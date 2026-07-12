@@ -1,175 +1,1169 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.*
+import android.app.TimePickerDialog
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.material.icons.filled.EventNote
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.TimeEntry
+import com.example.data.model.UserConfig
+import com.example.ui.theme.AccentGreen
+import com.example.ui.theme.AccentRed
+import com.example.ui.theme.AccentOrange
+import com.example.ui.theme.DarkBackground
+import com.example.ui.theme.DarkContainer
+import com.example.ui.theme.LightGray
+import com.example.ui.theme.MediumGray
+import com.example.ui.theme.NeonBlue
+import com.example.ui.theme.White
 import com.example.viewmodel.TimeSnapViewModel
+import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(viewModel: TimeSnapViewModel) {
-    val entries by viewModel.monthTimeEntries.collectAsState()
-    val sdf = SimpleDateFormat("HH:mm", Locale.US)
+fun HistoryScreen(
+    viewModel: TimeSnapViewModel
+) {
+    val selectedMonth by viewModel.currentSelectedMonth.collectAsStateWithLifecycle()
+    val entries by viewModel.monthTimeEntries.collectAsStateWithLifecycle()
+    val configState by viewModel.userConfig.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+
+    // Screen State Toggle: Single select vs Multi-select
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    val selectedDates = remember { mutableStateListOf<String>() }
+    var rangeStartStr by remember { mutableStateOf<String?>(null) } // Helper for range selection (e.g. Day 1 -> Day 20)
+
+    // Dialog control triggers
+    var showSingleDayDialog by remember { mutableStateOf<CalendarDayInfo?>(null) }
+    var showBulkDialog by remember { mutableStateOf(false) }
+    var showDeleteAllDialog by remember { mutableStateOf(false) }
+    var showBulkDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // Month parsing calculations
+    val sdfMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+    val currentMonthDate = remember(selectedMonth) { sdfMonth.parse(selectedMonth) ?: Date() }
+
+    // Calendar generation
+    val daysInMonth = remember(currentMonthDate) {
+        getCalendarDaysForMonth(currentMonthDate)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Lịch Sử Điểm Danh") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.primary
-                )
+                title = { Text("Lịch Sử Chấm Công", fontWeight = FontWeight.Bold, color = White) },
+                actions = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Toggle Mode Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(DarkContainer)
+                                .clickable {
+                                    isMultiSelectMode = !isMultiSelectMode
+                                    selectedDates.clear()
+                                    rangeStartStr = null
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .testTag("toggle_multi_select_mode")
+                        ) {
+                            Icon(
+                                imageVector = if (isMultiSelectMode) Icons.Default.Group else Icons.Default.EditCalendar,
+                                contentDescription = "Mode Icon",
+                                tint = NeonBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isMultiSelectMode) "Chọn nhiều" else "Chọn đơn ngày",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = White
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Clear Month Button
+                        IconButton(
+                            onClick = { showDeleteAllDialog = true },
+                            modifier = Modifier.testTag("clear_all_month_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Xoá cả tháng",
+                                tint = AccentRed
+                            )
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
             )
-        }
-    ) { padding ->
-        if (entries.isEmpty()) {
-            Box(
+        },
+        containerColor = DarkBackground
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
+        ) {
+            
+            // Month Switcher Controller
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Info,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Prev Month
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentMonthDate
+                    cal.add(Calendar.MONTH, -1)
+                    viewModel.selectMonth(sdfMonth.format(cal.time))
+                    selectedDates.clear()
+                    rangeStartStr = null
+                }) {
+                    Icon(Icons.Default.ArrowBackIosNew, "Tháng trước", tint = NeonBlue)
+                }
+
+                // Month Label
+                val vietnameseMonthLabel = remember(selectedMonth) {
+                    val parser = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                    val d = parser.parse(selectedMonth) ?: Date()
+                    val formatter = SimpleDateFormat("MMMM yyyy", Locale("vi", "VN"))
+                    formatter.format(d).replaceFirstChar { it.uppercase() }
+                }
+
+                Text(
+                    text = vietnameseMonthLabel,
+                    color = White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Next Month
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentMonthDate
+                    cal.add(Calendar.MONTH, 1)
+                    viewModel.selectMonth(sdfMonth.format(cal.time))
+                    selectedDates.clear()
+                    rangeStartStr = null
+                }) {
+                    Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
+                }
+            }
+
+            // Grid header: Mon -> Sun (Thứ 2 đến Chủ Nhật VN Calendar starting T2)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val headers = listOf("T2", "T3", "T4", "T5", "T6", "T7", "CN")
+                headers.forEach { label ->
                     Text(
-                        "Không có dữ liệu trong tháng này.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.outline
+                        text = label,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (label == "CN") AccentRed else MediumGray
                     )
                 }
             }
-        } else {
-            LazyColumn(
+
+            // Days Grid
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
+                items(daysInMonth) { day ->
+                    if (day.isEmpty) {
+                        Box(modifier = Modifier.aspectRatio(1f))
+                    } else {
+                        val isSelected = selectedDates.contains(day.dateString)
+                        val matchingEntry = entries.find { it.date == day.dateString }
+
+                        DayGridCell(
+                            day = day,
+                            isSelected = isSelected,
+                            entry = matchingEntry,
+                            isMultiSelectMode = isMultiSelectMode,
+                            config = configState,
+                            onClick = {
+                                if (isMultiSelectMode) {
+                                    if (isSelected) {
+                                        selectedDates.remove(day.dateString)
+                                        rangeStartStr = null
+                                    } else {
+                                        if (rangeStartStr == null) {
+                                            rangeStartStr = day.dateString
+                                            selectedDates.add(day.dateString)
+                                        } else {
+                                            // Perform full range acquisition
+                                            val start = rangeStartStr!!
+                                            val end = day.dateString
+                                            val d1 = if (start <= end) start else end
+                                            val d2 = if (start <= end) end else start
+
+                                            val fillDates = getDatesInRange(d1, d2)
+                                            selectedDates.clear()
+                                            selectedDates.addAll(fillDates)
+                                            rangeStartStr = null
+                                        }
+                                    }
+                                } else {
+                                    showSingleDayDialog = day
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // CONTROL OVERLAY PANEL: BULK ACTIONS & SWITCHES
+            AnimatedVisibility(visible = isMultiSelectMode && selectedDates.isNotEmpty()) {
+                Surface(
+                    color = DarkContainer,
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Đã chọn ${selectedDates.size} ngày",
+                            color = NeonBlue,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = { showBulkDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp)
+                                    .testTag("bulk_submit_button")
+                            ) {
+                                Text("Chấm công", color = White, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { showBulkDeleteConfirmDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp)
+                                    .testTag("bulk_delete_button")
+                            ) {
+                                Text("Xóa công", color = White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Guide text
+            if (!isMultiSelectMode) {
+                Text(
+                    text = "* Ấn vào ngày bất kỳ trên lưới lịch để sửa giờ chấm công hoặc bù chấm công trễ.",
+                    color = MediumGray,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+            } else {
+                Text(
+                    text = if (rangeStartStr == null) 
+                        "* Ấn chọn ngày bắt đầu, sau đó chọn ngày kết thúc để tự động bôi đen toàn bộ dải ngày."
+                        else 
+                        "* Đã chọn ngày bắt đầu. Hãy ấn chọn ngày kết thúc tiếp theo để hoàn tất dải ngày.",
+                    color = NeonBlue,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(72.dp))
+        }
+
+        // ==================== SINGLE ENTRY DIALOG POPUP (CHẾ ĐỘ 1) ====================
+        showSingleDayDialog?.let { day ->
+            val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+            val isFutureDate = day.dateString > todayStr
+
+            var checkInHour by remember { mutableStateOf("08") }
+            var checkInMin by remember { mutableStateOf("00") }
+            var checkOutHour by remember { mutableStateOf("17") }
+            var checkOutMin by remember { mutableStateOf("00") }
+            var leaveCheckOutEmpty by remember { mutableStateOf(false) }
+            
+            var selectedDayType by remember { mutableStateOf("NORMAL") }
+            var noteString by remember { mutableStateOf("") }
+
+            // Pre-fill if entry already exists
+            val existing = entries.find { it.date == day.dateString }
+            LaunchedEffect(day) {
+                if (existing != null) {
+                    noteString = existing.note ?: ""
+                    selectedDayType = existing.dayType
+                    
+                    if (existing.checkInTime != null) {
+                        val cal = Calendar.getInstance().apply { timeInMillis = existing.checkInTime }
+                        checkInHour = String.format("%02d", cal.get(Calendar.HOUR_OF_DAY))
+                        checkInMin = String.format("%02d", cal.get(Calendar.MINUTE))
+                        
+                        if (existing.checkOutTime != null) {
+                            val outCal = Calendar.getInstance().apply { timeInMillis = existing.checkOutTime }
+                            checkOutHour = String.format("%02d", outCal.get(Calendar.HOUR_OF_DAY))
+                            checkOutMin = String.format("%02d", outCal.get(Calendar.MINUTE))
+                            leaveCheckOutEmpty = false
+                        } else {
+                            leaveCheckOutEmpty = true
+                        }
+                    }
+                } else {
+                    noteString = ""
+                    if (isFutureDate) {
+                        // Future date defaults strictly to paid leave booking
+                        selectedDayType = "PAID_LEAVE"
+                    } else {
+                        selectedDayType = if (day.isSunday) "SUNDAY" else "NORMAL"
+                    }
+                    checkInHour = "08"
+                    checkInMin = "00"
+                    checkOutHour = "17"
+                    checkOutMin = "00"
+                    leaveCheckOutEmpty = false
+                }
+            }
+
+            AlertDialog(
+                onDismissRequest = { showSingleDayDialog = null },
+                containerColor = DarkContainer,
+                title = {
+                    Text(
+                        text = if (isFutureDate) "Đặt lịch nghỉ Ngày ${day.dayNumber}" else "Chấm công Ngày ${day.dayNumber}",
+                        color = White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Choice of Day Type
+                        Text("Phân loại ngày này:", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // If future day, do NOT render the standard working options - only allow PAID_LEAVE or UNPAID_LEAVE
+                            val isHoliday = day.dateString.endsWith("-01-01") || 
+                                            day.dateString.endsWith("-04-30") || 
+                                            day.dateString.endsWith("-05-01") || 
+                                            day.dateString.endsWith("-09-02")
+                                            
+                            val types = if (isFutureDate) {
+                                val list = mutableListOf(
+                                    Triple("PAID_LEAVE", "Có lương", AccentGreen),
+                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange)
+                                )
+                                if (isHoliday) {
+                                    list.add(0, Triple("HOLIDAY_LEAVE", "Lễ có lương", AccentGreen))
+                                }
+                                list
+                            } else {
+                                val list = mutableListOf(
+                                    Triple("NORMAL", "Đi làm", NeonBlue),
+                                    Triple("PAID_LEAVE", "Có lương", AccentGreen),
+                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange)
+                                )
+                                if (isHoliday) {
+                                    list.add(1, Triple("HOLIDAY_LEAVE", "Lễ có lương", AccentGreen))
+                                }
+                                list
+                            }
+
+                            types.forEach { (typeKey, typeLabel, typeColor) ->
+                                val isChosen = selectedDayType == typeKey
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isChosen) typeColor.copy(alpha = 0.2f) else DarkBackground)
+                                        .border(
+                                            1.5.dp, 
+                                            if (isChosen) typeColor else Color.Transparent, 
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { 
+                                            selectedDayType = typeKey 
+                                        }
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = typeLabel,
+                                        color = if (isChosen) typeColor else LightGray,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        // Hours Selection Area (Disabled completely for holiday/paid/unpaid leaves)
+                        if (!isFutureDate && selectedDayType != "PAID_LEAVE" && selectedDayType != "UNPAID_LEAVE" && selectedDayType != "HOLIDAY_LEAVE") {
+                            // CheckIn Selection
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("Giờ Vào Ca:", color = LightGray, modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
+                                OutlinedTextField(
+                                    value = checkInHour,
+                                    onValueChange = { if (it.length <= 2) checkInHour = it },
+                                    modifier = Modifier.width(62.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                                )
+                                Text(":", color = White, fontWeight = FontWeight.Black)
+                                OutlinedTextField(
+                                    value = checkInMin,
+                                    onValueChange = { if (it.length <= 2) checkInMin = it },
+                                    modifier = Modifier.width(62.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                                )
+                            }
+
+                            // CheckOut Selection
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("Giờ Ra Ca:", color = if (leaveCheckOutEmpty) MediumGray else LightGray, modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
+                                OutlinedTextField(
+                                    value = checkOutHour,
+                                    onValueChange = { if (it.length <= 2) checkOutHour = it },
+                                    enabled = !leaveCheckOutEmpty,
+                                    modifier = Modifier.width(62.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                                )
+                                Text(":", color = if (leaveCheckOutEmpty) MediumGray else White, fontWeight = FontWeight.Black)
+                                OutlinedTextField(
+                                    value = checkOutMin,
+                                    onValueChange = { if (it.length <= 2) checkOutMin = it },
+                                    enabled = !leaveCheckOutEmpty,
+                                    modifier = Modifier.width(62.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                                )
+                            }
+
+                            // Special switch: "Quên chấm công khi đang trong ca"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clickable { leaveCheckOutEmpty = !leaveCheckOutEmpty }
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = leaveCheckOutEmpty,
+                                    onCheckedChange = { leaveCheckOutEmpty = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Quên bấm chấm công ra (Để trống Giờ ra)",
+                                    color = LightGray,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.W500
+                                )
+                            }
+                        } else if (isFutureDate) {
+                            // Notice for Future Leave setups
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(AccentOrange.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = "⚠️ Bạn đang xin nghỉ trong tương lai. Bạn không được chấm công làm cho ngày tương lai. Đến ngày này hệ thống sẽ tự động cập nhật là bạn nghỉ và tính mức lương lưu vết tương ứng.",
+                                    color = AccentOrange,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            // Leave day explanation notice for past days
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(NeonBlue.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = if (selectedDayType == "PAID_LEAVE") 
+                                        "✓ Đăng ký vắng nghỉ có lương. Hệ thống bảo lưu lương cơ bản ngày công này."
+                                        else 
+                                        "✓ Đăng ký vắng nghỉ không lương. Ngày công này sẽ bị khấu trừ vào lương thực nhận.",
+                                    color = LightGray,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+
+                        // NOTE INPUT FIELD
+                        OutlinedTextField(
+                            value = noteString,
+                            onValueChange = { noteString = it },
+                            label = { Text("Ghi chú lý do nghỉ hoặc vắng...") },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonBlue,
+                                focusedLabelColor = NeonBlue,
+                                focusedTextColor = White,
+                                unfocusedTextColor = White
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Delete entry
+                        if (existing != null) {
+                            IconButton(
+                                onClick = {
+                                    viewModel.deleteEntry(existing)
+                                    showSingleDayDialog = null
+                                }
+                            ) {
+                                Icon(Icons.Default.Delete, "Xoá", tint = AccentRed)
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(1.dp))
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { showSingleDayDialog = null }) {
+                                Text("Huỷ", color = LightGray)
+                            }
+                            Button(
+                                onClick = {
+                                    if (isFutureDate) {
+                                        // Force save as Leave types for Future dates
+                                        viewModel.addSingleEntry(
+                                            dateStr = day.dateString,
+                                            checkInHour = 0,
+                                            checkInMin = 0,
+                                            checkOutHour = null,
+                                            checkOutMin = null,
+                                            dayTypeOverride = selectedDayType,
+                                            noteStr = noteString.ifEmpty { "Nghỉ phép trước" }
+                                        )
+                                    } else {
+                                        val inHour = checkInHour.toIntOrNull() ?: 8
+                                        val inMin = checkInMin.toIntOrNull() ?: 0
+                                        val outHour = if (leaveCheckOutEmpty) null else (checkOutHour.toIntOrNull() ?: 17)
+                                        val outMin = if (leaveCheckOutEmpty) null else (checkOutMin.toIntOrNull() ?: 0)
+
+                                        viewModel.addSingleEntry(
+                                            dateStr = day.dateString,
+                                            checkInHour = inHour,
+                                            checkInMin = inMin,
+                                            checkOutHour = outHour,
+                                            checkOutMin = outMin,
+                                            dayTypeOverride = selectedDayType,
+                                            noteStr = noteString.ifEmpty { null }
+                                        )
+                                    }
+                                    showSingleDayDialog = null
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                            ) {
+                                Text("Lưu", color = White)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        // ==================== CLEAR MONTH ENTRIES DIALOG ====================
+        if (showDeleteAllDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteAllDialog = false },
+                containerColor = DarkContainer,
+                title = {
+                    Text(
+                        text = "Cảnh báo xóa ngày công",
+                        color = AccentRed,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Bạn đang xóa tất cả ngày công của tháng này. Thao tác này sẽ xoá toàn bộ lịch sử trong tháng để bạn có thể thêm lại từ đầu. Có ai lỡ ấn nhầm cũng sẽ hiểu rõ hành động này.",
+                        color = LightGray,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteAllDialog = false
+                            viewModel.clearAllEntriesInSelectedMonth()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Xác nhận xóa", color = White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteAllDialog = false }) {
+                        Text("Hủy", color = LightGray)
+                    }
+                }
+            )
+        }
+
+        // ==================== CONFIRM BULK DELETE DIALOG ====================
+        if (showBulkDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showBulkDeleteConfirmDialog = false },
+                containerColor = DarkContainer,
+                title = {
+                    Text(
+                        text = "Xác nhận xóa ngày công",
+                        color = AccentRed,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Bạn đang thực hiện xóa hàng loạt tuyển tập ${selectedDates.size} ngày công đã chọn. Thao tác này sẽ xoá sạch lịch sử công để tránh trường hợp nhập sai. Bạn có chắc chắn muốn xóa ngày công này?",
+                        color = LightGray,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteBulkEntries(selectedDates.toList())
+                            showBulkDeleteConfirmDialog = false
+                            selectedDates.clear()
+                            isMultiSelectMode = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Xác nhận xóa", color = White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showBulkDeleteConfirmDialog = false }) {
+                        Text("Hủy", color = LightGray)
+                    }
+                }
+            )
+        }
+
+        // ==================== BULK SHIFT SELECT PRESET DIALOG (CHẾ ĐỘ 2) ====================
+        if (showBulkDialog) {
+            var startHour by remember { mutableStateOf("08") }
+            var startMin by remember { mutableStateOf("00") }
+            var endHour by remember { mutableStateOf("17") }
+            var endMin by remember { mutableStateOf("00") }
+
+            var skipSunday by remember { mutableStateOf(false) }
+            var skipHoliday by remember { mutableStateOf(false) }
+            var autoRecognizeOtCoefficients by remember { mutableStateOf(true) }
+            var isNightShiftOverride by remember { mutableStateOf(false) }
+
+            val startHourInt = startHour.toIntOrNull() ?: 0
+            val startMinInt = startMin.toIntOrNull() ?: 0
+            val startTotalMinutes = startHourInt * 60 + startMinInt
+            val showNightShiftOption = startTotalMinutes in (18 * 60)..(19 * 60 + 30)
+
+            androidx.compose.runtime.LaunchedEffect(showNightShiftOption) {
+                if (!showNightShiftOption) {
+                    isNightShiftOverride = false
+                }
+            }
+
+            androidx.compose.runtime.LaunchedEffect(skipSunday, skipHoliday) {
+                if (skipSunday || skipHoliday) {
+                    autoRecognizeOtCoefficients = false
+                }
+            }
+
+            AlertDialog(
+                onDismissRequest = { showBulkDialog = false },
+                containerColor = DarkContainer,
+                title = { Text("Chấm công Hàng loạt", color = White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Cấu hình giờ chung cho ${selectedDates.size} ngày đã chọn:",
+                            color = NeonBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        // Hours Vào
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("Giờ Vào:", color = LightGray, modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = startHour,
+                                onValueChange = { if (it.length <= 2) startHour = it },
+                                modifier = Modifier.width(62.dp),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                            )
+                            Text(":", color = White)
+                            OutlinedTextField(
+                                value = startMin,
+                                onValueChange = { if (it.length <= 2) startMin = it },
+                                modifier = Modifier.width(62.dp),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                            )
+                        }
+
+                        // Hours Ra
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("Giờ Ra:", color = LightGray, modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = endHour,
+                                onValueChange = { if (it.length <= 2) endHour = it },
+                                modifier = Modifier.width(62.dp),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                            )
+                            Text(":", color = White)
+                            OutlinedTextField(
+                                value = endMin,
+                                onValueChange = { if (it.length <= 2) endMin = it },
+                                modifier = Modifier.width(62.dp),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+                            )
+                        }
+
+                        Divider(color = Color(0xFF2C2C2C))
+
+                        // Preference Switches
+                        if (showNightShiftOption) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clickable { isNightShiftOverride = !isNightShiftOverride }
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = isNightShiftOverride,
+                                    onCheckedChange = { isNightShiftOverride = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Chấm công làm Ca Đêm", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Text("Đánh dấu tất cả ngày đã chọn là ca đêm (+100k phụ cấp/ca)", color = MediumGray, fontSize = 10.sp)
+                                }
+                            }
+                        }
+
+                        // Checkbox A: Bỏ qua (OT 2.0)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { skipSunday = !skipSunday }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = skipSunday,
+                                onCheckedChange = { skipSunday = it },
+                                colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Bỏ qua Chủ Nhật (Không thêm CN)", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Tự loại ngày công chủ nhật ra khi tạo hàng loạt", color = MediumGray, fontSize = 10.sp)
+                            }
+                        }
+
+                        // Checkbox B: Bỏ qua (OT 3.0)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { skipHoliday = !skipHoliday }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = skipHoliday,
+                                onCheckedChange = { skipHoliday = it },
+                                colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Bỏ qua Ngày Lễ (Không thêm Ngày Lễ)", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Hệ thống tự loại ngày nghỉ lễ ra", color = MediumGray, fontSize = 10.sp)
+                            }
+                        }
+
+                        // Checkbox C: Tự động nhận diện OT 2.0, OT 3.0
+                        val isAutoEnabled = !skipSunday && !skipHoliday
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable(enabled = isAutoEnabled) { autoRecognizeOtCoefficients = !autoRecognizeOtCoefficients }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(
+                                checked = autoRecognizeOtCoefficients && isAutoEnabled,
+                                onCheckedChange = { if (isAutoEnabled) autoRecognizeOtCoefficients = it },
+                                enabled = isAutoEnabled,
+                                colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Tự động nhận diện Lễ (3.0) & Chủ Nhật (2.0)", 
+                                    color = if (isAutoEnabled) White else Color.Gray, 
+                                    fontSize = 13.sp, 
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Nhân hệ số lương phù hợp cho ngày đã tạo", 
+                                    color = if (isAutoEnabled) AccentGreen else Color.DarkGray, 
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showBulkDialog = false }) {
+                            Text("Huỷ", color = LightGray)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = {
+                                val inH = startHour.toIntOrNull() ?: 8
+                                val inM = startMin.toIntOrNull() ?: 0
+                                val outH = endHour.toIntOrNull() ?: 17
+                                val outM = endMin.toIntOrNull() ?: 0
+
+                                viewModel.addBulkEntries(
+                                    selectedDates = selectedDates.toList(),
+                                    checkInHour = inH,
+                                    checkInMin = inM,
+                                    checkOutHour = outH,
+                                    checkOutMin = outM,
+                                    skipSunday = skipSunday,
+                                    skipHoliday = skipHoliday,
+                                    autoRecognizeOt = autoRecognizeOtCoefficients,
+                                    isNightShiftOverride = isNightShiftOverride
+                                )
+
+                                showBulkDialog = false
+                                isMultiSelectMode = false
+                                selectedDates.clear()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                        ) {
+                            Text("Thực hiện", color = White)
+                        }
+                    }
+                }
+            )
+        }
+    }
+}
+
+// Custom Grid cell widget representation
+@Composable
+fun DayGridCell(
+    day: CalendarDayInfo,
+    isSelected: Boolean,
+    entry: TimeEntry?,
+    isMultiSelectMode: Boolean,
+    config: UserConfig?,
+    onClick: () -> Unit
+) {
+    val borderColor = when {
+        isSelected -> NeonBlue
+        entry?.dayType == "PAID_LEAVE" -> NeonBlue
+        entry?.dayType == "UNPAID_LEAVE" -> AccentOrange
+        entry?.isWorking == true -> AccentOrange
+        entry != null -> AccentGreen
+        else -> Color.Transparent
+    }
+
+    val backgroundColor = when {
+        isSelected -> NeonBlue.copy(alpha = 0.2f)
+        entry?.dayType == "PAID_LEAVE" -> NeonBlue.copy(alpha = 0.15f)
+        entry?.dayType == "UNPAID_LEAVE" -> AccentOrange.copy(alpha = 0.12f)
+        entry?.isWorking == true -> AccentOrange.copy(alpha = 0.15f)
+        entry != null -> AccentGreen.copy(alpha = 0.12f)
+        day.isSunday -> AccentRed.copy(alpha = 0.08f)
+        else -> DarkContainer
+    }
+
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(10.dp))
+            .background(backgroundColor)
+            .border(1.5.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable { onClick() }
+            .padding(4.dp),
+         contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = day.dayNumber.toString(),
+                color = if (day.isSunday) AccentRed else White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            // Hours label or status
+            if (entry != null) {
+                when (entry.dayType) {
+                    "PAID_LEAVE" -> {
+                        Text(
+                            text = "PHÉP",
+                            color = NeonBlue,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    "UNPAID_LEAVE" -> {
+                        Text(
+                            text = "VẮNG",
+                            color = AccentOrange,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    else -> {
+                        if (entry.isWorking) {
+                            Text(
+                                text = "Vào ca",
+                                color = AccentOrange,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else if (entry.checkInTime != null && entry.checkOutTime != null) {
+                            val workedHrs = (entry.checkOutTime - entry.checkInTime) / 3600000.0
+                            val isBreakDeduction = config?.tinhKhauTruNghi == true
+                            val breakHours = if (isBreakDeduction) (config?.soGioNghiGiaiLao ?: 1.5) else 0.0
+                            val roundedHrs = if (isBreakDeduction) {
+                                (workedHrs - breakHours).coerceAtLeast(0.0)
+                            } else {
+                                if (workedHrs <= 8.5) {
+                                    workedHrs.coerceAtMost(8.0)
+                                } else {
+                                    workedHrs
+                                }
+                            }
+                            val df = DecimalFormat("#.#")
+                            Text(
+                                text = "${df.format(roundedHrs)}h",
+                                color = AccentGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
-                items(entries.sortedByDescending { it.date }, key = { it.id }) { entry ->
-                    HistoryItemCard(entry, onDelete = { viewModel.deleteTimeEntry(entry.id) })
+                if (!entry.note.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(4.dp)
+                            .background(White, CircleShape)
+                    )
                 }
-
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
+            } else {
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(modifier = Modifier.size(4.dp).background(Color(0xFF2C2C2C), RoundedCornerShape(2.dp)))
             }
         }
     }
 }
 
-@Composable
-fun HistoryItemCard(entry: TimeEntry, onDelete: () -> Unit) {
-    val sdfTime = SimpleDateFormat("HH:mm", Locale.US)
-    val checkInStr = entry.checkInTime?.let { sdfTime.format(Date(it)) } ?: "--:--"
-    val checkOutStr = entry.checkOutTime?.let { sdfTime.format(Date(it)) } ?: "--:--"
+// Wrapper for calendar cell date information
+data class CalendarDayInfo(
+    val dayNumber: Int,
+    val dateString: String,
+    val isSunday: Boolean,
+    val isEmpty: Boolean = false
+)
 
-    val totalHours = if (entry.checkInTime != null && entry.checkOutTime != null) {
-        val duration = entry.checkOutTime - entry.checkInTime
-        String.format(Locale.US, "%.1f", duration.toDouble() / (1000.0 * 3600.0))
-    } else {
-        null
+// Algorithm to build grid days layout start on Monday
+private fun getCalendarDaysForMonth(monthDate: Date): List<CalendarDayInfo> {
+    val cal = Calendar.getInstance()
+    cal.time = monthDate
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+
+    val startDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+    val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+    val list = ArrayList<CalendarDayInfo>()
+
+    val indexOffset = if (startDayOfWeek == Calendar.SUNDAY) 6 else startDayOfWeek - 2
+
+    for (i in 0 until indexOffset) {
+        list.add(CalendarDayInfo(0, "", false, true))
     }
 
-    val typeLabel = when (entry.dayType) {
-        "NORMAL" -> "Ngày Thường"
-        "PAID_LEAVE" -> "Phép Năm"
-        "UNPAID_LEAVE" -> "Nghỉ Không Lương"
-        "HOLIDAY" -> "Ngày Lễ"
-        "SUNDAY" -> "Chủ Nhật"
-        else -> entry.dayType
+    for (day in 1..maxDays) {
+        cal.set(Calendar.DAY_OF_MONTH, day)
+        val dateString = sdf.format(cal.time)
+        val isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+        list.add(CalendarDayInfo(day, dateString, isSunday, false))
     }
 
-    val typeColor = when (entry.dayType) {
-        "PAID_LEAVE" -> MaterialTheme.colorScheme.secondary
-        "UNPAID_LEAVE" -> MaterialTheme.colorScheme.error
-        "HOLIDAY" -> MaterialTheme.colorScheme.tertiary
-        "SUNDAY" -> MaterialTheme.colorScheme.outline
-        else -> MaterialTheme.colorScheme.primary
-    }
+    return list
+}
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("history_item_card_${entry.date}"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = entry.date,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SuggestionChip(
-                        onClick = {},
-                        label = { Text(typeLabel, style = MaterialTheme.typography.bodySmall) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(labelColor = typeColor)
-                    )
-
-                    if (totalHours != null) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = { Text("$totalHours Giờ làm", style = MaterialTheme.typography.bodySmall) }
-                        )
-                    }
-                }
-
-                if (entry.checkInTime != null || entry.checkOutTime != null) {
-                    Text(
-                        text = "Vào: $checkInStr  -  Ra: $checkOutStr",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                entry.note?.let {
-                    Text(
-                        text = "Ghi chú: $it",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-
-            IconButton(onClick = onDelete, modifier = Modifier.testTag("delete_entry_${entry.date}")) {
-                Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = MaterialTheme.colorScheme.error)
+private fun getDatesInRange(startStr: String, endStr: String): List<String> {
+    val list = ArrayList<String>()
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    try {
+        val start = sdf.parse(startStr)
+        val end = sdf.parse(endStr)
+        if (start != null && end != null) {
+            val cal = Calendar.getInstance()
+            cal.time = start
+            while (!cal.time.after(end)) {
+                list.add(sdf.format(cal.time))
+                cal.add(Calendar.DAY_OF_YEAR, 1)
             }
         }
+    } catch (e: Exception) {
+        e.printStackTrace()
     }
+    return list
 }

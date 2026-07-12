@@ -6,21 +6,30 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TimeEntryDao {
-    @Query("SELECT * FROM time_entries WHERE userId = :userId ORDER BY date ASC")
-    fun getAllTimeEntries(userId: String): Flow<List<TimeEntry>>
-
-    @Query("SELECT * FROM time_entries WHERE userId = :userId AND date LIKE :monthPrefix || '%' ORDER BY date ASC")
-    fun getTimeEntriesByMonth(userId: String, monthPrefix: String): Flow<List<TimeEntry>>
+    @Query("SELECT * FROM time_entries WHERE userId = :userId ORDER BY date DESC")
+    fun getEntriesForUser(userId: String): Flow<List<TimeEntry>>
 
     @Query("SELECT * FROM time_entries WHERE userId = :userId AND date = :date LIMIT 1")
-    suspend fun getTimeEntryByDate(userId: String, date: String): TimeEntry?
+    suspend fun getEntryByDate(userId: String, date: String): TimeEntry?
+
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND isWorking = 1 LIMIT 1")
+    suspend fun getActiveEntry(userId: String): TimeEntry?
+
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND date LIKE :monthPattern ORDER BY date ASC")
+    fun getEntriesForUserInMonth(userId: String, monthPattern: String): Flow<List<TimeEntry>>
+
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND date LIKE :monthPattern ORDER BY date ASC")
+    suspend fun getEntriesForUserInMonthDirect(userId: String, monthPattern: String): List<TimeEntry>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTimeEntry(entry: TimeEntry): Long
+    suspend fun insertOrUpdate(entry: TimeEntry)
 
-    @Query("DELETE FROM time_entries WHERE id = :id")
-    suspend fun deleteTimeEntryById(id: Int)
+    @Delete
+    suspend fun delete(entry: TimeEntry)
 
-    @Query("DELETE FROM time_entries WHERE userId = :userId AND date = :date")
-    suspend fun deleteTimeEntryByDate(userId: String, date: String)
+    @Query("DELETE FROM time_entries WHERE userId = :userId")
+    suspend fun clearAllForUser(userId: String)
+
+    @Query("DELETE FROM time_entries WHERE userId = :userId AND date LIKE :monthPattern")
+    suspend fun deleteEntriesInMonth(userId: String, monthPattern: String)
 }

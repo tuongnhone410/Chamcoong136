@@ -2,13 +2,13 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val DarkBackground = Color(0xFF121212)
-val SurfaceDark = Color(0xFF1E1E1E)
-val PrimaryNeon = Color(0xFF00E5FF) // Electric neon cyan
-val SecondaryNeon = Color(0xFF00E676) // Bright green
-val AccentPink = Color(0xFFFF4081) // Vibrant pink
-val TextPrimary = Color(0xFFFFFFFF)
-val TextSecondary = Color(0xFFB0BEC5)
-val DividerColor = Color(0xFF263238)
-val CardBackground = Color(0xFF1C1C1E)
-val ErrorColor = Color(0xFFFF5252)
+val NeonBlue = Color(0xFF2F80ED)
+val DarkBackground = Color(0xFF0D0F13)
+val DarkContainer = Color(0xFF1F222A)
+val LightGray = Color(0xFFE0E0E0)
+val MediumGray = Color(0xFF828282)
+val AccentRed = Color(0xFFEB5757)
+val AccentGreen = Color(0xFF27AE60)
+val AccentOrange = Color(0xFFF2994A)
+val White = Color(0xFFFFFFFF)
+

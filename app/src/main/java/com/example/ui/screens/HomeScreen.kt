@@ -1,478 +1,921 @@
 package com.example.ui.screens
 
-import android.app.TimePickerDialog
-import androidx.compose.animation.*
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalAtm
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.QueryBuilder
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.auth.UserSession
 import com.example.data.model.TimeEntry
+import com.example.ui.theme.AccentGreen
+import com.example.ui.theme.AccentRed
+import com.example.ui.theme.AccentOrange
+import com.example.ui.theme.DarkBackground
+import com.example.ui.theme.DarkContainer
+import com.example.ui.theme.LightGray
+import com.example.ui.theme.MediumGray
+import com.example.ui.theme.NeonBlue
+import com.example.ui.theme.White
 import com.example.viewmodel.TimeSnapViewModel
+import kotlinx.coroutines.delay
+import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: TimeSnapViewModel) {
-    val currentMonthStr by viewModel.currentMonth.collectAsState()
-    val entries by viewModel.monthTimeEntries.collectAsState()
-    val summary by viewModel.salarySummary.collectAsState()
-    val config by viewModel.userConfig.collectAsState()
-    val context = LocalContext.current
+fun HomeScreen(
+    viewModel: TimeSnapViewModel,
+    onNavigateToLogin: () -> Unit
+) {
+    val userSession by viewModel.currentUserSession.collectAsStateWithLifecycle()
+    val activeEntry by viewModel.activeWorkingEntry.collectAsStateWithLifecycle()
+    val runningTimeText by viewModel.runningDurationText.collectAsStateWithLifecycle()
+    val summaryState by viewModel.salarySummaryState.collectAsStateWithLifecycle()
+    val recentEntries by viewModel.monthTimeEntries.collectAsStateWithLifecycle()
+    val configState by viewModel.userConfig.collectAsStateWithLifecycle()
 
-    val calendar = Calendar.getInstance()
-    val sdfMonth = SimpleDateFormat("yyyy-MM", Locale.US)
-    val parsedDate = try { sdfMonth.parse(currentMonthStr) ?: Date() } catch (e: Exception) { Date() }
-    calendar.time = parsedDate
+    var liveTimeString by remember { mutableStateOf("") }
+    var liveDateString by remember { mutableStateOf("") }
 
-    val targetYear = calendar.get(Calendar.YEAR)
-    val targetMonth = calendar.get(Calendar.MONTH) + 1 // 1-indexed
-
-    // States for logging days
-    var selectedDayToEdit by remember { mutableStateOf<Int?>(null) }
-    var editCheckInTime by remember { mutableStateOf<String?>(null) }
-    var editCheckOutTime by remember { mutableStateOf<String?>(null) }
-    var editDayType by remember { mutableStateOf("NORMAL") }
-    var editNote by remember { mutableStateOf("") }
-    var editIsWorking by remember { mutableStateOf(true) }
-
-    val daysInMonth = calendar.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-    // Calculate days offset for the first day of month
-    calendar.set(Calendar.DAY_OF_MONTH, 1)
-    val firstDayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
-    // Calendar.SUNDAY is 1. If we want Monday as first column, we offset. Let's make Sunday first column for simplicity.
-    val leadingEmptyCells = firstDayOfWeek - 1
-
-    val sdfFull = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    // Quick check-in/out logic
-    val todayStr = sdfFull.format(Date())
-    val todayEntry = entries.find { it.date == todayStr }
-
-    fun navigateMonth(offset: Int) {
-        val cal = Calendar.getInstance()
-        cal.time = parsedDate
-        cal.add(Calendar.MONTH, offset)
-        viewModel.setMonth(sdfMonth.format(cal.time))
+    // Live clock ticks
+    LaunchedEffect(Unit) {
+        val clockFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        val dateFormat = SimpleDateFormat("EEEE, 'Ngày' dd 'tháng' MM, yyyy", Locale("vi", "VN"))
+        while (true) {
+            val now = Date()
+            liveTimeString = clockFormat.format(now)
+            liveDateString = dateFormat.format(now).replaceFirstChar { it.uppercase() }
+            delay(1000)
+        }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // 1. Month Selector
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { navigateMonth(-1) }) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Tháng trước", tint = MaterialTheme.colorScheme.primary)
-            }
-            Text(
-                text = "Tháng $targetMonth - $targetYear",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            IconButton(onClick = { navigateMonth(1) }) {
-                Icon(Icons.Default.ArrowForward, contentDescription = "Tháng sau", tint = MaterialTheme.colorScheme.primary)
-            }
-        }
+    // Load active note dynamically so they can type inside Home
+    var quickNoteText by remember { mutableStateOf("") }
+    LaunchedEffect(activeEntry) {
+        quickNoteText = activeEntry?.note ?: ""
+    }
 
-        // 2. Today's Check In / Out Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Hôm nay: $todayStr",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            val now = System.currentTimeMillis()
-                            val updatedEntry = todayEntry?.copy(checkInTime = now, isWorking = true)
-                                ?: TimeEntry(userId = "default_user", date = todayStr, checkInTime = now, isWorking = true)
-                            viewModel.saveTimeEntry(updatedEntry)
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("check_in_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
                         Text(
-                            text = if (todayEntry?.checkInTime != null) {
-                                val sdf = SimpleDateFormat("HH:mm", Locale.US)
-                                "Đã Vào: " + sdf.format(Date(todayEntry.checkInTime))
-                            } else "Vào Ca"
+                            text = "TIMESNAP PRO",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = NeonBlue,
+                            fontSize = 18.sp,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Hệ thống quản trị lương quốc dân",
+                            color = LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
-
-                    Button(
+                },
+                actions = {
+                    IconButton(
                         onClick = {
-                            val now = System.currentTimeMillis()
-                            if (todayEntry != null) {
-                                viewModel.saveTimeEntry(todayEntry.copy(checkOutTime = now))
-                            } else {
-                                viewModel.saveTimeEntry(
-                                    TimeEntry(userId = "default_user", date = todayStr, checkInTime = now - 8 * 3600 * 1000, checkOutTime = now, isWorking = true)
-                                )
+                            viewModel.authController.signOut {
+                                onNavigateToLogin()
                             }
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("check_out_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                        modifier = Modifier.testTag("logout_button")
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (todayEntry?.checkOutTime != null) {
-                                val sdf = SimpleDateFormat("HH:mm", Locale.US)
-                                "Đã Ra: " + sdf.format(Date(todayEntry.checkOutTime))
-                            } else "Ra Ca"
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Đăng xuất",
+                            tint = AccentRed
                         )
                     }
-                }
-            }
-        }
-
-        // 3. Quick Stats Summary
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+            )
+        },
+        containerColor = DarkBackground
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
         ) {
+            
+            // Welcome Header Block
+            Spacer(modifier = Modifier.height(6.dp))
+            val displayName = configState?.hoVaTen ?: userSession?.displayName ?: "Cá nhân"
+            Text(
+                text = "Xin chào, $displayName",
+                color = White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black
+            )
+            Text(
+                text = liveDateString.ifEmpty { "Đang kết nối..." },
+                color = LightGray,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
+            )
+
+            // CARD 1: NET ESTIMATED INCOME CARD (THỰC LĨNH DỰ KIẾN)
             Card(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.5.dp, AccentGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                    .padding(bottom = 16.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.padding(20.dp)
                 ) {
-                    Text("Số Ngày Công", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
-                        "${summary.workingDays} / 26",
-                        style = MaterialTheme.typography.titleLarge,
+                        text = "THỰC LĨNH DỰ KIẾN (NET)",
+                        color = LightGray,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        letterSpacing = 1.sp
                     )
-                }
-            }
-            Card(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Thực Lĩnh Dự Kiến", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val fmt = java.text.DecimalFormat("#,###")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val realSalary = summaryState?.luongThucNhan ?: 0.0
+                    val formattedSalary = DecimalFormat("#,###").format(realSalary) + " đ"
                     Text(
-                        "${fmt.format(summary.netSalary)} đ",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
+                        text = formattedSalary,
+                        color = AccentGreen,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Black
                     )
-                }
-            }
-        }
 
-        // 4. Calendar Grid
-        Text(
-            text = "Lịch Chấm Công",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = Color(0xFF2C2C2C))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                // Calendar Week Headers
-                val daysOfWeek = listOf("CN", "T2", "T3", "T4", "T5", "T6", "T7")
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    daysOfWeek.forEach { day ->
-                        Text(
-                            text = day,
-                            modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (day == "CN") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Build Grid list of cells
-                val totalCells = leadingEmptyCells + daysInMonth
-                val rows = (totalCells + 6) / 7
-
-                for (row in 0 until rows) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        for (col in 0 until 7) {
-                            val cellIndex = row * 7 + col
-                            val dayNum = cellIndex - leadingEmptyCells + 1
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp)
+                            Text(
+                                text = "${summaryState?.workingDays ?: 0} ngày công",
+                                color = White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        
+                        // Calculate live hourly calculation based on settings
+                        val lcb = configState?.luongCoBan ?: 6000000.0
+                        val hrRate = lcb / 26.0 / 8.0
+                        val coeff = when {
+                            Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> configState?.heSoOtChuNhat ?: 2.0
+                            run {
+                                val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
+                                val md = sdfMonthDay.format(java.util.Date())
+                                md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+                            } -> configState?.heSoOtNgayLe ?: 3.0
+                            else -> 1.0
+                        }
+                        val coeffLabel = when {
+                            Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> " (Chủ nhật x2)"
+                            run {
+                                val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
+                                val md = sdfMonthDay.format(java.util.Date())
+                                md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+                            } -> " (Ngày lễ x3)"
+                            else -> ""
+                        }
+                        val currentHrRate = hrRate * coeff
+                        val fmtHr = DecimalFormat("#,###").format(currentHrRate)
 
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .padding(2.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (dayNum in 1..daysInMonth) {
-                                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, dayNum)
-                                    val entry = entries.find { it.date == dateStr }
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Text("Lương mỗi giờ hiện tại", color = MediumGray, fontSize = 11.sp)
+                            Text(
+                                text = "$fmtHr đ/g$coeffLabel",
+                                color = if (coeff > 1.0) AccentGreen else NeonBlue,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
-                                    // Determine background color based on day details
-                                    val cellBgColor = when {
-                                        entry?.dayType == "PAID_LEAVE" -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                        entry?.dayType == "UNPAID_LEAVE" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                                        entry?.dayType == "HOLIDAY" -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-                                        entry?.dayType == "SUNDAY" -> MaterialTheme.colorScheme.surfaceVariant
-                                        entry != null && entry.isWorking -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                                        else -> Color.Transparent
-                                    }
+            // CARD 2: INTERACTIVE ACTION TERMINAL (VÀO CA / RA CA MODULE)
+            val isWorking = activeEntry != null
+            val buttonColor by animateColorAsState(
+                targetValue = if (isWorking) AccentRed else AccentGreen,
+                animationSpec = tween(300), label = ""
+            )
 
-                                    val isToday = dateStr == todayStr
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val cal = Calendar.getInstance()
+                    val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+                    val dayName = when (dayOfWeek) {
+                        Calendar.SUNDAY -> "CHỦ NHẬT"
+                        Calendar.SATURDAY -> "THỨ BẢY"
+                        else -> "THỨ ${dayOfWeek}"
+                    }
 
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(cellBgColor)
-                                            .clickable {
-                                                selectedDayToEdit = dayNum
-                                                editIsWorking = entry?.isWorking ?: true
-                                                editDayType = entry?.dayType ?: "NORMAL"
-                                                editNote = entry?.note ?: ""
+                    val otNormal = configState?.heSoOtNgayThuong ?: 1.5
+                    val otCn = configState?.heSoOtChuNhat ?: 2.0
+                    val otLe = configState?.heSoOtNgayLe ?: 3.0
 
-                                                val sdf = SimpleDateFormat("HH:mm", Locale.US)
-                                                editCheckInTime = entry?.checkInTime?.let { sdf.format(Date(it)) }
-                                                editCheckOutTime = entry?.checkOutTime?.let { sdf.format(Date(it)) }
-                                            }
-                                            .then(
-                                                if (isToday) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)) else Modifier
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                text = dayNum.toString(),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Medium,
-                                                color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            if (entry != null && (entry.checkInTime != null || entry.isWorking)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(4.dp)
-                                                        .clip(CircleShape)
-                                                        .background(MaterialTheme.colorScheme.secondary)
-                                                )
-                                            }
+                    Text(
+                        text = "HÔM NAY: $dayName",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Big digital clock
+                    Text(
+                        text = liveTimeString.ifEmpty { "00:00:00" },
+                        color = NeonBlue,
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center
+                    )
+
+                    // Active Work Session Title
+                    Text(
+                        text = if (isWorking) "Đang trong ca làm việc" else "Chưa nhận ca làm việc",
+                        color = if (isWorking) AccentOrange else MediumGray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
+                    // Fingerprint rounded fingerprint button
+                    Box(
+                        modifier = Modifier
+                            .size(105.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(buttonColor.copy(alpha = 0.2f), buttonColor.copy(alpha = 0.4f), buttonColor)
+                                )
+                            )
+                            .clickable {
+                                viewModel.toggleCheckIn(quickNoteText)
+                            }
+                            .testTag("in_out_action_button")
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Fingerprint,
+                                contentDescription = "Fingerprint verify",
+                                tint = White,
+                                modifier = Modifier.size(30.dp)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isWorking) "RA CA" else "VÀO CA",
+                                color = White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    }
+
+                    // Dinamic Running/Ticker Text inside ca
+                    if (isWorking) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (runningTimeText.isNotEmpty()) runningTimeText else "Vừa nhận ca",
+                                color = AccentRed,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    val active = activeEntry
+                    if (isWorking && active != null && active.checkInTime != null) {
+                        val lcb = configState?.luongCoBan ?: 6000000.0
+                        
+                        // Parse selected standard work days to use accurate daily & hourly rate denominator
+                        var standardWorkDays = 26
+                        try {
+                            val sdfMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                            val currentMonthStr = sdfMonth.format(Date())
+                            val parts = currentMonthStr.split("-")
+                            val yr = parts[0].toInt()
+                            val mo = parts[1].toInt()
+                            
+                            val cal = Calendar.getInstance()
+                            cal.set(Calendar.YEAR, yr)
+                            cal.set(Calendar.MONTH, mo - 1)
+                            val maxDaysInMo = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                            
+                            var totalSundays = 0
+                            for (day in 1..maxDaysInMo) {
+                                cal.set(Calendar.DAY_OF_MONTH, day)
+                                if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+                                    totalSundays++
+                                }
+                            }
+                            standardWorkDays = maxDaysInMo - totalSundays
+                            if (maxDaysInMo == 31) {
+                                standardWorkDays = 27
+                            }
+                        } catch (e: Exception) {}
+
+                        val dailyRate = if (standardWorkDays == 27) {
+                            lcb / 26.0
+                        } else {
+                            lcb / standardWorkDays.toDouble()
+                        }
+                        val hrRate = dailyRate / 8.0
+                        
+                        val checkInVal = active.checkInTime
+                        val elapsedMs = remember(liveTimeString) { System.currentTimeMillis() - checkInVal }
+                        val elapsedHours = (elapsedMs.coerceAtLeast(0L)) / 3600000.0
+                        
+                        val dateParser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        var dt = "NORMAL"
+                        try {
+                            val parsedDate = dateParser.parse(active.date)
+                            if (parsedDate != null) {
+                                val c = Calendar.getInstance()
+                                c.time = parsedDate
+                                if (c.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+                                    dt = "SUNDAY"
+                                } else {
+                                    val parts = active.date.split("-")
+                                    if (parts.size >= 3) {
+                                        val md = "${parts[1]}-${parts[2]}"
+                                        if (md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02") {
+                                            dt = "HOLIDAY"
                                         }
                                     }
                                 }
                             }
+                        } catch(e: Exception) {}
+
+                        val multi = when (dt) {
+                            "SUNDAY" -> configState?.heSoOtChuNhat ?: 2.0
+                            "HOLIDAY" -> configState?.heSoOtNgayLe ?: 3.0
+                            else -> configState?.heSoOtNgayThuong ?: 1.5
+                        }
+
+                        val breakHours = if (configState?.tinhKhauTruNghi == true) (configState?.soGioNghiGiaiLao ?: 1.5) else 0.0
+                        val actualElapsedHours = (elapsedHours - breakHours).coerceAtLeast(0.0)
+
+                        val earnings = if (actualElapsedHours <= 8.0) {
+                            actualElapsedHours * hrRate
+                        } else {
+                            val stdPay = 8.0 * hrRate
+                            val otPay = (actualElapsedHours - 8.0) * hrRate * multi
+                            stdPay + otPay
+                        }
+
+                        val decFmt = DecimalFormat("#,###")
+                        val formattedEarned = decFmt.format(earnings) + " đ"
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = AccentGreen.copy(alpha = 0.12f)),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentGreen.copy(alpha = 0.3f))
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "ƯỚC TÍNH SỐ TIỀN ĐÃ LÀM ĐƯỢC CA NÀY",
+                                    color = AccentGreen,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = formattedEarned,
+                                    color = AccentGreen,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Black,
+                                    textAlign = TextAlign.Center
+                                )
+                                val hoursStr = String.format(Locale.US, "%.2f giờ", actualElapsedHours)
+                                val breakLabel = if (configState?.tinhKhauTruNghi == true) " (đã trừ ${configState?.soGioNghiGiaiLao}g nghỉ)" else ""
+                                Text(
+                                    text = "Thực làm: $hoursStr$breakLabel" + if (actualElapsedHours > 8.0) " (Đang tăng ca OT x$multi)" else "",
+                                    color = LightGray,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(top = 2.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // GHI CHÚ NHANH CA LÀM
+                    OutlinedTextField(
+                        value = quickNoteText,
+                        onValueChange = { 
+                            quickNoteText = it
+                            if (isWorking) {
+                                viewModel.updateActiveEntryNote(it)
+                            }
+                        },
+                        label = { Text("Ghi chú nhanh ca làm...") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = NeonBlue,
+                            unfocusedBorderColor = Color(0xFF2C2C2C)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        textStyle = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
-        }
 
-        // Dialog for logging/editing a day's details
-        selectedDayToEdit?.let { day ->
-            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-            Dialog(onDismissRequest = { selectedDayToEdit = null }) {
-                Card(
+            // CARD 3: 7-DAY BAR CHART
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        .padding(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(Icons.Default.Timeline, "Chart", tint = NeonBlue, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Ngày $dateStr",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "BIỂU ĐỒ HOẠT ĐỘNG 7 NGÀY GẦN NHẤT",
+                            color = White,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            letterSpacing = 0.5.sp
                         )
+                    }
 
-                        Divider()
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                        // Day type selector
-                        Text("Loại ngày công:", style = MaterialTheme.typography.bodyMedium)
-                        val types = listOf(
-                            "NORMAL" to "Ngày Thường",
-                            "PAID_LEAVE" to "Phép Năm Có Lương",
-                            "UNPAID_LEAVE" to "Nghỉ Không Lương",
-                            "HOLIDAY" to "Ngày Lễ",
-                            "SUNDAY" to "Chủ Nhật"
+                    val last7DaysData = remember(recentEntries) {
+                        calculateRecent7Days(recentEntries)
+                    }
+
+                    TimeSnap7DayBarChart(data = last7DaysData)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+
+            // CARD 4: CHẤM CÔNG GẦN ĐÂY (SHOWING EXACTLY 3 days descending, real-time updates, no deletes)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Schedule, "Recent history logs", tint = NeonBlue, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "CHẤM CÔNG GẦN ĐÂY",
+                            color = White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
                         )
+                    }
 
-                        types.forEach { (typeVal, label) ->
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+                    val sortedLogs = remember(recentEntries, todayStr) {
+                        recentEntries
+                            .filter { it.date <= todayStr }
+                            .sortedByDescending { it.date }
+                            .take(3)
+                    }
+
+                    if (sortedLogs.isEmpty()) {
+                        Text(
+                            text = "Chưa có dữ liệu chấm công gần đây.",
+                            color = MediumGray,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    } else {
+                        sortedLogs.forEachIndexed { index, entry ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { editDayType = typeVal }
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(selected = editDayType == typeVal, onClick = { editDayType = typeVal })
-                                Text(label, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-
-                        // Check in / out pickers
-                        if (editDayType == "NORMAL" || editDayType == "SUNDAY" || editDayType == "HOLIDAY") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = {
-                                        val cal = Calendar.getInstance()
-                                        TimePickerDialog(context, { _, h, m ->
-                                            editCheckInTime = String.format(Locale.US, "%02d:%02d", h, m)
-                                        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(editCheckInTime?.let { "Vào: $it" } ?: "Chọn giờ vào")
-                                }
-
-                                Button(
-                                    onClick = {
-                                        val cal = Calendar.getInstance()
-                                        TimePickerDialog(context, { _, h, m ->
-                                            editCheckOutTime = String.format(Locale.US, "%02d:%02d", h, m)
-                                        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(editCheckOutTime?.let { "Ra: $it" } ?: "Chọn giờ ra")
-                                }
-                            }
-                        }
-
-                        // Note field
-                        OutlinedTextField(
-                            value = editNote,
-                            onValueChange = { editNote = it },
-                            label = { Text("Ghi chú") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Action buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    val entry = entries.find { it.date == dateStr }
-                                    if (entry != null) {
-                                        viewModel.deleteTimeEntry(entry.id)
-                                    }
-                                    selectedDayToEdit = null
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Xóa chấm công", color = MaterialTheme.colorScheme.error)
-                            }
-
-                            Button(
-                                onClick = {
-                                    val baseCal = Calendar.getInstance()
-                                    val sdfDateTime = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
-
-                                    val finalInTime = editCheckInTime?.let {
-                                        try { sdfDateTime.parse("$dateStr $it")?.time } catch (e: Exception) { null }
-                                    }
-                                    val finalOutTime = editCheckOutTime?.let {
-                                        try { sdfDateTime.parse("$dateStr $it")?.time } catch (e: Exception) { null }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val formattedDate = remember(entry.date) {
+                                        try {
+                                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            val dateVal = parser.parse(entry.date)
+                                            if (dateVal != null) {
+                                                val formatter = SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN"))
+                                                formatter.format(dateVal).replaceFirstChar { it.uppercase() }
+                                            } else {
+                                                entry.date
+                                            }
+                                        } catch (e: Exception) {
+                                            entry.date
+                                        }
                                     }
 
-                                    val existing = entries.find { it.date == dateStr }
-                                    val updated = TimeEntry(
-                                        id = existing?.id ?: 0,
-                                        userId = "default_user",
-                                        date = dateStr,
-                                        checkInTime = finalInTime,
-                                        checkOutTime = finalOutTime,
-                                        isWorking = editDayType == "NORMAL" || editDayType == "SUNDAY" || editDayType == "HOLIDAY",
-                                        dayType = editDayType,
-                                        isHourlyCalculated = finalInTime != null,
-                                        note = editNote.ifBlank { null }
+                                    Text(
+                                        text = formattedDate,
+                                        color = White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
-                                    viewModel.saveTimeEntry(updated)
-                                    selectedDayToEdit = null
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Lưu")
+                                    
+                                    val statusLabel = when (entry.dayType) {
+                                        "SUNDAY" -> "Chủ Nhật"
+                                        "HOLIDAY" -> "Ngày Lễ"
+                                        "PAID_LEAVE" -> "Nghỉ phép (Có lương)"
+                                        "UNPAID_LEAVE" -> "Nghỉ không lương"
+                                        else -> "Ngày thường"
+                                    }
+                                    Text(
+                                        text = statusLabel + (if (!entry.note.isNullOrEmpty()) " • ${entry.note}" else ""),
+                                        color = when(entry.dayType) {
+                                            "SUNDAY", "HOLIDAY" -> AccentRed
+                                            "PAID_LEAVE" -> NeonBlue
+                                            "UNPAID_LEAVE" -> AccentOrange
+                                            else -> LightGray
+                                        },
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    if (entry.dayType == "PAID_LEAVE" || entry.dayType == "UNPAID_LEAVE") {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    if(entry.dayType == "PAID_LEAVE") NeonBlue.copy(alpha = 0.15f) else AccentOrange.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(6.dp)
+                                                )
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = if(entry.dayType == "PAID_LEAVE") "PHÉP" else "VẮNG",
+                                                color = if(entry.dayType == "PAID_LEAVE") NeonBlue else AccentOrange,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    } else if (entry.isWorking) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(AccentOrange.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "ĐANG LÀM",
+                                                color = AccentOrange,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    } else if (entry.checkInTime != null && entry.checkOutTime != null) {
+                                        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                                        val inStr = timeFormat.format(Date(entry.checkInTime))
+                                        val outStr = timeFormat.format(Date(entry.checkOutTime))
+
+                                        Text(
+                                            text = "$inStr - $outStr",
+                                            color = AccentGreen,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        
+                                        val hrs = (entry.checkOutTime - entry.checkInTime) / 3600000.0
+                                        val isBreakDeduction = configState?.tinhKhauTruNghi == true
+                                        val breakHours = if (isBreakDeduction) (configState?.soGioNghiGiaiLao ?: 1.5) else 0.0
+                                        val rounded = if (isBreakDeduction) {
+                                            (hrs - breakHours).coerceAtLeast(0.0)
+                                        } else {
+                                            if (hrs <= 8.5) hrs.coerceAtMost(8.0) else hrs
+                                        }
+                                        Text(
+                                            text = "${DecimalFormat("#.#").format(rounded)} tiếng",
+                                            color = LightGray,
+                                            fontSize = 11.sp
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Không xác định",
+                                            color = MediumGray,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
+                            if (index < sortedLogs.lastIndex) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(Color(0xFF2C2C2C))
+                                        .padding(vertical = 4.dp)
+                                )
                             }
                         }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(80.dp))
+        }
+    }
+}
+
+@Composable
+fun StatCard(
+    title: String,
+    value: String,
+    subValue: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkContainer),
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.height(115.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = title,
+                    color = LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    color = White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(1.dp))
+                Text(
+                    text = subValue,
+                    color = MediumGray,
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+data class DayChartPoint(
+    val label: String,
+    val hours: Double,
+    val dateStr: String
+)
+
+@Composable
+fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
+    val barColor = NeonBlue
+    val gridLineColor = Color(0xFF2C2C2C)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(170.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val canvasWidth = size.width
+            val canvasHeight = size.height
+
+            val bottomPadding = 30f
+            val topPadding = 20f
+            val leftPadding = 40f
+            val rightPadding = 20f
+
+            val graphWidth = canvasWidth - leftPadding - rightPadding
+            val graphHeight = canvasHeight - topPadding - bottomPadding
+
+            val maxHours = 12.0
+
+            drawLine(
+                color = gridLineColor,
+                start = Offset(leftPadding, canvasHeight - bottomPadding),
+                end = Offset(canvasWidth - rightPadding, canvasHeight - bottomPadding),
+                strokeWidth = 2f
+            )
+
+            val middleY1 = canvasHeight - bottomPadding - (graphHeight * 0.5f)
+            drawLine(
+                color = gridLineColor.copy(alpha = 0.5f),
+                start = Offset(leftPadding, middleY1),
+                end = Offset(canvasWidth - rightPadding, middleY1),
+                strokeWidth = 1f
+            )
+
+            val barCount = data.size
+            if (barCount > 0) {
+                val columnWidth = graphWidth / barCount
+                val barMaxWidth = columnWidth * 0.5f
+
+                for (i in 0 until barCount) {
+                    val pt = data[i]
+
+                    val rawHours = pt.hours.coerceAtLeast(0.0)
+                    val percent = (rawHours / maxHours).coerceAtMost(1.0).toFloat()
+
+                    val barHeight = graphHeight * percent
+                    val xCenter = leftPadding + (i * columnWidth) + (columnWidth / 2f)
+                    val xLeft = xCenter - (barMaxWidth / 2f)
+                    val yTop = canvasHeight - bottomPadding - barHeight
+
+                    if (barHeight > 2f) {
+                        drawRoundRect(
+                            color = if (pt.hours > 8.0) AccentGreen else barColor,
+                            topLeft = Offset(xLeft, yTop),
+                            size = Size(barMaxWidth, barHeight),
+                            cornerRadius = CornerRadius(8f, 8f)
+                        )
+                    }
+
+                    drawContext.canvas.nativeCanvas.apply {
+                        val textPaint = android.text.TextPaint().apply {
+                            color = android.graphics.Color.WHITE
+                            textSize = 24f
+                            textAlign = android.graphics.Paint.Align.CENTER
+                        }
+                        drawText(
+                            pt.label,
+                            xCenter,
+                            canvasHeight - 5f,
+                            textPaint
+                        )
+
+                        if (pt.hours > 0.0) {
+                            val hrsText = if (pt.hours % 1.0 == 0.0) "${pt.hours.toInt()}h" else "${DecimalFormat("#.#").format(pt.hours)}h"
+                            val valPaint = android.text.TextPaint().apply {
+                                color = if (pt.hours > 8.0) android.graphics.Color.parseColor("#27AE60") else android.graphics.Color.parseColor("#2F80ED")
+                                textSize = 20f
+                                textAlign = android.graphics.Paint.Align.CENTER
+                                isFakeBoldText = true
+                            }
+                            drawText(
+                                hrsText,
+                                xCenter,
+                                yTop - 6f,
+                                valPaint
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> {
+    val cal = Calendar.getInstance()
+    val sdfValue = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val sdfDay = SimpleDateFormat("EEE", Locale("vi", "VN"))
+
+    val dates = ArrayList<Pair<String, String>>()
+    for (i in 6 downTo 0) {
+        val clone = cal.clone() as Calendar
+        clone.add(Calendar.DAY_OF_YEAR, -i)
+        val dateStr = sdfValue.format(clone.time)
+        var label = sdfDay.format(clone.time)
+            .replace("Thứ ", "T")
+            .replace("Chủ nhật", "CN")
+            .replace("Chủ Nhật", "CN")
+        dates.add(Pair(label, dateStr))
+    }
+
+    return dates.map { (label, dateStr) ->
+        val entity = entries.find { it.date == dateStr }
+        val hours = if (entity != null && entity.checkInTime != null && entity.checkOutTime != null) {
+            val elapsed = entity.checkOutTime - entity.checkInTime
+            val actual = elapsed / 3600000.0
+            
+            if (actual <= 8.5) {
+                actual.coerceAtMost(8.0)
+            } else {
+                actual
+            }
+        } else {
+            0.0
+        }
+        DayChartPoint(label, hours, dateStr)
     }
 }

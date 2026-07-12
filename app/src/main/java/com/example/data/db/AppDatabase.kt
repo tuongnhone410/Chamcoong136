@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
 
-@Database(entities = [TimeEntry::class, UserConfig::class], version = 6, exportSchema = false)
+@Database(entities = [TimeEntry::class, UserConfig::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun timeEntryDao(): TimeEntryDao
     abstract fun userConfigDao(): UserConfigDao
@@ -16,14 +16,14 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        fun getDatabase(context: Context): AppDatabase {
+        fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "timesnap_database"
+                    "timesnap_pro_db"
                 )
-                .fallbackToDestructiveMigration() // safe for local updates/resets
+                .fallbackToDestructiveMigration() // safe for production prototyping iteration
                 .build()
                 INSTANCE = instance
                 instance

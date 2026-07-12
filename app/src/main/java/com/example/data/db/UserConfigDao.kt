@@ -7,11 +7,11 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface UserConfigDao {
     @Query("SELECT * FROM user_config WHERE userId = :userId LIMIT 1")
-    fun getUserConfig(userId: String): Flow<UserConfig?>
+    suspend fun getConfigForUser(userId: String): UserConfig?
 
     @Query("SELECT * FROM user_config WHERE userId = :userId LIMIT 1")
-    suspend fun getUserConfigOnce(userId: String): UserConfig?
+    fun getConfigFlow(userId: String): Flow<UserConfig?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertUserConfig(config: UserConfig)
+    suspend fun saveConfig(config: UserConfig)
 }

@@ -10,39 +10,63 @@ class TimeRepository(
     private val timeEntryDao: TimeEntryDao,
     private val userConfigDao: UserConfigDao
 ) {
-    fun getAllTimeEntries(userId: String): Flow<List<TimeEntry>> {
-        return timeEntryDao.getAllTimeEntries(userId)
+    fun getEntries(userId: String): Flow<List<TimeEntry>> = timeEntryDao.getEntriesForUser(userId)
+
+    fun getEntriesInMonth(userId: String, monthPattern: String): Flow<List<TimeEntry>> {
+        return timeEntryDao.getEntriesForUserInMonth(userId, monthPattern)
     }
 
-    fun getTimeEntriesByMonth(userId: String, monthPrefix: String): Flow<List<TimeEntry>> {
-        return timeEntryDao.getTimeEntriesByMonth(userId, monthPrefix)
+    suspend fun getEntryByDate(userId: String, date: String): TimeEntry? {
+        return timeEntryDao.getEntryByDate(userId, date)
     }
 
-    suspend fun getTimeEntryByDate(userId: String, date: String): TimeEntry? {
-        return timeEntryDao.getTimeEntryByDate(userId, date)
+    suspend fun getActiveEntry(userId: String): TimeEntry? {
+        return timeEntryDao.getActiveEntry(userId)
     }
 
-    suspend fun insertTimeEntry(entry: TimeEntry): Long {
-        return timeEntryDao.insertTimeEntry(entry)
+    suspend fun insertOrUpdate(entry: TimeEntry) {
+        timeEntryDao.insertOrUpdate(entry)
     }
 
-    suspend fun deleteTimeEntryById(id: Int) {
-        timeEntryDao.deleteTimeEntryById(id)
+    suspend fun delete(entry: TimeEntry) {
+        timeEntryDao.delete(entry)
     }
 
-    suspend fun deleteTimeEntryByDate(userId: String, date: String) {
-        timeEntryDao.deleteTimeEntryByDate(userId, date)
+    suspend fun deleteEntriesInMonth(userId: String, monthPattern: String) {
+        timeEntryDao.deleteEntriesInMonth(userId, monthPattern)
     }
 
-    fun getUserConfig(userId: String): Flow<UserConfig?> {
-        return userConfigDao.getUserConfig(userId)
+    suspend fun getEntriesInMonthDirect(userId: String, monthPattern: String): List<TimeEntry> {
+        return timeEntryDao.getEntriesForUserInMonthDirect(userId, monthPattern)
     }
 
-    suspend fun getUserConfigOnce(userId: String): UserConfig? {
-        return userConfigDao.getUserConfigOnce(userId)
+    fun getConfig(userId: String): Flow<UserConfig?> = userConfigDao.getConfigFlow(userId)
+
+    suspend fun getConfigDirect(userId: String): UserConfig? {
+        return userConfigDao.getConfigForUser(userId)
     }
 
-    suspend fun saveUserConfig(config: UserConfig) {
-        userConfigDao.insertUserConfig(config)
+    suspend fun saveConfig(config: UserConfig) {
+        userConfigDao.saveConfig(config)
+    }
+
+    suspend fun insertDefaultConfig(userId: String, defaultName: String = "User Demo", defaultEmail: String = "", defaultMaNhanVien: String = "") {
+        val existing = userConfigDao.getConfigForUser(userId)
+        val maNhan = if (defaultMaNhanVien.isNotEmpty()) defaultMaNhanVien else "demo_${userId.takeLast(6)}"
+        if (existing == null) {
+            userConfigDao.saveConfig(UserConfig(
+                userId = userId,
+                hoVaTen = defaultName,
+                emailDangKy = defaultEmail,
+                maNhanVien = maNhan
+            ))
+        } else {
+            if ((existing.emailDangKy.isEmpty() && defaultEmail.isNotEmpty()) || (defaultMaNhanVien.isNotEmpty() && existing.maNhanVien != defaultMaNhanVien)) {
+                userConfigDao.saveConfig(existing.copy(
+                    emailDangKy = if (existing.emailDangKy.isEmpty()) defaultEmail else existing.emailDangKy,
+                    maNhanVien = if (defaultMaNhanVien.isNotEmpty()) defaultMaNhanVien else existing.maNhanVien
+                ))
+            }
+        }
     }
 }

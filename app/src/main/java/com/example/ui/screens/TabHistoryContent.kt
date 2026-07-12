@@ -1,0 +1,575 @@
+package com.example.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import com.example.data.AttendanceRecord
+import com.example.data.DatabaseHelper
+import com.example.data.UserConfig
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
+
+@Composable
+fun TabHistoryContent(
+    userId: String,
+    userConfig: UserConfig,
+    attendanceLogs: List<AttendanceRecord>,
+    onRecordsChanged: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val dbHelper = DatabaseHelper.instance
+
+    var currentMonth by remember { mutableStateOf(Calendar.getInstance()) }
+    
+    val attendanceMap = remember(attendanceLogs, currentMonth) {
+        val targetMonth = currentMonth.get(Calendar.MONTH) + 1
+        val targetYear = currentMonth.get(Calendar.YEAR)
+        attendanceLogs.filter { log ->
+            val parts = log.dateString.split("/")
+            if (parts.size >= 3) {
+                val m = parts[1].toIntOrNull()
+                val y = parts[2].toIntOrNull()
+                m == targetMonth && y == targetYear
+            } else false
+        }.associateBy { it.dateString }
+    }
+
+    var selectedDates by remember { mutableStateOf(setOf<String>()) }
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+
+    var showSingleDayDialog by remember { mutableStateOf<String?>(null) }
+    var showBatchDialog by remember { mutableStateOf(false) }
+
+    val daysInMonth = currentMonth.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val firstDayOfMonth = currentMonth.clone() as Calendar
+    firstDayOfMonth.set(Calendar.DAY_OF_MONTH, 1)
+    
+    // adjust for Monday = 1
+    var firstDayOfWeek = firstDayOfMonth.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY
+    if (firstDayOfWeek < 0) firstDayOfWeek += 7
+
+    val headerFormatter = SimpleDateFormat("MM/yyyy", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // Multi-select actions header
+        if (isMultiSelectMode) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Đã chọn ${selectedDates.size} ngày",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { isMultiSelectMode = false; selectedDates = emptySet() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                    ) {
+                        Text("Hủy")
+                    }
+                    Button(
+                        onClick = { showBatchDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71)),
+                        enabled = selectedDates.isNotEmpty()
+                    ) {
+                        Text("Chấm Công")
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Tháng ${headerFormatter.format(currentMonth.time)}",
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = { isMultiSelectMode = true; selectedDates = emptySet() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A86FF))
+                ) {
+                    Text("Chọn Nhiều")
+                }
+            }
+        }
+
+        // Calendar Grid Header
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            listOf("T2", "T3", "T4", "T5", "T6", "T7", "CN").forEach { day ->
+                Text(
+                    text = day,
+                    color = if (day == "CN") Color(0xFFFF5252) else Color.White,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(7),
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = 100.dp)
+        ) {
+            items(firstDayOfWeek) {
+                Box(modifier = Modifier.aspectRatio(1f))
+            }
+            items((1..daysInMonth).toList()) { day ->
+                val cal = currentMonth.clone() as Calendar
+                cal.set(Calendar.DAY_OF_MONTH, day)
+                val dateStr = dateFormatter.format(cal.time)
+                val record = attendanceMap[dateStr]
+                
+                val isSelected = selectedDates.contains(dateStr)
+                val isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+
+                Box(
+                    modifier = Modifier
+                        .aspectRatio(1f)
+                        .padding(2.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when {
+                                isSelected -> Color(0xFF3A86FF).copy(alpha = 0.5f)
+                                record != null -> {
+                                    when (record.status) {
+                                        "PaidLeave" -> Color(0xFFF2C94C).copy(alpha = 0.2f)
+                                        "PaidHolidayLeave" -> Color(0xFF9B51E0).copy(alpha = 0.2f)
+                                        else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
+                                    }
+                                }
+                                else -> Color(0xFF1E1E1E)
+                            }
+                        )
+                        .clickable {
+                            if (isMultiSelectMode) {
+                                selectedDates = if (isSelected) {
+                                    selectedDates - dateStr
+                                } else {
+                                    selectedDates + dateStr
+                                }
+                            } else {
+                                showSingleDayDialog = dateStr
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = day.toString(),
+                            color = if (isSunday) Color(0xFFFF5252) else Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (record != null) {
+                            if (record.status == "PaidLeave") {
+                                Text(text = "Nghỉ phép\ncó lương", fontSize = 9.sp, color = Color(0xFFF2C94C), textAlign = TextAlign.Center, lineHeight = 10.sp)
+                            } else if (record.status == "PaidHolidayLeave") {
+                                Text(text = "Nghỉ lễ\ncó lương", fontSize = 9.sp, color = Color(0xFFBB6BD9), textAlign = TextAlign.Center, lineHeight = 10.sp)
+                            } else {
+                                val inStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockInTime))
+                                val outStr = if (record.clockOutTime != null) {
+                                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockOutTime))
+                                } else "..."
+                                Text(text = "$inStr\n$outStr", fontSize = 9.sp, color = Color.LightGray, textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val currentDialogDate = showSingleDayDialog
+    if (currentDialogDate != null) {
+        val dateStr = currentDialogDate
+        SingleDayEntryDialog(
+            dateStr = dateStr,
+            initialRecord = attendanceMap[dateStr],
+            onDismiss = { showSingleDayDialog = null },
+            onSave = { clockInTime, clockOutTime, finalStatus ->
+                scope.launch {
+                    val r = AttendanceRecord(
+                        id = attendanceMap[dateStr]?.id ?: 0,
+                        uid = userId,
+                        dateString = dateStr,
+                        clockInTime = clockInTime,
+                        clockOutTime = clockOutTime,
+                        status = finalStatus
+                    )
+                    dbHelper.insertManualRecord(r)
+                    onRecordsChanged()
+                }
+                showSingleDayDialog = null
+            }
+        )
+    }
+
+    if (showBatchDialog) {
+        BatchEntryDialog(
+            selectedDates = selectedDates.toList(),
+            onDismiss = { showBatchDialog = false },
+            onSave = { inHour, inMin, outHour, outMin, skipSunday, skipHoliday ->
+                val datesToSave = selectedDates.toList()
+                showBatchDialog = false
+                isMultiSelectMode = false
+                selectedDates = emptySet()
+
+                scope.launch {
+                    val recordsList = mutableListOf<AttendanceRecord>()
+                    datesToSave.forEach { d ->
+                        val cal = Calendar.getInstance()
+                        val parsedDate = dateFormatter.parse(d)
+                        if (parsedDate != null) {
+                            cal.time = parsedDate
+                            
+                            val isSun = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                            val isHol = com.example.data.SalaryCalculator.isHoliday(d)
+                            
+                            if (skipSunday && isSun) return@forEach
+                            if (skipHoliday && isHol) return@forEach
+
+                            val cIn = cal.clone() as Calendar
+                            cIn.set(Calendar.HOUR_OF_DAY, inHour)
+                            cIn.set(Calendar.MINUTE, inMin)
+                            cIn.set(Calendar.SECOND, 0)
+                            cIn.set(Calendar.MILLISECOND, 0)
+
+                            val cOut = cal.clone() as Calendar
+                            cOut.set(Calendar.HOUR_OF_DAY, outHour)
+                            cOut.set(Calendar.MINUTE, outMin)
+                            cOut.set(Calendar.SECOND, 0)
+                            cOut.set(Calendar.MILLISECOND, 0)
+                            
+                            // if out is next day (e.g. night shift)
+                            if (cOut.timeInMillis <= cIn.timeInMillis) {
+                                cOut.add(Calendar.DAY_OF_MONTH, 1)
+                            }
+
+                            val r = AttendanceRecord(
+                                id = attendanceMap[d]?.id ?: 0,
+                                uid = userId,
+                                dateString = d,
+                                clockInTime = cIn.timeInMillis,
+                                clockOutTime = cOut.timeInMillis,
+                                status = "Completed"
+                            )
+                            recordsList.add(r)
+                        }
+                    }
+                    if (recordsList.isNotEmpty()) {
+                        dbHelper.insertManualRecords(recordsList)
+                    }
+                    onRecordsChanged()
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SingleDayEntryDialog(
+    dateStr: String,
+    initialRecord: AttendanceRecord?,
+    onDismiss: () -> Unit,
+    onSave: (Long, Long?, String) -> Unit
+) {
+    var inHour by remember { mutableStateOf(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.HOUR_OF_DAY).toString() } ?: "08") }
+    var inMin by remember { mutableStateOf(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.MINUTE).toString() } ?: "00") }
+    
+    var outHour by remember { mutableStateOf(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.HOUR_OF_DAY).toString() } ?: "") }
+    var outMin by remember { mutableStateOf(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.MINUTE).toString() } ?: "") }
+
+    var selectedStatus by remember { mutableStateOf(initialRecord?.status ?: "Completed") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Chấm công ngày $dateStr", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Trạng thái công", color = Color.LightGray, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedStatus == "Completed" || selectedStatus == "Active",
+                        onClick = { selectedStatus = "Completed" }
+                    )
+                    Text("Đi làm", color = Color.White, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    RadioButton(
+                        selected = selectedStatus == "PaidLeave",
+                        onClick = { selectedStatus = "PaidLeave" }
+                    )
+                    Text("Nghỉ có lương", color = Color.White, fontSize = 13.sp)
+                }
+
+                val isDayHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+                if (isDayHoliday) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedStatus == "PaidHolidayLeave",
+                            onClick = { selectedStatus = "PaidHolidayLeave" }
+                        )
+                        Text("Nghỉ lễ QDNN có lương (Cty cho nghỉ)", color = Color(0xFF2ECC71), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Conditionally display hour input only for actual work shifts
+                if (selectedStatus == "Completed" || selectedStatus == "Active") {
+                    Text("Giờ Vào Ca", color = Color.LightGray)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = inHour,
+                            onValueChange = { inHour = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Giờ (0-23)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        OutlinedTextField(
+                            value = inMin,
+                            onValueChange = { inMin = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Phút (0-59)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Giờ Ra Ca (Để trống nếu quên chấm ra)", color = Color.LightGray)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = outHour,
+                            onValueChange = { outHour = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Giờ") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        OutlinedTextField(
+                            value = outMin,
+                            onValueChange = { outMin = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Phút") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
+                    ) {
+                        Text(
+                            text = "Hệ thống sẽ ghi nhận công ngày nghỉ hưởng 100% lương ngày cơ bản tiêu chuẩn.",
+                            color = Color.LightGray,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
+                    Button(
+                        onClick = {
+                            try {
+                                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                val date = sdf.parse(dateStr) ?: Date()
+                                
+                                val cin = Calendar.getInstance()
+                                cin.time = date
+                                cin.set(Calendar.HOUR_OF_DAY, inHour.toIntOrNull() ?: 8)
+                                cin.set(Calendar.MINUTE, inMin.toIntOrNull() ?: 0)
+
+                                val coutHour = outHour.toIntOrNull()
+                                val coutMin = outMin.toIntOrNull()
+                                
+                                var coutMillis: Long? = null
+                                if (coutHour != null && coutMin != null) {
+                                    val cout = Calendar.getInstance()
+                                    cout.time = date
+                                    cout.set(Calendar.HOUR_OF_DAY, coutHour)
+                                    cout.set(Calendar.MINUTE, coutMin)
+                                    if (cout.timeInMillis <= cin.timeInMillis) {
+                                        cout.add(Calendar.DAY_OF_MONTH, 1)
+                                    }
+                                    coutMillis = cout.timeInMillis
+                                }
+
+                                val finalStatus = if (selectedStatus == "PaidLeave" || selectedStatus == "PaidHolidayLeave") {
+                                    selectedStatus
+                                } else {
+                                    if (coutMillis == null) "Active" else "Completed"
+                                }
+
+                                val finalCin = if (finalStatus == "PaidLeave" || finalStatus == "PaidHolidayLeave") {
+                                    cin.apply { 
+                                        set(Calendar.HOUR_OF_DAY, 8)
+                                        set(Calendar.MINUTE, 0)
+                                    }.timeInMillis
+                                } else {
+                                    cin.timeInMillis
+                                }
+                                
+                                val finalCout = if (finalStatus == "PaidLeave" || finalStatus == "PaidHolidayLeave") {
+                                    Calendar.getInstance().apply {
+                                        time = date
+                                        set(Calendar.HOUR_OF_DAY, 17)
+                                        set(Calendar.MINUTE, 0)
+                                    }.timeInMillis
+                                } else {
+                                    coutMillis
+                                }
+
+                                onSave(finalCin, finalCout, finalStatus)
+                            } catch (e: Exception) {
+                                android.util.Log.e("SingleDayEntryDialog", "Failed to parse/save manual record", e)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))
+                    ) { Text("Lưu") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BatchEntryDialog(
+    selectedDates: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (Int, Int, Int, Int, Boolean, Boolean) -> Unit
+) {
+    var inHour by remember { mutableStateOf("08") }
+    var inMin by remember { mutableStateOf("00") }
+    var outHour by remember { mutableStateOf("17") }
+    var outMin by remember { mutableStateOf("00") }
+    
+    var skipSunday by remember { mutableStateOf(false) }
+    var skipHoliday by remember { mutableStateOf(false) }
+    var autoRecognizeOT by remember { mutableStateOf(true) }
+
+    androidx.compose.runtime.LaunchedEffect(skipSunday, skipHoliday) {
+        if (skipSunday || skipHoliday) {
+            autoRecognizeOT = false
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Chấm công hàng loạt (${selectedDates.size} ngày)", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = inHour, onValueChange = { inHour = it }, modifier = Modifier.weight(1f), label = { Text("Giờ Vào") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                    OutlinedTextField(value = inMin, onValueChange = { inMin = it }, modifier = Modifier.weight(1f), label = { Text("Phút Vào") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = outHour, onValueChange = { outHour = it }, modifier = Modifier.weight(1f), label = { Text("Giờ Ra") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                    OutlinedTextField(value = outMin, onValueChange = { outMin = it }, modifier = Modifier.weight(1f), label = { Text("Phút Ra") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Cấu hình nâng cao", color = Color(0xFF2ECC71), fontWeight = FontWeight.Bold)
+                
+                val isAutoEnabled = !skipSunday && !skipHoliday
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipSunday = !skipSunday }) {
+                    Checkbox(checked = skipSunday, onCheckedChange = { 
+                        skipSunday = it
+                    })
+                    Text("A. Bỏ qua ngày Chủ Nhật", color = Color.White)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipHoliday = !skipHoliday }) {
+                    Checkbox(checked = skipHoliday, onCheckedChange = { 
+                        skipHoliday = it
+                    })
+                    Text("B. Bỏ qua Ngày Lễ", color = Color.White)
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically, 
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = isAutoEnabled) { autoRecognizeOT = !autoRecognizeOT }
+                ) {
+                    Checkbox(
+                        checked = autoRecognizeOT && isAutoEnabled, 
+                        onCheckedChange = { if (isAutoEnabled) autoRecognizeOT = it },
+                        enabled = isAutoEnabled
+                    )
+                    Text("C. Tự động nhận diện OT 2.0, OT 3.0", color = if (isAutoEnabled) Color.White else Color.Gray)
+                }
+                
+                Text(
+                    text = "* Những ngày hệ thống nhận diện là OT sẽ tự động được nhân hệ số lúc tính lương.",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
+                    Button(
+                        onClick = {
+                            val iH = inHour.toIntOrNull() ?: 8
+                            val iM = inMin.toIntOrNull() ?: 0
+                            val oH = outHour.toIntOrNull() ?: 17
+                            val oM = outMin.toIntOrNull() ?: 0
+                            onSave(iH, iM, oH, oM, skipSunday, skipHoliday)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))
+                    ) { Text("Áp Dụng") }
+                }
+            }
+        }
+    }
+}
