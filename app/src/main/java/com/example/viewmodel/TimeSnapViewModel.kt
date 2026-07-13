@@ -876,16 +876,6 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
                 pcKhac1Pr + pcKhacPr + pcCaDemPr
 
-        // Chuyen can block calculated per standard work / dynamic standard days * working day contribution
-        val chuyenCanValue = Math.round((config.tienChuyenCanGoc / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.tienChuyenCanGoc)
-
-        // Remaining retro-compatible values for standard slots (set to 0 to prevent double-counting dynamic meal allowances)
-        val tongCom = 0.0
-
-        // Deductions
-        val tieuBaoHiem = Math.round(config.luongDongBaoHiem * (config.tiLeDongBaoHiem / 100.0)).toDouble()
-        val doanPhi = config.doanPhiCongDoan
-
         // Missed day deduction (Compare with dynamically expected workdays count up to today/full month)
         var missedDays = 0
         if (isCurrentSelectedMonth) {
@@ -916,6 +906,23 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         } else {
             missedDays = (expectedWorkDaysCount - workingDaysCount).coerceAtLeast(0)
         }
+
+        // Chuyen can block calculated per standard work / dynamic standard days * working day contribution
+        // Chuyên cần is completely lost (0.0) if there's any unexcused absence (missedDays > 0) or unpaid leave (UNPAID_LEAVE)
+        val hasUnpaidOrAbsent = missedDays > 0 || entries.any { it.dayType == "UNPAID_LEAVE" }
+        val chuyenCanValue = if (hasUnpaidOrAbsent) {
+            0.0
+        } else {
+            Math.round((config.tienChuyenCanGoc / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.tienChuyenCanGoc)
+        }
+
+        // Remaining retro-compatible values for standard slots (set to 0 to prevent double-counting dynamic meal allowances)
+        val tongCom = 0.0
+
+        // Deductions
+        val tieuBaoHiem = Math.round(config.luongDongBaoHiem * (config.tiLeDongBaoHiem / 100.0)).toDouble()
+        val doanPhi = config.doanPhiCongDoan
+
         val baseBasicSalary = Math.round((luongBasic / 26.0) * workingDaysCount).toDouble().coerceAtMost(luongBasic)
         val tienKhauTruNghi = 0.0
 
