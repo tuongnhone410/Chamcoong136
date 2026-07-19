@@ -19,7 +19,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # Nâng cấp lên bản Gradle 9.3.1 theo đúng yêu cầu từ log lỗi của bạn
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
@@ -29,9 +28,11 @@ jobs:
     - name: Inject API Key
       run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
-    # Gọi trực tiếp lệnh gradle của hệ thống để build
+    # Ép chế độ không màn hình (headless) và tắt config cache để KSP không bị nổ dữ liệu
     - name: Build Debug APK
-      run: gradle assembleDebug
+      env:
+        GRADLE_OPTS: -Djava.awt.headless=true
+      run: gradle assembleDebug --no-configuration-cache
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
