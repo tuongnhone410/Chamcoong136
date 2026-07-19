@@ -1,4 +1,6 @@
+
 package com.example.ui.screens
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -23,10 +25,15 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -55,6 +62,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.focus.onFocusChanged
 
 class ThousandSeparatorVisualTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
@@ -204,19 +214,67 @@ fun SettingsScreen(
     var checkingUpdate by remember { mutableStateOf(false) }
     var manualUpdateInfo by remember { mutableStateOf<com.example.data.AppVersionControl?>(null) }
 
+    fun convertYyyyMmDdToDdMmYyyy(input: String): String {
+        if (input.isBlank()) return ""
+        val parts = input.split("-")
+        if (parts.size == 3) {
+            return "${parts[2]}${parts[1]}${parts[0]}"
+        }
+        return input
+    }
+
+    fun sanitizeAndCheckFutureDate(rawDigits: String): String {
+        if (rawDigits.length != 8) return rawDigits
+        try {
+            val day = rawDigits.substring(0, 2).toIntOrNull() ?: 1
+            val month = rawDigits.substring(2, 4).toIntOrNull() ?: 1
+            val year = rawDigits.substring(4, 8).toIntOrNull() ?: 2024
+            
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            
+            val inputCal = java.util.Calendar.getInstance()
+            inputCal.set(java.util.Calendar.YEAR, year)
+            inputCal.set(java.util.Calendar.MONTH, month - 1)
+            inputCal.set(java.util.Calendar.DAY_OF_MONTH, day)
+            
+            if (inputCal.after(cal)) {
+                val newDay = "01"
+                val newMonth = String.format("%02d", month)
+                val newYear = String.format("%04d", year)
+                return "$newDay$newMonth$newYear"
+            }
+        } catch (e: Exception) {}
+        return rawDigits
+    }
+
+    fun convertDdMmYyyyToYyyyMmDd(rawDigits: String): String {
+        if (rawDigits.length != 8) return ""
+        val day = rawDigits.substring(0, 2)
+        val month = rawDigits.substring(2, 4)
+        val year = rawDigits.substring(4, 8)
+        return "$year-$month-$day"
+    }
+
+    var ngayVaoLamInput by remember { mutableStateOf("") }
+
     var hoVaTen by remember { mutableStateOf("") }
     var maNhanVien by remember { mutableStateOf("") }
     var emailDangKy by remember { mutableStateOf("") }
+    var ngayVaoLam by remember { mutableStateOf("") }
 
     var luongCoBan by remember { mutableStateOf("") }
     var luongDongBaoHiem by remember { mutableStateOf("") }
     var tiLeDongBaoHiem by remember { mutableStateOf("") }
-    var ngayChotLuong by remember { mutableStateOf("") }
     var doanPhiCongDoan by remember { mutableStateOf("") }
 
     var heSoOtNgayThuong by remember { mutableStateOf("") }
     var heSoOtChuNhat by remember { mutableStateOf("") }
     var heSoOtNgayLe by remember { mutableStateOf("") }
+    var heSoOtDem by remember { mutableStateOf("") }
 
     var tienChuyenCanGoc by remember { mutableStateOf("") }
     var soNgayPhepNam by remember { mutableStateOf("") }
@@ -236,6 +294,11 @@ fun SettingsScreen(
     var pcKhac by remember { mutableStateOf("") }
     var pcKhac1 by remember { mutableStateOf("") }
     var pcThamNien by remember { mutableStateOf("") }
+    var allowanceCalcTypesMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var activeEditingAllowanceField by remember { mutableStateOf<String?>(null) }
+    var activeEditingAllowanceName by remember { mutableStateOf("") }
+    var activeEditingAllowanceValue by remember { mutableStateOf("") }
+    var activeEditingAllowanceType by remember { mutableStateOf("") }
     var tinhKhauTruNghi by remember { mutableStateOf(false) }
     var soGioNghiGiaiLao by remember { mutableStateOf("") }
 
@@ -246,16 +309,18 @@ fun SettingsScreen(
             hoVaTen = c.hoVaTen
             maNhanVien = c.maNhanVien
             emailDangKy = c.emailDangKy
+            ngayVaoLam = c.ngayVaoLam
+            ngayVaoLamInput = convertYyyyMmDdToDdMmYyyy(c.ngayVaoLam)
 
             luongCoBan = c.luongCoBan.toLong().toString()
             luongDongBaoHiem = c.luongDongBaoHiem.toLong().toString()
             tiLeDongBaoHiem = c.tiLeDongBaoHiem.toString()
-            ngayChotLuong = c.ngayChotLuong.toString()
             doanPhiCongDoan = c.doanPhiCongDoan.toLong().toString()
 
             heSoOtNgayThuong = c.heSoOtNgayThuong.toString()
             heSoOtChuNhat = c.heSoOtChuNhat.toString()
             heSoOtNgayLe = c.heSoOtNgayLe.toString()
+            heSoOtDem = c.heSoOtDem.toString()
 
             tienChuyenCanGoc = c.tienChuyenCanGoc.toLong().toString()
             soNgayPhepNam = c.soNgayPhepNam.toString()
@@ -274,6 +339,10 @@ fun SettingsScreen(
             pcKhac = c.pcKhac.toLong().toString()
             pcKhac1 = c.pcKhac1.toLong().toString()
             pcThamNien = c.pcThamNien.toLong().toString()
+            allowanceCalcTypesMap = c.allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+                val parts = it.split(":")
+                parts[0] to parts[1]
+            }
             tinhKhauTruNghi = c.tinhKhauTruNghi
             soGioNghiGiaiLao = c.soGioNghiGiaiLao.toString()
 
@@ -289,10 +358,12 @@ fun SettingsScreen(
     val otThuongCoeff = heSoOtNgayThuong.toDoubleOrNull() ?: 1.5
     val otCnCoeff = heSoOtChuNhat.toDoubleOrNull() ?: 2.0
     val otLeCoeff = heSoOtNgayLe.toDoubleOrNull() ?: 3.0
+    val otDemCoeff = heSoOtDem.toDoubleOrNull() ?: 1.75
 
     val otThuongPrice = hourlyPrice * otThuongCoeff
     val otCnPrice = hourlyPrice * otCnCoeff
     val otLePrice = hourlyPrice * otLeCoeff
+    val otDemPrice = hourlyPrice * otDemCoeff
 
     // Direct save trigger function
     val saveChanges = {
@@ -319,32 +390,34 @@ fun SettingsScreen(
                 hoVaTen = hoVaTen,
                 maNhanVien = maNhanVien,
                 emailDangKy = emailDangKy,
-                luongCoBan = sLcb.toDoubleOrNull() ?: current.luongCoBan,
-                luongDongBaoHiem = sLbh.toDoubleOrNull() ?: current.luongDongBaoHiem,
-                tiLeDongBaoHiem = tiLeDongBaoHiem.toDoubleOrNull() ?: current.tiLeDongBaoHiem,
-                ngayChotLuong = ngayChotLuong.toIntOrNull() ?: current.ngayChotLuong,
-                doanPhiCongDoan = sDp.toDoubleOrNull() ?: current.doanPhiCongDoan,
-                heSoOtNgayThuong = heSoOtNgayThuong.toDoubleOrNull() ?: current.heSoOtNgayThuong,
-                heSoOtChuNhat = heSoOtChuNhat.toDoubleOrNull() ?: current.heSoOtChuNhat,
-                heSoOtNgayLe = heSoOtNgayLe.toDoubleOrNull() ?: current.heSoOtNgayLe,
-                tienChuyenCanGoc = sCc.toDoubleOrNull() ?: current.tienChuyenCanGoc,
-                soNgayPhepNam = soNgayPhepNam.toIntOrNull() ?: current.soNgayPhepNam,
-                pcKyThuat = pcKyThuat.replace(".", "").toDoubleOrNull() ?: current.pcKyThuat,
-                pcTrachNhiem = pcTrachNhiem.replace(".", "").toDoubleOrNull() ?: current.pcTrachNhiem,
-                pcChucVu = pcChucVu.replace(".", "").toDoubleOrNull() ?: current.pcChucVu,
-                pcHieuSuat = pcHieuSuat.replace(".", "").toDoubleOrNull() ?: current.pcHieuSuat,
-                pcSanPham = pcSanPham.replace(".", "").toDoubleOrNull() ?: current.pcSanPham,
-                pcComCa = pcComCa.replace(".", "").toDoubleOrNull() ?: current.pcComCa,
-                pcComOt = pcComOt.replace(".", "").toDoubleOrNull() ?: current.pcComOt,
-                pcNhaO = pcNhaO.replace(".", "").toDoubleOrNull() ?: current.pcNhaO,
-                pcDocHai = pcDocHai.replace(".", "").toDoubleOrNull() ?: current.pcDocHai,
-                pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: current.pcDtDoanhThu,
-                pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: current.pcXangXe,
-                pcKhac = pcKhac.replace(".", "").toDoubleOrNull() ?: current.pcKhac,
-                pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: current.pcKhac1,
-                pcThamNien = pcThamNien.replace(".", "").toDoubleOrNull() ?: current.pcThamNien,
+                ngayVaoLam = ngayVaoLam,
+                luongCoBan = sLcb.toDoubleOrNull() ?: 0.0,
+                luongDongBaoHiem = sLbh.toDoubleOrNull() ?: 0.0,
+                tiLeDongBaoHiem = tiLeDongBaoHiem.toDoubleOrNull() ?: 0.0,
+                doanPhiCongDoan = sDp.toDoubleOrNull() ?: 0.0,
+                heSoOtNgayThuong = heSoOtNgayThuong.toDoubleOrNull() ?: 0.0,
+                heSoOtChuNhat = heSoOtChuNhat.toDoubleOrNull() ?: 0.0,
+                heSoOtNgayLe = heSoOtNgayLe.toDoubleOrNull() ?: 0.0,
+                heSoOtDem = heSoOtDem.toDoubleOrNull() ?: 0.0,
+                tienChuyenCanGoc = sCc.toDoubleOrNull() ?: 0.0,
+                soNgayPhepNam = soNgayPhepNam.toIntOrNull() ?: 0,
+                pcKyThuat = pcKyThuat.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcTrachNhiem = pcTrachNhiem.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcChucVu = pcChucVu.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcHieuSuat = pcHieuSuat.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcSanPham = pcSanPham.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcComCa = pcComCa.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcComOt = pcComOt.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcNhaO = pcNhaO.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcDocHai = pcDocHai.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcKhac = pcKhac.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcThamNien = pcThamNien.replace(".", "").toDoubleOrNull() ?: 0.0,
+                allowanceCalcTypes = allowanceCalcTypesMap.entries.joinToString(";") { "${it.key}:${it.value}" },
                 tinhKhauTruNghi = tinhKhauTruNghi,
-                soGioNghiGiaiLao = interpretBreakHours(soGioNghiGiaiLao, current.soGioNghiGiaiLao).third
+                soGioNghiGiaiLao = interpretBreakHours(soGioNghiGiaiLao, 0.0).third
             )
             viewModel.updateSalaryConfig(updated)
         }
@@ -393,6 +466,31 @@ fun SettingsScreen(
                         keyboardType = KeyboardType.Email,
                         enabled = false
                     )
+                    ConfigInputField(
+                        label = "Ngày nhận việc",
+                        value = ngayVaoLamInput,
+                        onValueChange = { input ->
+                            var clean = input.filter { it.isDigit() }.take(8)
+                            if (clean.length == 8) {
+                                clean = sanitizeAndCheckFutureDate(clean)
+                                val isoDate = convertDdMmYyyyToYyyyMmDd(clean)
+                                ngayVaoLam = isoDate
+                                saveChanges()
+                            } else if (clean.isEmpty()) {
+                                ngayVaoLam = ""
+                                saveChanges()
+                            }
+                            ngayVaoLamInput = clean
+                        },
+                        keyboardType = KeyboardType.Number,
+                        visualTransformation = DateVisualTransformation()
+                    )
+                    Text(
+                        text = "Thiết lập này giúp tự động tính toán lại chuyên cần, không trừ chuyên cần của nhân viên mới gia nhập giữa tháng.",
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 }
             }
 
@@ -413,24 +511,12 @@ fun SettingsScreen(
                         visualTransformation = ThousandSeparatorVisualTransformation()
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ConfigInputField(
-                            label = "Tỉ lệ đóng BH (%)",
-                            value = tiLeDongBaoHiem,
-                            onValueChange = { tiLeDongBaoHiem = it; saveChanges() },
-                            keyboardType = KeyboardType.Decimal,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ConfigInputField(
-                            label = "Ngày chốt lương",
-                            value = ngayChotLuong,
-                            onValueChange = { ngayChotLuong = it.filter { c -> c.isDigit() }; saveChanges() },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    ConfigInputField(
+                        label = "Tỉ lệ đóng BH (%)",
+                        value = tiLeDongBaoHiem,
+                        onValueChange = { tiLeDongBaoHiem = it; saveChanges() },
+                        keyboardType = KeyboardType.Decimal
+                    )
 
                     ConfigInputField(
                         label = "Đoàn phí công đoàn",
@@ -479,10 +565,22 @@ fun SettingsScreen(
                             keyboardType = KeyboardType.Decimal,
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         ConfigInputField(
                             label = "Ngày Lễ",
                             value = heSoOtNgayLe,
                             onValueChange = { heSoOtNgayLe = it; saveChanges() },
+                            keyboardType = KeyboardType.Decimal,
+                            modifier = Modifier.weight(1f)
+                        )
+                        ConfigInputField(
+                            label = "OT đêm",
+                            value = heSoOtDem,
+                            onValueChange = { heSoOtDem = it; saveChanges() },
                             keyboardType = KeyboardType.Decimal,
                             modifier = Modifier.weight(1f)
                         )
@@ -512,6 +610,12 @@ fun SettingsScreen(
                         Text(
                             text = "• Tiền OT Ngày Lễ (${heSoOtNgayLe}x): ${dec.format(otLePrice)} đ/giờ",
                             color = AccentOrange,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "• Tiền OT Đêm (${heSoOtDem}x): ${dec.format(otDemPrice)} đ/giờ",
+                            color = NeonBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -571,19 +675,6 @@ fun SettingsScreen(
                         )
 
                         val interpretation = interpretBreakHours(soGioNghiGiaiLao)
-                        val badgeText = if (interpretation.first.isNotEmpty() && interpretation.second != "không hợp lệ") {
-                            "👉 Nhận diện thông minh: ${interpretation.first} được hiểu là ${interpretation.first} ${interpretation.second} = ${interpretation.third} giờ"
-                        } else {
-                            "👉 Vui lòng nhập số giờ (vd: 1.5) hoặc số phút nghỉ (vd: 30, 45, 60)..."
-                        }
-
-                        Text(
-                            text = badgeText,
-                            color = AccentOrange,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 4.dp)
-                        )
                         
                         Box(
                             modifier = Modifier
@@ -626,136 +717,247 @@ fun SettingsScreen(
                 }
             }
 
-            // CATEGORY 4: CÁC KHOẢN PHỤ CẤP (14 KHOẢN KHÁC NHAU)
-            CategoryLayout(title = "CÁC KHOẢN PHỤ CẤP (14 KHOẢN KHÁC NHAU)", icon = Icons.Default.Star) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "1. Kỹ thuật",
+            // CATEGORY 4: CÁC KHOẢN PHỤ CẤP
+            CategoryLayout(title = "CẤU HÌNH CÁC KHOẢN PHỤ CẤP", icon = Icons.Default.Star) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        text = "Chạm vào từng mục để chỉnh sửa số tiền và tính chất tính lương của khoản phụ cấp đó.",
+                        color = LightGray,
+                        fontSize = 11.sp,
+                        fontStyle = FontStyle.Italic
+                    )
+
+                    // Sub-group 1: 📌 Phụ cấp theo tháng
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📌 ", fontSize = 14.sp)
+                            Text("PHỤ CẤP THEO THÁNG", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        AllowanceRowItem(
+                            name = "1. Kỹ thuật",
                             value = pcKyThuat,
-                            onValueChange = { pcKyThuat = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcKyThuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKyThuat"
+                                activeEditingAllowanceName = "Phụ cấp Kỹ thuật"
+                                activeEditingAllowanceValue = pcKyThuat
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcKyThuat"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcKyThuat")
+                            }
                         )
-                        ConfigInputField(
-                            label = "2. Trách nhiệm",
+                        AllowanceRowItem(
+                            name = "2. Trách nhiệm",
                             value = pcTrachNhiem,
-                            onValueChange = { pcTrachNhiem = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcTrachNhiem",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcTrachNhiem"
+                                activeEditingAllowanceName = "Phụ cấp Trách nhiệm"
+                                activeEditingAllowanceValue = pcTrachNhiem
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcTrachNhiem"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcTrachNhiem")
+                            }
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "3. Chức vụ",
+                        AllowanceRowItem(
+                            name = "3. Chức vụ",
                             value = pcChucVu,
-                            onValueChange = { pcChucVu = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcChucVu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcChucVu"
+                                activeEditingAllowanceName = "Phụ cấp Chức vụ"
+                                activeEditingAllowanceValue = pcChucVu
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcChucVu"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcChucVu")
+                            }
                         )
-                        ConfigInputField(
-                            label = "4. Hiệu suất",
+                        AllowanceRowItem(
+                            name = "4. Hiệu suất",
                             value = pcHieuSuat,
-                            onValueChange = { pcHieuSuat = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcHieuSuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcHieuSuat"
+                                activeEditingAllowanceName = "Phụ cấp Hiệu suất"
+                                activeEditingAllowanceValue = pcHieuSuat
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcHieuSuat"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcHieuSuat")
+                            }
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "5. Sản phẩm",
-                            value = pcSanPham,
-                            onValueChange = { pcSanPham = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ConfigInputField(
-                            label = "6. Cơm/CA",
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // Sub-group 2: 🍱 Phụ cấp theo ca
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🍱 ", fontSize = 14.sp)
+                            Text("PHỤ CẤP THEO CA", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        AllowanceRowItem(
+                            name = "5. Cơm / Ca làm việc",
                             value = pcComCa,
-                            onValueChange = { pcComCa = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcComCa",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComCa"
+                                activeEditingAllowanceName = "Phụ cấp Cơm/CA"
+                                activeEditingAllowanceValue = pcComCa
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcComCa"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcComCa")
+                            }
                         )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "7. Cơm OT",
+                        AllowanceRowItem(
+                            name = "6. Cơm tăng ca (OT)",
                             value = pcComOt,
-                            onValueChange = { pcComOt = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcComOt",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComOt"
+                                activeEditingAllowanceName = "Phụ cấp Cơm OT"
+                                activeEditingAllowanceValue = pcComOt
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcComOt"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcComOt")
+                            }
                         )
-                        ConfigInputField(
-                            label = "8. Nhà ở",
-                            value = pcNhaO,
-                            onValueChange = { pcNhaO = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "9. Độc hại",
-                            value = pcDocHai,
-                            onValueChange = { pcDocHai = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ConfigInputField(
-                            label = "10. Doanh thu",
-                            value = pcDtDoanhThu,
-                            onValueChange = { pcDtDoanhThu = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "11. Xăng xe",
-                            value = pcXangXe,
-                            onValueChange = { pcXangXe = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ConfigInputField(
-                            label = "12. Khác",
+                        AllowanceRowItem(
+                            name = "7. Phụ cấp ca đêm (mỗi ca)",
                             value = pcKhac,
-                            onValueChange = { pcKhac = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcKhac",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKhac"
+                                activeEditingAllowanceName = "Phụ cấp Ca đêm"
+                                activeEditingAllowanceValue = pcKhac
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcKhac"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcKhac")
+                            }
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ConfigInputField(
-                            label = "13. Khác 1",
-                            value = pcKhac1,
-                            onValueChange = { pcKhac1 = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // Sub-group 3: 🎁 Phụ cấp khác
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🎁 ", fontSize = 14.sp)
+                            Text("PHỤ CẤP KHÁC", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        AllowanceRowItem(
+                            name = "8. Nhà ở",
+                            value = pcNhaO,
+                            fieldName = "pcNhaO",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcNhaO"
+                                activeEditingAllowanceName = "Phụ cấp Nhà ở"
+                                activeEditingAllowanceValue = pcNhaO
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcNhaO"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcNhaO")
+                            }
                         )
-                        ConfigInputField(
-                            label = "14. Thâm niên",
+                        AllowanceRowItem(
+                            name = "9. Xăng xe",
+                            value = pcXangXe,
+                            fieldName = "pcXangXe",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcXangXe"
+                                activeEditingAllowanceName = "Phụ cấp Xăng xe"
+                                activeEditingAllowanceValue = pcXangXe
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcXangXe"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcXangXe")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "10. Độc hại",
+                            value = pcDocHai,
+                            fieldName = "pcDocHai",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDocHai"
+                                activeEditingAllowanceName = "Phụ cấp Độc hại"
+                                activeEditingAllowanceValue = pcDocHai
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcDocHai"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcDocHai")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "11. Doanh thu",
+                            value = pcDtDoanhThu,
+                            fieldName = "pcDtDoanhThu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDtDoanhThu"
+                                activeEditingAllowanceName = "Phụ cấp Doanh thu"
+                                activeEditingAllowanceValue = pcDtDoanhThu
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcDtDoanhThu"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcDtDoanhThu")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "12. Thâm niên",
                             value = pcThamNien,
-                            onValueChange = { pcThamNien = it.filter { c -> c.isDigit() }; saveChanges() },
-                            visualTransformation = ThousandSeparatorVisualTransformation(),
-                            labelColor = NeonBlue,
-                            modifier = Modifier.weight(1f)
+                            fieldName = "pcThamNien",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcThamNien"
+                                activeEditingAllowanceName = "Phụ cấp Thâm niên"
+                                activeEditingAllowanceValue = pcThamNien
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcThamNien"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcThamNien")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "13. Sản phẩm",
+                            value = pcSanPham,
+                            fieldName = "pcSanPham",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcSanPham"
+                                activeEditingAllowanceName = "Phụ cấp Sản phẩm"
+                                activeEditingAllowanceValue = pcSanPham
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcSanPham"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcSanPham")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "14. Khác",
+                            value = pcKhac1,
+                            fieldName = "pcKhac1",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKhac1"
+                                activeEditingAllowanceName = "Phụ cấp Khác"
+                                activeEditingAllowanceValue = pcKhac1
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcKhac1"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcKhac1")
+                            }
                         )
                     }
                 }
+            }
+
+            // Dialog for editing allowance details
+            if (activeEditingAllowanceField != null) {
+                AllowanceEditDialog(
+                    name = activeEditingAllowanceName,
+                    initialValue = activeEditingAllowanceValue,
+                    initialType = activeEditingAllowanceType,
+                    onDismiss = { activeEditingAllowanceField = null },
+                    onSave = { newValue, newType ->
+                        val cleanVal = newValue.filter { it.isDigit() }
+                        when (activeEditingAllowanceField) {
+                            "pcKyThuat" -> pcKyThuat = cleanVal
+                            "pcTrachNhiem" -> pcTrachNhiem = cleanVal
+                            "pcChucVu" -> pcChucVu = cleanVal
+                            "pcHieuSuat" -> pcHieuSuat = cleanVal
+                            "pcSanPham" -> pcSanPham = cleanVal
+                            "pcComCa" -> pcComCa = cleanVal
+                            "pcComOt" -> pcComOt = cleanVal
+                            "pcNhaO" -> pcNhaO = cleanVal
+                            "pcDocHai" -> pcDocHai = cleanVal
+                            "pcDtDoanhThu" -> pcDtDoanhThu = cleanVal
+                            "pcXangXe" -> pcXangXe = cleanVal
+                            "pcKhac" -> pcKhac = cleanVal
+                            "pcKhac1" -> pcKhac1 = cleanVal
+                            "pcThamNien" -> pcThamNien = cleanVal
+                        }
+                        allowanceCalcTypesMap = allowanceCalcTypesMap + (activeEditingAllowanceField!! to newType)
+                        activeEditingAllowanceField = null
+                        saveChanges()
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -1088,14 +1290,44 @@ fun ConfigInputField(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    var textFieldValueState by remember { mutableStateOf(TextFieldValue(value)) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    
+    LaunchedEffect(isFocused) {
+        if (isFocused && enabled) {
+            kotlinx.coroutines.delay(50) // Small delay to override the cursor placement from tap
+            textFieldValueState = textFieldValueState.copy(
+                selection = TextRange(0, textFieldValueState.text.length)
+            )
+        }
+    }
+
+    LaunchedEffect(value) {
+        if (textFieldValueState.text != value) {
+            textFieldValueState = textFieldValueState.copy(text = value)
+        }
+    }
+
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = textFieldValueState,
+        onValueChange = { newValue ->
+            textFieldValueState = newValue
+            onValueChange(newValue.text)
+        },
         label = { Text(label, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = labelColor) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+        ),
+        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+            onDone = { focusManager.clearFocus() }
+        ),
         visualTransformation = visualTransformation,
         enabled = enabled,
+        interactionSource = interactionSource,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = labelColor,
             focusedTextColor = White,
@@ -1107,6 +1339,232 @@ fun ConfigInputField(
             disabledLabelColor = labelColor.copy(alpha = 0.6f)
         ),
         shape = RoundedCornerShape(8.dp),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
     )
 }
+
+fun formatTimeToStandard(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    if (digits.isEmpty()) return "00:00"
+    
+    var h = 0
+    var m = 0
+    
+    if (digits.length == 3) {
+        h = digits.substring(0, 1).toIntOrNull() ?: 0
+        m = digits.substring(1).toIntOrNull() ?: 0
+    } else if (digits.length >= 4) {
+        h = digits.substring(0, 2).toIntOrNull() ?: 0
+        m = digits.substring(2, 4).toIntOrNull() ?: 0
+    } else {
+        h = digits.toIntOrNull() ?: 0
+    }
+    
+    if (h > 24 || (h == 24 && m > 0)) {
+        // Just cap it at 24:00 or let it be for validation to handle?
+        // Let's cap at 24:00 for standard formatting safety
+        h = 24
+        m = 0
+    }
+    
+    if (m > 59) m = 59
+    
+    val hStr = h.toString().padStart(2, '0')
+    val mStr = m.toString().padStart(2, '0')
+    return "$hStr:$mStr"
+}
+
+@Composable
+fun AllowanceRowItem(
+    name: String,
+    value: String,
+    fieldName: String,
+    calcTypeMap: Map<String, String>,
+    onClick: () -> Unit
+) {
+    val currentType = calcTypeMap[fieldName] ?: com.example.data.model.UserConfig.getDefaultCalcType(fieldName)
+    val displayType = when (currentType) {
+        "MONTHLY_PRO_RATED" -> "Theo tháng (/26)"
+        "MONTHLY_FLAT" -> "Tháng cố định"
+        "PER_WORK_DAY" -> "Theo ngày công"
+        "OT_MEAL_GE_2H" -> "Cơm OT ≥ 2h"
+        "PER_NIGHT_SHIFT" -> "Số ca đêm"
+        else -> "Theo tháng (/26)"
+    }
+    
+    val formattedValue = try {
+        val parsed = value.replace(".", "").toDoubleOrNull() ?: 0.0
+        DecimalFormat("#,###").format(parsed) + " đ"
+    } catch (e: Exception) {
+        "$value đ"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF1E1E1E))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                color = White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Tính chất: $displayType",
+                color = LightGray,
+                fontSize = 10.sp
+            )
+        }
+        
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = formattedValue,
+                color = AccentGreen,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Chỉnh sửa",
+                tint = LightGray,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AllowanceEditDialog(
+    name: String,
+    initialValue: String,
+    initialType: String,
+    onDismiss: () -> Unit,
+    onSave: (newValue: String, newType: String) -> Unit
+) {
+    var textValue by remember { mutableStateOf(initialValue) }
+    var selectedType by remember { mutableStateOf(initialType) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = { onSave(textValue, selectedType) },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+            ) {
+                Text("Xác nhận", color = White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy", color = LightGray)
+            }
+        },
+        title = {
+            Text(
+                text = "Cấu hình $name",
+                color = White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Input field for amount
+                ConfigInputField(
+                    label = "Số tiền (VNĐ)",
+                    value = textValue,
+                    onValueChange = { textValue = it.filter { c -> c.isDigit() } },
+                    visualTransformation = ThousandSeparatorVisualTransformation(),
+                    labelColor = NeonBlue
+                )
+
+                Text(
+                    text = "Tính chất tính lương (Loại tính):",
+                    color = White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    listOf(
+                        "MONTHLY_PRO_RATED" to ("Theo tháng (/26)" to "Chia 26 ngày công chuẩn và nhân ngày làm thực tế"),
+                        "MONTHLY_FLAT" to ("Tháng cố định" to "Hưởng đủ 100% cố định không tính theo ngày công"),
+                        "PER_WORK_DAY" to ("Theo ngày công" to "Cộng thêm theo số ngày đi làm thực tế"),
+                        "OT_MEAL_GE_2H" to ("Cơm OT ≥ 2h" to "Nhân với số ngày tăng ca từ 2 giờ trở lên"),
+                        "PER_NIGHT_SHIFT" to ("Theo số ca đêm" to "Nhân trực tiếp với số ca làm việc ban đêm")
+                    ).forEach { (typeKey, info) ->
+                        val (typeLabel, description) = info
+                        val isSelected = selectedType == typeKey
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) Color(0xFF1E293B) else Color(0xFF1E1E1E))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isSelected) NeonBlue else Color.Transparent,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { selectedType = typeKey }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = typeLabel,
+                                        color = if (isSelected) NeonBlue else White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = NeonBlue,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = description,
+                                    color = LightGray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = Color(0xFF121212),
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+

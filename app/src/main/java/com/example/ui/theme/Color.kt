@@ -10,5 +10,6 @@ val MediumGray = Color(0xFF828282)
 val AccentRed = Color(0xFFEB5757)
 val AccentGreen = Color(0xFF27AE60)
 val AccentOrange = Color(0xFFF2994A)
+val NightPurple = Color(0xFF9B51E0)
 val White = Color(0xFFFFFFFF)
 

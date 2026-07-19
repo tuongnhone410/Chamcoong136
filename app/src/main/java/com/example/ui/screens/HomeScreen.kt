@@ -34,6 +34,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +55,7 @@ import com.example.ui.theme.LightGray
 import com.example.ui.theme.MediumGray
 import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.White
+import com.example.ui.theme.NightPurple
 import com.example.viewmodel.TimeSnapViewModel
 import kotlinx.coroutines.delay
 import java.text.DecimalFormat
@@ -63,6 +68,7 @@ fun HomeScreen(
     viewModel: TimeSnapViewModel,
     onNavigateToLogin: () -> Unit
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
     val userSession by viewModel.currentUserSession.collectAsStateWithLifecycle()
     val activeEntry by viewModel.activeWorkingEntry.collectAsStateWithLifecycle()
     val runningTimeText by viewModel.runningDurationText.collectAsStateWithLifecycle()
@@ -494,6 +500,8 @@ fun HomeScreen(
                         ),
                         shape = RoundedCornerShape(10.dp),
                         textStyle = TextStyle(fontSize = 13.sp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -634,6 +642,31 @@ fun HomeScreen(
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
                                     )
+
+                                    val earnings = remember(entry, configState) {
+                                        calculateDayEarnings(entry, configState)
+                                    }
+                                    val formattedEarnings = DecimalFormat("#,###").format(earnings)
+                                    val displayDateStr = remember(entry.date) {
+                                        try {
+                                            val p = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            val d = p.parse(entry.date)
+                                            if (d != null) {
+                                                SimpleDateFormat("dd/M", Locale.getDefault()).format(d)
+                                            } else {
+                                                entry.date
+                                            }
+                                        } catch (e: Exception) {
+                                            entry.date
+                                        }
+                                    }
+                                    Text(
+                                        text = "Ngày $displayDateStr: $formattedEarnings VNĐ",
+                                        color = AccentGreen,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
                                 }
 
                                 Column(horizontalAlignment = Alignment.End) {
@@ -654,26 +687,42 @@ fun HomeScreen(
                                             )
                                         }
                                     } else if (entry.isWorking) {
+                                        val isNightShift = remember(entry) {
+                                            if (entry.checkInTime != null) {
+                                                val inCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime }
+                                                val inHour = inCal.get(Calendar.HOUR_OF_DAY)
+                                                val inMin = inCal.get(Calendar.MINUTE)
+                                                val inTotalMin = inHour * 60 + inMin
+                                                (inTotalMin in (18 * 60)..(19 * 60 + 30)) || inHour >= 22 || inHour <= 6 || entry.dayType == "NIGHT"
+                                            } else entry.dayType == "NIGHT"
+                                        }
                                         Box(
                                             modifier = Modifier
-                                                .background(AccentOrange.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                                .background(if (isNightShift) NightPurple.copy(alpha = 0.15f) else AccentOrange.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text(
-                                                text = "ĐANG LÀM",
-                                                color = AccentOrange,
+                                                text = if (isNightShift) "CA ĐÊM" else "ĐANG LÀM",
+                                                color = if (isNightShift) NightPurple else AccentOrange,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
                                     } else if (entry.checkInTime != null && entry.checkOutTime != null) {
+                                        val isNightShift = remember(entry) {
+                                            val inCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime }
+                                            val inHour = inCal.get(Calendar.HOUR_OF_DAY)
+                                            val inMin = inCal.get(Calendar.MINUTE)
+                                            val inTotalMin = inHour * 60 + inMin
+                                            (inTotalMin in (18 * 60)..(19 * 60 + 30)) || inHour >= 22 || inHour <= 6 || entry.dayType == "NIGHT"
+                                        }
                                         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
                                         val inStr = timeFormat.format(Date(entry.checkInTime))
                                         val outStr = timeFormat.format(Date(entry.checkOutTime))
 
                                         Text(
                                             text = "$inStr - $outStr",
-                                            color = AccentGreen,
+                                            color = if (isNightShift) NightPurple else AccentGreen,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -687,8 +736,8 @@ fun HomeScreen(
                                             if (hrs <= 8.5) hrs.coerceAtMost(8.0) else hrs
                                         }
                                         Text(
-                                            text = "${DecimalFormat("#.#").format(rounded)} tiếng",
-                                            color = LightGray,
+                                            text = "${DecimalFormat("#.#").format(rounded)} tiếng ${if (isNightShift) "🌙" else ""}",
+                                            color = if (isNightShift) NightPurple else LightGray,
                                             fontSize = 11.sp
                                         )
                                     } else {
@@ -918,4 +967,129 @@ private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> 
         }
         DayChartPoint(label, hours, dateStr)
     }
+}
+
+private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.model.UserConfig?): Double {
+    if (config == null) return 0.0
+    val hourlySalary = config.luongCoBan / 26.0 / 8.0
+    
+    if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE") {
+        return config.luongCoBan / 26.0
+    }
+    if (entry.dayType == "UNPAID_LEAVE" || entry.checkInTime == null) {
+        return 0.0
+    }
+    
+    val inCal = Calendar.getInstance()
+    inCal.timeInMillis = entry.checkInTime
+    val inHour = inCal.get(Calendar.HOUR_OF_DAY)
+    val inMin = inCal.get(Calendar.MINUTE)
+    val inTotalMin = inHour * 60 + inMin
+    val isNightShift = (inTotalMin in (18 * 60)..(19 * 60 + 30)) || 
+                       inHour >= 22 || inHour <= 6 || 
+                       entry.dayType == "NIGHT"
+
+    val isSunday = entry.dayType == "SUNDAY" || 
+                   (run {
+                       try {
+                           val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                           val dateVal = parser.parse(entry.date)
+                           if (dateVal != null) {
+                               val cal = Calendar.getInstance()
+                               cal.time = dateVal
+                               cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                           } else {
+                               false
+                           }
+                       } catch (e: Exception) {
+                           false
+                       }
+                   } && entry.dayType == "NIGHT")
+
+    val isHoliday = run {
+        val parts = entry.date.split("-")
+        if (parts.size >= 3) {
+            val md = "${parts[1]}-${parts[2]}"
+            md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+        } else {
+            false
+        }
+    }
+
+    if (entry.checkOutTime == null) {
+        if (isSunday) {
+            return 8.0 * hourlySalary * config.heSoOtChuNhat
+        } else {
+            return config.luongCoBan / 26.0
+        }
+    }
+
+    val finalCheckIn = roundCheckInGrace(entry.checkInTime)
+    val finalCheckOut = roundCheckOutGrace(entry.checkOutTime)
+    val durationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
+    val rawHours = durationMs / 3600000.0
+    val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
+    val actualHours = (rawHours - breakHours).coerceAtLeast(0.0)
+
+    val finalStandardHours = actualHours.coerceAtMost(8.0)
+    val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
+
+    var earned = 0.0
+    if (isSunday) {
+        earned += actualHours * hourlySalary * config.heSoOtChuNhat
+    } else if (isHoliday) {
+        earned += actualHours * hourlySalary * config.heSoOtNgayLe
+    } else {
+        earned += finalStandardHours * hourlySalary
+        if (finalOtHours > 0.0) {
+            earned += finalOtHours * hourlySalary * config.heSoOtNgayThuong
+        }
+    }
+
+    if (actualHours >= 4.0) {
+        earned += config.pcComCa
+    }
+
+    if (finalOtHours >= 2.0) {
+        earned += config.pcComCa
+    }
+
+    if (isNightShift) {
+        earned += 100000.0
+    }
+
+    return earned
+}
+
+private fun roundCheckInGrace(timeMs: Long): Long {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = timeMs
+    val min = cal.get(Calendar.MINUTE)
+    if (min in 45..59) {
+        cal.add(Calendar.HOUR_OF_DAY, 1)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    } else if (min in 0..15) {
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+    return timeMs
+}
+
+private fun roundCheckOutGrace(timeMs: Long): Long {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = timeMs
+    val min = cal.get(Calendar.MINUTE)
+    if (min in 45..59) {
+        cal.add(Calendar.HOUR_OF_DAY, 1)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+    return timeMs
 }

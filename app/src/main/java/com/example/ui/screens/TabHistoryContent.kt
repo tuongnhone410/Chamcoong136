@@ -1,4 +1,6 @@
+
 package com.example.ui.screens
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +26,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.example.data.AttendanceRecord
 import com.example.data.DatabaseHelper
 import com.example.data.UserConfig
@@ -163,13 +170,17 @@ fun TabHistoryContent(
                         .background(
                             when {
                                 isSelected -> Color(0xFF3A86FF).copy(alpha = 0.5f)
-                                record != null -> {
-                                    when (record.status) {
-                                        "PaidLeave" -> Color(0xFFF2C94C).copy(alpha = 0.2f)
-                                        "PaidHolidayLeave" -> Color(0xFF9B51E0).copy(alpha = 0.2f)
-                                        else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
+                                    record != null -> {
+                                        val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
+                                        val isHoliday = com.example.data.SalaryCalculator.isHoliday(record.dateString)
+                                        
+                                        when {
+                                            record.status == "PaidLeave" -> Color(0xFFF2C94C).copy(alpha = 0.2f)
+                                            record.status == "PaidHolidayLeave" -> Color(0xFF9B51E0).copy(alpha = 0.2f)
+                                            isNight || isHoliday -> Color(0xFFFF9800).copy(alpha = 0.3f)
+                                            else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
+                                        }
                                     }
-                                }
                                 else -> Color(0xFF1E1E1E)
                             }
                         )
@@ -305,13 +316,45 @@ fun SingleDayEntryDialog(
     onDismiss: () -> Unit,
     onSave: (Long, Long?, String) -> Unit
 ) {
-    var inHour by remember { mutableStateOf(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.HOUR_OF_DAY).toString() } ?: "08") }
-    var inMin by remember { mutableStateOf(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.MINUTE).toString() } ?: "00") }
+    var inHour by remember { mutableStateOf(TextFieldValue(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.HOUR_OF_DAY).toString() } ?: "08")) }
+    var inMin by remember { mutableStateOf(TextFieldValue(initialRecord?.let { Calendar.getInstance().apply { timeInMillis = it.clockInTime }.get(Calendar.MINUTE).toString() } ?: "00")) }
     
-    var outHour by remember { mutableStateOf(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.HOUR_OF_DAY).toString() } ?: "") }
-    var outMin by remember { mutableStateOf(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.MINUTE).toString() } ?: "") }
+    var outHour by remember { mutableStateOf(TextFieldValue(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.HOUR_OF_DAY).toString() } ?: "")) }
+    var outMin by remember { mutableStateOf(TextFieldValue(initialRecord?.clockOutTime?.let { Calendar.getInstance().apply { timeInMillis = it }.get(Calendar.MINUTE).toString() } ?: "")) }
 
+    val focusRequesters = remember { List(4) { FocusRequester() } }
+    
     var selectedStatus by remember { mutableStateOf(initialRecord?.status ?: "Completed") }
+
+    fun createTextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, label: String, focusRequester: FocusRequester, nextFocusRequester: FocusRequester? = null, modifier: Modifier = Modifier): @Composable () -> Unit = {
+        val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        val isFocused by interactionSource.collectIsFocusedAsState()
+        
+        LaunchedEffect(isFocused) {
+            if (isFocused) {
+                kotlinx.coroutines.delay(50)
+                onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+            }
+        }
+        
+        OutlinedTextField(
+            value = value,
+            onValueChange = { 
+                if (it.text.length <= 2) {
+                    val textChanged = it.text != value.text
+                    onValueChange(it)
+                    if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
+                        nextFocusRequester.requestFocus()
+                    }
+                }
+            },
+            interactionSource = interactionSource,
+            modifier = modifier.focusRequester(focusRequester),
+            label = { Text(label) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done),
+            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.LightGray)
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -363,39 +406,65 @@ fun SingleDayEntryDialog(
                 if (selectedStatus == "Completed" || selectedStatus == "Active") {
                     Text("Giờ Vào Ca", color = Color.LightGray)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = inHour,
-                            onValueChange = { inHour = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Giờ (0-23)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        OutlinedTextField(
-                            value = inMin,
-                            onValueChange = { inMin = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Phút (0-59)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
+                        createTextField(inHour, { 
+                            if (it.text.length <= 2) {
+                                val h = it.text.toIntOrNull() ?: 0
+                                if (h > 24) {
+                                    inHour = it.copy(text = "07", selection = TextRange(2))
+                                    inMin = inMin.copy(text = "30", selection = TextRange(2))
+                                } else if (h == 24 && (inMin.text.toIntOrNull() ?: 0) > 0) {
+                                    inHour = it.copy(text = "07", selection = TextRange(2))
+                                    inMin = inMin.copy(text = "30", selection = TextRange(2))
+                                } else {
+                                    inHour = it 
+                                }
+                            }
+                        }, "Giờ (0-23)", focusRequesters[0], focusRequesters[1], Modifier.weight(1f))()
+                        createTextField(inMin, { 
+                            if (it.text.length <= 2) {
+                                val m = it.text.toIntOrNull() ?: 0
+                                if (m > 59) {
+                                    inMin = it.copy(text = "59", selection = TextRange(2))
+                                } else if (m > 0 && (inHour.text.toIntOrNull() ?: 0) == 24) {
+                                    inHour = inHour.copy(text = "07", selection = TextRange(2))
+                                    inMin = it.copy(text = "30", selection = TextRange(2))
+                                } else {
+                                    inMin = it
+                                }
+                            }
+                        }, "Phút (0-59)", focusRequesters[1], focusRequesters[2], Modifier.weight(1f))()
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Giờ Ra Ca (Để trống nếu quên chấm ra)", color = Color.LightGray)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = outHour,
-                            onValueChange = { outHour = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Giờ") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        OutlinedTextField(
-                            value = outMin,
-                            onValueChange = { outMin = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Phút") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
+                        createTextField(outHour, { 
+                            if (it.text.length <= 2) {
+                                val h = it.text.toIntOrNull() ?: 0
+                                if (h > 24) {
+                                    outHour = it.copy(text = "07", selection = TextRange(2))
+                                    outMin = outMin.copy(text = "30", selection = TextRange(2))
+                                } else if (h == 24 && (outMin.text.toIntOrNull() ?: 0) > 0) {
+                                    outHour = it.copy(text = "07", selection = TextRange(2))
+                                    outMin = outMin.copy(text = "30", selection = TextRange(2))
+                                } else {
+                                    outHour = it
+                                }
+                            }
+                        }, "Giờ", focusRequesters[2], focusRequesters[3], Modifier.weight(1f))()
+                        createTextField(outMin, { 
+                            if (it.text.length <= 2) {
+                                val m = it.text.toIntOrNull() ?: 0
+                                if (m > 59) {
+                                    outMin = it.copy(text = "59", selection = TextRange(2))
+                                } else if (m > 0 && (outHour.text.toIntOrNull() ?: 0) == 24) {
+                                    outHour = outHour.copy(text = "07", selection = TextRange(2))
+                                    outMin = it.copy(text = "30", selection = TextRange(2))
+                                } else {
+                                    outMin = it
+                                }
+                            }
+                        }, "Phút", focusRequesters[3], null, Modifier.weight(1f))()
                     }
                 } else {
                     Card(
@@ -422,11 +491,11 @@ fun SingleDayEntryDialog(
                                 
                                 val cin = Calendar.getInstance()
                                 cin.time = date
-                                cin.set(Calendar.HOUR_OF_DAY, inHour.toIntOrNull() ?: 8)
-                                cin.set(Calendar.MINUTE, inMin.toIntOrNull() ?: 0)
+                                cin.set(Calendar.HOUR_OF_DAY, inHour.text.toIntOrNull() ?: 8)
+                                cin.set(Calendar.MINUTE, inMin.text.toIntOrNull() ?: 0)
 
-                                val coutHour = outHour.toIntOrNull()
-                                val coutMin = outMin.toIntOrNull()
+                                val coutHour = outHour.text.toIntOrNull()
+                                val coutMin = outMin.text.toIntOrNull()
                                 
                                 var coutMillis: Long? = null
                                 if (coutHour != null && coutMin != null) {
@@ -484,10 +553,12 @@ fun BatchEntryDialog(
     onDismiss: () -> Unit,
     onSave: (Int, Int, Int, Int, Boolean, Boolean) -> Unit
 ) {
-    var inHour by remember { mutableStateOf("08") }
-    var inMin by remember { mutableStateOf("00") }
-    var outHour by remember { mutableStateOf("17") }
-    var outMin by remember { mutableStateOf("00") }
+    var inHour by remember { mutableStateOf(TextFieldValue("08")) }
+    var inMin by remember { mutableStateOf(TextFieldValue("00")) }
+    var outHour by remember { mutableStateOf(TextFieldValue("17")) }
+    var outMin by remember { mutableStateOf(TextFieldValue("00")) }
+    
+    val focusRequesters = remember { List(4) { FocusRequester() } }
     
     var skipSunday by remember { mutableStateOf(false) }
     var skipHoliday by remember { mutableStateOf(false) }
@@ -508,14 +579,94 @@ fun BatchEntryDialog(
                 Text("Chấm công hàng loạt (${selectedDates.size} ngày)", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
 
+                fun createTextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, label: String, focusRequester: FocusRequester, nextFocusRequester: FocusRequester? = null, modifier: Modifier = Modifier): @Composable () -> Unit = {
+                    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    val isFocused by interactionSource.collectIsFocusedAsState()
+                    
+                    LaunchedEffect(isFocused) {
+                        if (isFocused) {
+                            kotlinx.coroutines.delay(50)
+                            onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+                        }
+                    }
+                    
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { 
+                            if (it.text.length <= 2) {
+                                val textChanged = it.text != value.text
+                                onValueChange(it)
+                                if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
+                                    nextFocusRequester.requestFocus()
+                                }
+                            }
+                        },
+                        interactionSource = interactionSource,
+                        modifier = modifier.focusRequester(focusRequester),
+                        label = { Text(label) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.LightGray)
+                    )
+                }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = inHour, onValueChange = { inHour = it }, modifier = Modifier.weight(1f), label = { Text("Giờ Vào") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
-                    OutlinedTextField(value = inMin, onValueChange = { inMin = it }, modifier = Modifier.weight(1f), label = { Text("Phút Vào") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                    createTextField(inHour, { 
+                        if (it.text.length <= 2) {
+                            val h = it.text.toIntOrNull() ?: 0
+                            if (h > 24) {
+                                inHour = it.copy(text = "07", selection = TextRange(2))
+                                inMin = inMin.copy(text = "30", selection = TextRange(2))
+                            } else if (h == 24 && (inMin.text.toIntOrNull() ?: 0) > 0) {
+                                inHour = it.copy(text = "07", selection = TextRange(2))
+                                inMin = inMin.copy(text = "30", selection = TextRange(2))
+                            } else {
+                                inHour = it
+                            }
+                        }
+                    }, "Giờ Vào", focusRequesters[0], focusRequesters[1], Modifier.weight(1f))()
+                    createTextField(inMin, { 
+                        if (it.text.length <= 2) {
+                            val m = it.text.toIntOrNull() ?: 0
+                            if (m > 59) {
+                                inMin = it.copy(text = "59", selection = TextRange(2))
+                            } else if (m > 0 && (inHour.text.toIntOrNull() ?: 0) == 24) {
+                                inHour = inHour.copy(text = "07", selection = TextRange(2))
+                                inMin = it.copy(text = "30", selection = TextRange(2))
+                            } else {
+                                inMin = it
+                            }
+                        }
+                    }, "Phút Vào", focusRequesters[1], focusRequesters[2], Modifier.weight(1f))()
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = outHour, onValueChange = { outHour = it }, modifier = Modifier.weight(1f), label = { Text("Giờ Ra") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
-                    OutlinedTextField(value = outMin, onValueChange = { outMin = it }, modifier = Modifier.weight(1f), label = { Text("Phút Ra") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                    createTextField(outHour, { 
+                        if (it.text.length <= 2) {
+                            val h = it.text.toIntOrNull() ?: 0
+                            if (h > 24) {
+                                outHour = it.copy(text = "07", selection = TextRange(2))
+                                outMin = outMin.copy(text = "30", selection = TextRange(2))
+                            } else if (h == 24 && (outMin.text.toIntOrNull() ?: 0) > 0) {
+                                outHour = it.copy(text = "07", selection = TextRange(2))
+                                outMin = outMin.copy(text = "30", selection = TextRange(2))
+                            } else {
+                                outHour = it
+                            }
+                        }
+                    }, "Giờ Ra", focusRequesters[2], focusRequesters[3], Modifier.weight(1f))()
+                    createTextField(outMin, { 
+                        if (it.text.length <= 2) {
+                            val m = it.text.toIntOrNull() ?: 0
+                            if (m > 59) {
+                                outMin = it.copy(text = "59", selection = TextRange(2))
+                            } else if (m > 0 && (outHour.text.toIntOrNull() ?: 0) == 24) {
+                                outHour = outHour.copy(text = "07", selection = TextRange(2))
+                                outMin = it.copy(text = "30", selection = TextRange(2))
+                            } else {
+                                outMin = it
+                            }
+                        }
+                    }, "Phút Ra", focusRequesters[3], null, Modifier.weight(1f))()
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -560,10 +711,10 @@ fun BatchEntryDialog(
                     TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
                     Button(
                         onClick = {
-                            val iH = inHour.toIntOrNull() ?: 8
-                            val iM = inMin.toIntOrNull() ?: 0
-                            val oH = outHour.toIntOrNull() ?: 17
-                            val oM = outMin.toIntOrNull() ?: 0
+                            val iH = inHour.text.toIntOrNull() ?: 8
+                            val iM = inMin.text.toIntOrNull() ?: 0
+                            val oH = outHour.text.toIntOrNull() ?: 17
+                            val oM = outMin.text.toIntOrNull() ?: 0
                             onSave(iH, iM, oH, oM, skipSunday, skipHoliday)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))

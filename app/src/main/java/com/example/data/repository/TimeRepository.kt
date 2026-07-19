@@ -40,6 +40,10 @@ class TimeRepository(
         return timeEntryDao.getEntriesForUserInMonthDirect(userId, monthPattern)
     }
 
+    suspend fun getLastCompletedEntries(userId: String, limit: Int): List<TimeEntry> {
+        return timeEntryDao.getLastCompletedEntries(userId, limit)
+    }
+
     fun getConfig(userId: String): Flow<UserConfig?> = userConfigDao.getConfigFlow(userId)
 
     suspend fun getConfigDirect(userId: String): UserConfig? {

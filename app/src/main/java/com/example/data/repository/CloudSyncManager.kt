@@ -108,7 +108,7 @@ class CloudSyncManager(private val context: Context) {
                         "configJson" to configJson,
                         "lastSyncTime" to System.currentTimeMillis()
                     )
-                    firestore.collection("overtime_sync").document(userId)
+                    firestore.collection("users").document(userId).collection("overtime_sync").document("backup")
                         .set(map, SetOptions.merge())
                         .awaitTaskFirestore()
                     Log.d("CloudSyncManager", "Successfully uploaded overtime data and config to Firestore for userId: $userId")
@@ -163,7 +163,7 @@ class CloudSyncManager(private val context: Context) {
             if (!userId.startsWith("demo") && !userId.contains("demo")) {
                 try {
                     val firestore = FirebaseFirestore.getInstance()
-                    val document = firestore.collection("overtime_sync").document(userId)
+                    val document = firestore.collection("users").document(userId).collection("overtime_sync").document("backup")
                         .get()
                         .awaitTaskFirestore()
 
@@ -171,6 +171,16 @@ class CloudSyncManager(private val context: Context) {
                         entriesJson = document.getString("entriesJson")
                         configJson = document.getString("configJson")
                         Log.d("CloudSyncManager", "Found synched overtime data on Firebase Firestore for userId: $userId")
+                    } else {
+                        // Fallback to old root collection
+                        val oldDocument = firestore.collection("overtime_sync").document(userId)
+                            .get()
+                            .awaitTaskFirestore()
+                        if (oldDocument != null && oldDocument.exists()) {
+                            entriesJson = oldDocument.getString("entriesJson")
+                            configJson = oldDocument.getString("configJson")
+                            Log.d("CloudSyncManager", "Found synched overtime data on old root Firebase Firestore for userId: $userId")
+                        }
                     }
                 } catch (e: Throwable) {
                     Log.e("CloudSyncManager", "Failed to fetch from Firebase Firestore during download: ${e.message}", e)

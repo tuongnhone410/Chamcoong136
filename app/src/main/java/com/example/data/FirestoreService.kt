@@ -193,6 +193,57 @@ object FirestoreService {
             .awaitTaskFirestore()
     }
 
+    suspend fun getAllUserConfigs(): List<com.example.data.model.UserConfig> {
+        val firestore = getDb() ?: return emptyList()
+        return try {
+            // Collection group query to find all 'settings' documents in any 'salary_config' subcollection
+            val snapshot = firestore.collectionGroup("salary_config")
+                .get()
+                .awaitTaskFirestore()
+            snapshot?.documents?.mapNotNull { doc ->
+                val userId = doc.reference.parent.parent?.id ?: return@mapNotNull null
+                doc.toUserSalaryConfig(userId)
+            } ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching all user configs: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun getAttendanceLogsForUser(uid: String): List<AttendanceRecord> {
+        val firestore = getDb() ?: return emptyList()
+        return try {
+            val snapshot = firestore.collection("users").document(uid).collection("attendance_logs")
+                .get()
+                .awaitTaskFirestore()
+            snapshot?.documents?.mapNotNull { doc ->
+                doc.toAttendanceRecord(uid)
+            }?.sortedByDescending { it.clockInTime } ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching attendance logs for $uid: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun getAllAttendanceLogsInMonth(monthStr: String): List<AttendanceRecord> {
+        val firestore = getDb() ?: return emptyList()
+        return try {
+            // monthStr format: yyyy-MM
+            val snapshot = firestore.collectionGroup("attendance_logs")
+                .whereGreaterThanOrEqualTo("dateString", "$monthStr-01")
+                .whereLessThanOrEqualTo("dateString", "$monthStr-31")
+                .get()
+                .awaitTaskFirestore()
+            snapshot?.documents?.mapNotNull { doc ->
+                val uid = doc.reference.parent.parent?.id ?: return@mapNotNull null
+                doc.toAttendanceRecord(uid)
+            } ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching all attendance logs in month $monthStr: ${e.message}")
+            emptyList()
+        }
+    }
+
     fun parseVersionToCode(versionStr: String): Long {
         val clean = versionStr.trim()
         if (clean.isEmpty()) return 0L
@@ -484,11 +535,13 @@ object FirestoreService {
             "pcThamNien" to config.pcThamNien,
             "pcKhac1" to config.pcKhac1,
             "pcKhac" to config.pcKhac,
+            "allowanceCalcTypes" to config.allowanceCalcTypes,
             "soGioNghiGiaiLao" to config.soGioNghiGiaiLao,
             "tinhKhauTruNghi" to config.tinhKhauTruNghi,
             "hoVaTen" to config.hoVaTen,
             "maNhanVien" to config.maNhanVien,
             "emailDangKy" to config.emailDangKy,
+            "ngayVaoLam" to config.ngayVaoLam,
             "tienComMoiNgay" to config.tienComMoiNgay,
             "phuCap" to config.phuCap,
             "phuCapXangXe" to config.phuCapXangXe,
@@ -498,9 +551,10 @@ object FirestoreService {
             "thuong" to config.thuong,
             "heSoOtDem" to config.heSoOtDem,
             "caDemStart" to config.caDemStart,
-            "caDemEnd" to config.caDemEnd
+            "caDemEnd" to config.caDemEnd,
+            "isAdmin" to config.isAdmin
         )
-        firestore.collection("users_salary").document(config.userId)
+        firestore.collection("users").document(config.userId).collection("salary_config").document("settings")
             .set(map, SetOptions.merge())
             .awaitTaskFirestore()
     }
@@ -509,17 +563,53 @@ object FirestoreService {
         if (userId.startsWith("demo") || userId.contains("demo")) return null
         val firestore = getDb() ?: return null
         return try {
-            val document = firestore.collection("users_salary").document(userId)
+            val document = firestore.collection("users").document(userId).collection("salary_config").document("settings")
                 .get()
                 .awaitTaskFirestore()
             if (document != null && document.exists()) {
                 document.toUserSalaryConfig(userId)
             } else {
-                null
+                // Fallback to old root collection
+                val oldDocument = firestore.collection("users_salary").document(userId)
+                    .get()
+                    .awaitTaskFirestore()
+                if (oldDocument != null && oldDocument.exists()) {
+                    oldDocument.toUserSalaryConfig(userId)
+                } else {
+                    null
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching user salary config from Firestore: ${e.message}", e)
             null
+        }
+    }
+
+    suspend fun deleteUserFully(userId: String) {
+        if (userId.startsWith("demo") || userId.contains("demo")) return
+        val firestore = getDb() ?: return
+        try {
+            // 1. Delete salary_config subcollection documents
+            val salaryConfigs = firestore.collection("users").document(userId).collection("salary_config").get().awaitTaskFirestore()
+            salaryConfigs?.documents?.forEach { doc ->
+                doc.reference.delete().awaitTaskFirestore()
+            }
+            
+            // 2. Delete attendance_logs subcollection documents
+            val logs = firestore.collection("users").document(userId).collection("attendance_logs").get().awaitTaskFirestore()
+            logs?.documents?.forEach { doc ->
+                doc.reference.delete().awaitTaskFirestore()
+            }
+            
+            // 3. Delete the main user document
+            firestore.collection("users").document(userId).delete().awaitTaskFirestore()
+            
+            // 4. Delete from old root collection if exists
+            firestore.collection("users_salary").document(userId).delete().awaitTaskFirestore()
+            
+            Log.d(TAG, "Successfully deleted user fully: $userId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting user $userId: ${e.message}")
         }
     }
 }
@@ -530,7 +620,7 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         luongCoBan = getDouble("luongCoBan") ?: 0.0,
         luongDongBaoHiem = getDouble("luongDongBaoHiem") ?: 0.0,
         tiLeDongBaoHiem = getDouble("tiLeDongBaoHiem") ?: 10.5,
-        ngayChotLuong = getLong("ngayChotLuong")?.toInt() ?: 25,
+        ngayChotLuong = getLong("ngayChotLuong")?.toInt() ?: 1,
         doanPhiCongDoan = getDouble("doanPhiCongDoan") ?: 0.0,
         heSoOtNgayThuong = getDouble("heSoOtNgayThuong") ?: 1.5,
         heSoOtChuNhat = getDouble("heSoOtChuNhat") ?: 2.0,
@@ -553,11 +643,13 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         pcThamNien = getDouble("pcThamNien") ?: 0.0,
         pcKhac1 = getDouble("pcKhac1") ?: 0.0,
         pcKhac = getDouble("pcKhac") ?: 0.0,
+        allowanceCalcTypes = getString("allowanceCalcTypes") ?: "",
         soGioNghiGiaiLao = getDouble("soGioNghiGiaiLao") ?: 1.5,
         tinhKhauTruNghi = getBoolean("tinhKhauTruNghi") ?: false,
         hoVaTen = getString("hoVaTen") ?: "User Demo",
         maNhanVien = getString("maNhanVien") ?: "demo_${userId.takeLast(6)}",
         emailDangKy = getString("emailDangKy") ?: "",
+        ngayVaoLam = getString("ngayVaoLam") ?: "",
         tienComMoiNgay = getDouble("tienComMoiNgay") ?: 50000.0,
         phuCap = getDouble("phuCap") ?: 1000000.0,
         phuCapXangXe = getDouble("phuCapXangXe") ?: 500000.0,
@@ -567,7 +659,8 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         thuong = getDouble("thuong") ?: 800000.0,
         heSoOtDem = getDouble("heSoOtDem") ?: 1.75,
         caDemStart = getString("caDemStart") ?: "22:00",
-        caDemEnd = getString("caDemEnd") ?: "06:00"
+        caDemEnd = getString("caDemEnd") ?: "06:00",
+        isAdmin = getBoolean("isAdmin") ?: false
     )
 }
 

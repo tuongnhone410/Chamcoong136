@@ -1,4 +1,6 @@
+
 package com.example.ui.screens
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 import android.content.ContentValues
 import android.content.Context
@@ -19,10 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -68,6 +74,13 @@ fun PayslipScreen(
     val config by viewModel.userConfig.collectAsStateWithLifecycle()
     val entries by viewModel.monthTimeEntries.collectAsStateWithLifecycle(emptyList())
 
+    var customOt15DaysCount by remember { mutableStateOf(0.0) }
+    var selectedOt15Shift by remember { mutableStateOf("Ngày") }
+    LaunchedEffect(selectedMonth) {
+        customOt15DaysCount = 0.0
+        selectedOt15Shift = "Ngày"
+    }
+
     val fmt = DecimalFormat("#,###")
     val df = DecimalFormat("#.#")
 
@@ -99,6 +112,45 @@ fun PayslipScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Month Switcher Controller
+            val sdfMonth = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()) }
+            val currentMonthDate = remember(selectedMonth) { sdfMonth.parse(selectedMonth) ?: Date() }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Prev Month
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentMonthDate
+                    cal.add(Calendar.MONTH, -1)
+                    viewModel.selectMonth(sdfMonth.format(cal.time))
+                }) {
+                    Icon(Icons.Default.ArrowBackIosNew, "Tháng trước", tint = NeonBlue)
+                }
+
+                // Month Label
+                Text(
+                    text = monthLabel,
+                    color = White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Next Month
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    cal.time = currentMonthDate
+                    cal.add(Calendar.MONTH, 1)
+                    viewModel.selectMonth(sdfMonth.format(cal.time))
+                }) {
+                    Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
+                }
+            }
             
             if (summary == null || config == null) {
                 // Empty state setup
@@ -126,6 +178,19 @@ fun PayslipScreen(
 
                 val isCurrentSelectedMonth = (targetYear == currentYear && targetMonth == currentMonth)
 
+                val nightShiftsCount = remember(entries) {
+                    entries.count { e ->
+                        try {
+                            val inCal = Calendar.getInstance()
+                            e.checkInTime?.let {
+                                inCal.timeInMillis = it
+                                val inHour = inCal.get(Calendar.HOUR_OF_DAY)
+                                inHour >= 22 || inHour <= 6 || e.dayType == "NIGHT"
+                            } ?: false
+                        } catch (ex: Exception) { false }
+                    }
+                }
+                
                 val tinhDenNgay = if (isCurrentSelectedMonth) {
                     todayDayOfMonth
                 } else {
@@ -145,7 +210,7 @@ fun PayslipScreen(
                     tempCal.getActualMaximum(Calendar.DAY_OF_MONTH)
                 }
 
-                val remainingSundays = remember(targetYear, targetMonth, todayDayOfMonth, isCurrentSelectedMonth) {
+                val defaultRemainingSundays = remember(targetYear, targetMonth, todayDayOfMonth, isCurrentSelectedMonth) {
                     if (!isCurrentSelectedMonth) 0 else {
                         val cal = Calendar.getInstance()
                         var count = 0
@@ -160,6 +225,7 @@ fun PayslipScreen(
                         count
                     }
                 }
+                var remainingSundays by remember(defaultRemainingSundays) { mutableStateOf(defaultRemainingSundays) }
 
                 val remainingWeekdays = remember(targetYear, targetMonth, todayDayOfMonth, isCurrentSelectedMonth) {
                     if (!isCurrentSelectedMonth) 0 else {
@@ -224,7 +290,7 @@ fun PayslipScreen(
 
                 val pcComCaShow = if (selectedTab == 1) {
                     if (isCurrentSelectedMonth) {
-                        s.pcComCaVal + (remainingWeekdays * c.pcComCa)
+                        s.pcComCaVal + (remainingWeekdays * c.pcComCa) + (if (includeSundayInProjection) remainingSundays * c.pcComCa else 0.0)
                     } else {
                         s.pcComCaVal
                     }
@@ -232,7 +298,8 @@ fun PayslipScreen(
                     s.pcComCaVal
                 }
 
-                val pcComOtShow = s.pcComOtVal
+                val otMealAllowance = if (selectedTab == 1) customOt15DaysCount * c.pcComOt else 0.0
+                val pcComOtShow = if (selectedTab == 1) s.pcComOtVal + otMealAllowance else s.pcComOtVal
 
                 val pcNhaOShow = if (selectedTab == 1) c.pcNhaO else s.pcNhaOVal
                 val pcDocHaiShow = if (selectedTab == 1) c.pcDocHai else s.pcDocHaiVal
@@ -257,7 +324,13 @@ fun PayslipScreen(
                 val allowanceAdjustment = fullProjectedAllowancesSum - currentProratedAllowancesSum
 
                 val baseSalaryAdjustment = if (isCurrentSelectedMonth) additionalWeekdaysPay else 0.0
-                val luongDuKienVal = s.luongThucNhan + baseSalaryAdjustment + additionalSundaysPay + allowanceAdjustment
+                val breakHours = if (c.tinhKhauTruNghi) c.soGioNghiGiaiLao else 0.0
+                val totalOtHours = customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0)
+                val customOt15Pay = totalOtHours * hourlySalary * c.heSoOtNgayThuong
+                val customNightAllowance = if (selectedOt15Shift == "Đêm") {
+                    customOt15DaysCount * c.pcKhac
+                } else 0.0
+                val luongDuKienVal = s.luongThucNhan + baseSalaryAdjustment + additionalSundaysPay + allowanceAdjustment + customOt15Pay + customNightAllowance
                 val soNgayCongDuKien = if (isCurrentSelectedMonth) {
                     s.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
                 } else {
@@ -425,25 +498,203 @@ fun PayslipScreen(
                         }
 
                         // Interactive Projection Switch inside Receipt Paper
-                        if (selectedTab == 1 && remainingSundays > 0) {
+                        if (selectedTab == 1 && isCurrentSelectedMonth) {
                             HorizontalDivider(
                                 color = Color(0xFF2C2C2C),
                                 thickness = 0.5.dp,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
-                            Row(
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { includeSundayInProjection = !includeSundayInProjection },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Lịch làm việc có Chủ Nhật", color = LightGray, fontSize = 12.sp)
+                                    Switch(
+                                        checked = includeSundayInProjection,
+                                        onCheckedChange = { includeSundayInProjection = it },
+                                        modifier = Modifier.scale(0.85f).testTag("sunday_projection_switch")
+                                    )
+                                }
+
+                                if (includeSundayInProjection) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("Số ngày CN còn lại:", color = LightGray, fontSize = 12.sp)
+                                            Text("(Tối đa: $defaultRemainingSundays ngày)", color = Color.Gray, fontSize = 10.sp)
+                                        }
+                                        
+                                        var sundayInputText by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(remainingSundays.toString())) }
+                                        LaunchedEffect(remainingSundays) {
+                                            if (sundayInputText.text != remainingSundays.toString()) {
+                                                sundayInputText = sundayInputText.copy(
+                                                    text = remainingSundays.toString(),
+                                                    selection = androidx.compose.ui.text.TextRange(remainingSundays.toString().length)
+                                                )
+                                            }
+                                        }
+                                        
+                                        OutlinedTextField(
+                                            value = sundayInputText,
+                                            onValueChange = { newValue ->
+                                                val cleanText = newValue.text.filter { it.isDigit() }
+                                                if (cleanText.isEmpty()) {
+                                                    sundayInputText = newValue.copy(text = "")
+                                                    remainingSundays = 0
+                                                } else {
+                                                    cleanText.toIntOrNull()?.let { parsed ->
+                                                        if (parsed <= defaultRemainingSundays) {
+                                                            sundayInputText = newValue.copy(text = cleanText)
+                                                            remainingSundays = parsed
+                                                        } else {
+                                                            val cappedStr = defaultRemainingSundays.toString()
+                                                            sundayInputText = androidx.compose.ui.text.input.TextFieldValue(
+                                                                text = cappedStr,
+                                                                selection = androidx.compose.ui.text.TextRange(cappedStr.length)
+                                                            )
+                                                            remainingSundays = defaultRemainingSundays
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .width(72.dp)
+                                                .testTag("sunday_count_input"),
+                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                textAlign = TextAlign.Center, 
+                                                color = White, 
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp
+                                            ),
+                                            singleLine = true,
+                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                            ),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color(0xFF3C3C3C),
+                                                focusedContainerColor = Color(0xFF1E1E1E),
+                                                unfocusedContainerColor = Color(0xFF161616),
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                cursorColor = NeonBlue
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (selectedTab == 1) {
+                            HorizontalDivider(
+                                color = Color(0xFF2C2C2C),
+                                thickness = 0.5.dp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { includeSundayInProjection = !includeSundayInProjection },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(vertical = 4.dp)
                             ) {
-                                Text("Lịch làm việc có Chủ Nhật", color = LightGray, fontSize = 12.sp)
-                                Switch(
-                                    checked = includeSundayInProjection,
-                                    onCheckedChange = { includeSundayInProjection = it },
-                                    modifier = Modifier.scale(0.85f).testTag("sunday_projection_switch")
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Dự kiến OT1.5:", color = LightGray, fontSize = 13.sp)
+                                    if (customOt15DaysCount > 0.0) {
+                                        Text(
+                                            text = "+${fmt.format(customOt15Pay)}đ dự kiến",
+                                            color = AccentGreen,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedOt15Shift == "Ngày",
+                                            onClick = { selectedOt15Shift = "Ngày" },
+                                            colors = RadioButtonDefaults.colors(selectedColor = NeonBlue, unselectedColor = LightGray)
+                                        )
+                                        Text("Ngày", color = White, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.width(16.dp))
+                                        RadioButton(
+                                            selected = selectedOt15Shift == "Đêm",
+                                            onClick = { selectedOt15Shift = "Đêm" },
+                                            colors = RadioButtonDefaults.colors(selectedColor = NeonBlue, unselectedColor = LightGray)
+                                        )
+                                        Text("Đêm", color = White, fontSize = 13.sp)
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        var textFieldValue by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(if (customOt15DaysCount == 0.0) "" else df.format(customOt15DaysCount))) }
+                                        LaunchedEffect(customOt15DaysCount) {
+                                            val str = if (customOt15DaysCount == 0.0) "" else df.format(customOt15DaysCount)
+                                            if (textFieldValue.text != str && textFieldValue.text.toDoubleOrNull() != customOt15DaysCount) {
+                                                textFieldValue = textFieldValue.copy(text = str)
+                                            }
+                                        }
+                                        val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                        val isFocused by interactionSource.collectIsFocusedAsState()
+                                        LaunchedEffect(isFocused) {
+                                            if (isFocused) {
+                                                kotlinx.coroutines.delay(50)
+                                                textFieldValue = textFieldValue.copy(selection = androidx.compose.ui.text.TextRange(0, textFieldValue.text.length))
+                                            }
+                                        }
+                                        TextField(
+                                            value = textFieldValue,
+                                            onValueChange = {
+                                                textFieldValue = it
+                                                val raw = it.text.toDoubleOrNull() ?: 0.0
+                                                val maxPossible = (remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)).toDouble()
+                                                if (raw > maxPossible) {
+                                                    customOt15DaysCount = maxPossible
+                                                    val cappedStr = df.format(maxPossible)
+                                                    textFieldValue = textFieldValue.copy(
+                                                        text = cappedStr,
+                                                        selection = androidx.compose.ui.text.TextRange(cappedStr.length)
+                                                    )
+                                                } else {
+                                                    customOt15DaysCount = raw
+                                                }
+                                            },
+                                            modifier = Modifier.width(60.dp),
+                                            textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center, color = White),
+                                            singleLine = true,
+                                            interactionSource = interactionSource,
+                                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                                            colors = androidx.compose.material3.TextFieldDefaults.colors(
+                                                unfocusedContainerColor = Color.Transparent,
+                                                focusedContainerColor = Color.Transparent,
+                                                focusedIndicatorColor = NeonBlue,
+                                                unfocusedIndicatorColor = Color.Transparent
+                                            )
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("ngày", color = LightGray, fontSize = 13.sp)
+                                    }
+                                }
                             }
                         }
 
@@ -462,89 +713,128 @@ fun PayslipScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
+                        // 1. Lương cơ bản
                         if (selectedTab == 1) {
                             PayslipMoneyRow(label = "Lương Cơ Bản Thỏa Thuận", value = c.luongCoBan, isAddition = true)
                             if (s.standardWorkDays == 27) {
-                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true, isAccent = true)
-                            }
-                            if (s.tienChuNhat > 0.0) {
-                                PayslipMoneyRow(label = "OT 2.0 (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
-                            }
-                            if (isCurrentSelectedMonth && includeSundayInProjection && remainingSundays > 0) {
-                                PayslipMoneyRow(label = "Dự kiến làm thêm $remainingSundays Chủ Nhật (H.Số ${c.heSoOtChuNhat})", value = additionalSundaysPay, isAddition = true, isAccent = true)
+                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true)
                             }
                         } else {
-                            PayslipMoneyRow(label = "Lương Cơ Bản Tạm Tính", value = s.baseBasicSalary, isAddition = true)
+                            val label = if (s.isCurrentMonth) "Lương Cơ Bản Tạm Tính" else "Thực Nhận"
+                            PayslipMoneyRow(label = label, value = s.baseBasicSalary, isAddition = true)
                             if (s.standardWorkDays == 27) {
-                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true, isAccent = true)
-                            }
-                            if (s.tienChuNhat > 0.0) {
-                                PayslipMoneyRow(label = "OT 2.0 (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
+                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true)
                             }
                         }
                         
-                        // Flat allowances
-                        if (c.pcKyThuat > 0.0) {
-                            PayslipMoneyRow(label = "Kỹ thuật", value = pcKyThuatShow, isAddition = true)
-                        }
-                        if (c.pcTrachNhiem > 0.0) {
-                            PayslipMoneyRow(label = "Trách nhiệm", value = pcTrachNhiemShow, isAddition = true)
-                        }
-                        if (c.pcChucVu > 0.0) {
-                            PayslipMoneyRow(label = "Chức vụ", value = pcChucVuShow, isAddition = true)
-                        }
-                        if (c.pcHieuSuat > 0.0) {
-                            PayslipMoneyRow(label = "Hiệu suất", value = pcHieuSuatShow, isAddition = true)
-                        }
-                        if (c.pcSanPham > 0.0) {
-                            PayslipMoneyRow(label = "Sản phẩm", value = pcSanPhamShow, isAddition = true)
-                        }
-                        if (pcComCaShow > 0.0) {
-                            PayslipMoneyRow(label = "Cơm/ ca", value = pcComCaShow, isAddition = true)
-                        }
-                        if (pcComOtShow > 0.0) {
-                            PayslipMoneyRow(label = "Cơm OT", value = pcComOtShow, isAddition = true)
-                        }
-                        if (c.pcNhaO > 0.0) {
-                            PayslipMoneyRow(label = "Nhà ở", value = pcNhaOShow, isAddition = true)
-                        }
-                        if (c.pcDocHai > 0.0) {
-                            PayslipMoneyRow(label = "Độc hại", value = pcDocHaiShow, isAddition = true)
-                        }
-                        if (c.pcDtDoanhThu > 0.0) {
-                            PayslipMoneyRow(label = "Doanh thu", value = pcDtDoanhThuShow, isAddition = true)
-                        }
-                        if (c.pcXangXe > 0.0) {
-                            PayslipMoneyRow(label = "Xăng xe", value = pcXangXeShow, isAddition = true)
-                        }
-                        if (c.pcKhac > 0.0) {
-                            PayslipMoneyRow(label = "Khác", value = pcKhacShow, isAddition = true)
-                        }
-                        if (c.pcKhac1 > 0.0) {
-                            PayslipMoneyRow(label = "Khác 1", value = pcKhac1Show, isAddition = true)
-                        }
-                        if (c.pcThamNien > 0.0) {
-                            PayslipMoneyRow(label = "Thâm niên", value = pcThamNienShow, isAddition = true)
-                        }
+                        // 2. Chuyên cần
                         if (pcChuyenCanShow > 0.0) {
                             PayslipMoneyRow(label = "Chuyên cần", value = pcChuyenCanShow, isAddition = true)
                         }
-                        if (s.caDemCount > 0) {
-                            PayslipMoneyRow(label = "Phụ cấp đêm (${s.caDemCount})", value = s.pcCaDemVal, isAddition = true, isAccent = true)
+
+                        // 3. Trách nhiệm
+                        if (c.pcTrachNhiem > 0.0) {
+                            PayslipMoneyRow(label = "Trách nhiệm", value = pcTrachNhiemShow, isAddition = true)
                         }
 
-                        if (s.tongTienCom > 0.0) {
-                            PayslipMoneyRow(label = "Tổng Tiền Cơm (${s.workingDays} ngày)", value = s.tongTienCom, isAddition = true)
+                        // 4. Kỹ thuật
+                        if (c.pcKyThuat > 0.0) {
+                            PayslipMoneyRow(label = "Kỹ thuật", value = pcKyThuatShow, isAddition = true)
                         }
 
-                        // Overtime rows
+                        // 5. Hiệu suất
+                        if (c.pcHieuSuat > 0.0) {
+                            PayslipMoneyRow(label = "Hiệu suất", value = pcHieuSuatShow, isAddition = true)
+                        }
+
+                        // 6. Sản phẩm
+                        if (c.pcSanPham > 0.0) {
+                            PayslipMoneyRow(label = "Sản phẩm", value = pcSanPhamShow, isAddition = true)
+                        }
+
+                        // 7. Chức vụ
+                        if (c.pcChucVu > 0.0) {
+                            PayslipMoneyRow(label = "Chức vụ", value = pcChucVuShow, isAddition = true)
+                        }
+
+                        // 8. Độc hại
+                        if (c.pcDocHai > 0.0) {
+                            PayslipMoneyRow(label = "Độc hại", value = pcDocHaiShow, isAddition = true)
+                        }
+
+                        // 9. Doanh thu
+                        if (c.pcDtDoanhThu > 0.0) {
+                            PayslipMoneyRow(label = "Doanh thu", value = pcDtDoanhThuShow, isAddition = true)
+                        }
+
+                        // 10. Thâm niên
+                        if (c.pcThamNien > 0.0) {
+                            PayslipMoneyRow(label = "Thâm niên", value = pcThamNienShow, isAddition = true)
+                        }
+
+                        // 11. Cơm/ca
+                        if (pcComCaShow > 0.0) {
+                            PayslipMoneyRow(label = "Cơm/ ca", value = pcComCaShow, isAddition = true)
+                        }
+
+                        // 12. Cơm OT
+                        if (pcComOtShow > 0.0) {
+                            PayslipMoneyRow(label = "Cơm OT", value = pcComOtShow, isAddition = true)
+                        }
+
+                        // 13. OT 1.5
                         if (s.tienOtNgay > 0.0) {
-                            PayslipMoneyRow(
-                                label = "OT 1.5 (${df.format(s.otDayHours)}h)",
-                                value = s.tienOtNgay,
-                                isAddition = true
-                            )
+                            PayslipMoneyRow(label = "OT 1.5 (${df.format(s.otDayHours)}h)", value = s.tienOtNgay, isAddition = true, isAccent = true)
                         }
+                        if (selectedTab == 1 && customOt15DaysCount > 0.0) {
+                            PayslipMoneyRow(label = "OT 1.5 (${df.format(customOt15DaysCount)} ngày)", value = customOt15Pay, isAddition = true, isAccent = true)
+                        }
+
+                        // 14. OT 2.0
+                        if (s.tienChuNhat > 0.0) {
+                            PayslipMoneyRow(label = "OT 2.0 (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
+                        }
+                        if (selectedTab == 1 && isCurrentSelectedMonth && includeSundayInProjection && remainingSundays > 0) {
+                            PayslipMoneyRow(label = "OT 2.0 ($remainingSundays)", value = additionalSundaysPay, isAddition = true, isAccent = true)
+                        }
+
+                        // 15. OT 3.0
+                        if (s.tienOtLe > 0.0) {
+                            PayslipMoneyRow(label = "OT 3.0 (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
+                        }
+
+                        // 15.1 OT đêm
+                        if (s.tienOtDem > 0.0) {
+                            PayslipMoneyRow(label = "OT đêm (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
+                        }
+
+                        // 16. Phụ cấp đêm
+                        val finalPcCaDemCount = if (selectedTab == 1 && selectedOt15Shift == "Đêm") s.caDemCount + customOt15DaysCount.toInt() else s.caDemCount
+                        val finalPcCaDem = if (selectedTab == 1) (s.pcCaDemVal + customNightAllowance) else s.pcCaDemVal
+                        if (finalPcCaDem > 0.0) {
+                            PayslipMoneyRow(label = "Phụ cấp đêm ($finalPcCaDemCount)", value = finalPcCaDem, isAddition = true)
+                        }
+
+                        // 17. Xăng xe
+                        if (c.pcXangXe > 0.0) {
+                            PayslipMoneyRow(label = "Xăng xe", value = pcXangXeShow, isAddition = true)
+                        }
+
+                        // 18. Nhà ở
+                        if (c.pcNhaO > 0.0) {
+                            PayslipMoneyRow(label = "Nhà ở", value = pcNhaOShow, isAddition = true)
+                        }
+
+                        // 19. Khác (Now merged into Night Allowance)
+                        // if (c.pcKhac > 0.0) {
+                        //     PayslipMoneyRow(label = "Khác", value = pcKhacShow, isAddition = true)
+                        // }
+
+                        // 20. Khác 1
+                        if (c.pcKhac1 > 0.0) {
+                            PayslipMoneyRow(label = "Khác 1", value = pcKhac1Show, isAddition = true)
+                        }
+
 
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -595,7 +885,7 @@ fun PayslipScreen(
                             Text(
                                 text = "${fmt.format(if (selectedTab == 1) luongDuKienVal else s.luongThucNhan)}đ",
                                 color = AccentGreen,
-                                fontSize = 23.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
@@ -645,7 +935,11 @@ fun PayslipScreen(
                             remainingSundays = remainingSundays,
                             dailySalary = dailySalary,
                             luongDuKienVal = luongDuKienVal,
-                            soNgayCongDuKien = soNgayCongDuKien
+                            soNgayCongDuKien = soNgayCongDuKien,
+                            customOt15DaysCount = customOt15DaysCount,
+                            customOt15Pay = customOt15Pay,
+                            selectedOt15Shift = selectedOt15Shift,
+                            customNightAllowance = customNightAllowance
                         )
                         if (isSaved) {
                             Toast.makeText(context, "Đã lưu phiếu lương thành công vào Gallery ứng dụng của điện thoại!", Toast.LENGTH_LONG).show()
@@ -663,7 +957,7 @@ fun PayslipScreen(
                     Icon(imageVector = Icons.Default.Download, contentDescription = "Export")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (selectedTab == 1) "XUẤT LƯƠNG DỰ KIẾN (.PNG)" else "XUẤT LƯƠNG THỰC TẾ (.PNG)",
+                        text = "XUẤT PHIẾU LƯƠNG",
                         color = White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -741,7 +1035,11 @@ fun savePayslipAsPngImage(
     remainingSundays: Int = 0,
     dailySalary: Double = 0.0,
     luongDuKienVal: Double = 0.0,
-    soNgayCongDuKien: Int = 0
+    soNgayCongDuKien: Int = 0,
+    customOt15DaysCount: Double = 0.0,
+    customOt15Pay: Double = 0.0,
+    selectedOt15Shift: String = "Đêm",
+    customNightAllowance: Double = 0.0
 ): Boolean {
     val df = DecimalFormat("#.#")
     val fmt = DecimalFormat("#,###")
@@ -759,7 +1057,7 @@ fun savePayslipAsPngImage(
 
     val pcComCaShowPNG = if (selectedTab == 1) {
         if (isCurrentSelectedMonth) {
-            summary.pcComCaVal + (remainingWeekdays * config.pcComCa)
+            summary.pcComCaVal + (remainingWeekdays * config.pcComCa) + (if (includeSundayInProjection) remainingSundays * config.pcComCa else 0.0)
         } else {
             summary.pcComCaVal
         }
@@ -767,7 +1065,11 @@ fun savePayslipAsPngImage(
         summary.pcComCaVal
     }
 
-    val pcComOtShowPNG = summary.pcComOtVal
+    val pcComOtShowPNG = if (selectedTab == 1) {
+        summary.pcComOtVal + (customOt15DaysCount * config.pcComOt)
+    } else {
+        summary.pcComOtVal
+    }
 
     val pcNhaOShowPNG = if (selectedTab == 1) config.pcNhaO else summary.pcNhaOVal
     val pcDocHaiShowPNG = if (selectedTab == 1) config.pcDocHai else summary.pcDocHaiVal
@@ -788,6 +1090,9 @@ fun savePayslipAsPngImage(
     estimatedHeight += 45
     if (selectedTab == 1 && remainingSundays > 0 && includeSundayInProjection) {
         estimatedHeight += 45 // Extra lines for sundays projection additions
+    }
+    if (selectedTab == 1 && customOt15DaysCount > 0.0) {
+        estimatedHeight += 45 // Extra line for custom OT 1.5 projection additions
     }
     // Allowances
     if (config.pcKyThuat > 0.0) estimatedHeight += 45
@@ -983,82 +1288,122 @@ fun savePayslipAsPngImage(
     canvas.drawText(additionsHeaderPNG, 80f, currentY, paintGreen)
     currentY += 45f
 
+    // 1. Lương cơ bản
     if (selectedTab == 1) {
         drawRow("Lương Cơ Bản Thỏa Thuận", "+${fmt.format(config.luongCoBan)}đ", isGreenVal = true)
         if (summary.standardWorkDays == 27) {
             drawRow("Bù công dôi dư tháng 31 ngày (1 ngày LCB)", "+${fmt.format(dailySalary)}đ", isGreenVal = true)
         }
-        if (includeSundayInProjection && remainingSundays > 0) {
-            drawRow("Dự kiến làm thêm $remainingSundays CN (H.Số ${config.heSoOtChuNhat})", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", isGreenVal = true)
-        }
     } else {
-        drawRow("Lương Cơ Bản Tạm Tính", "+${fmt.format(summary.baseBasicSalary)}đ", isGreenVal = true)
+        val label = if (summary.isCurrentMonth) "Lương Cơ Bản Tạm Tính" else "Thực Nhận"
+        drawRow(label, "+${fmt.format(summary.baseBasicSalary)}đ", isGreenVal = true)
         if (summary.standardWorkDays == 27) {
             drawRow("Bù công dôi dư tháng 31 ngày (1 ngày LCB)", "+${fmt.format(dailySalary)}đ", isGreenVal = true)
         }
     }
     
-    // Draw separate real allowances configured by user on PNG
-    if (config.pcKyThuat > 0.0) {
-        drawRow("Kỹ thuật", "+${fmt.format(pcKyThuatShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcTrachNhiem > 0.0) {
-        drawRow("Trách nhiệm", "+${fmt.format(pcTrachNhiemShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcChucVu > 0.0) {
-        drawRow("Chức vụ", "+${fmt.format(pcChucVuShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcHieuSuat > 0.0) {
-        drawRow("Hiệu suất", "+${fmt.format(pcHieuSuatShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcSanPham > 0.0) {
-        drawRow("Sản phẩm", "+${fmt.format(pcSanPhamShowPNG)}đ", isGreenVal = true)
-    }
-    if (pcComCaShowPNG > 0.0) {
-        drawRow("Cơm/ ca", "+${fmt.format(pcComCaShowPNG)}đ", isGreenVal = true)
-    }
-    if (pcComOtShowPNG > 0.0) {
-        drawRow("Cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcNhaO > 0.0) {
-        drawRow("Nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcDocHai > 0.0) {
-        drawRow("Độc hại", "+${fmt.format(pcDocHaiShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcDtDoanhThu > 0.0) {
-        drawRow("Doanh thu", "+${fmt.format(pcDtDoanhThuShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcXangXe > 0.0) {
-        drawRow("Xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcKhac > 0.0) {
-        drawRow("Khác", "+${fmt.format(pcKhacShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcKhac1 > 0.0) {
-        drawRow("Khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", isGreenVal = true)
-    }
-    if (config.pcThamNien > 0.0) {
-        drawRow("Thâm niên", "+${fmt.format(pcThamNienShowPNG)}đ", isGreenVal = true)
-    }
+    // 2. Chuyên cần
     if (pcChuyenCanShowPNG > 0.0) {
         drawRow("Chuyên cần", "+${fmt.format(pcChuyenCanShowPNG)}đ", isGreenVal = true)
     }
-    if (summary.caDemCount > 0) {
-        drawRow("Phụ cấp đêm (${summary.caDemCount})", "+${fmt.format(summary.pcCaDemVal)}đ", isGreenVal = true)
+
+    // 3. Trách nhiệm
+    if (config.pcTrachNhiem > 0.0) {
+        drawRow("Trách nhiệm", "+${fmt.format(pcTrachNhiemShowPNG)}đ", isGreenVal = true)
     }
 
-    if (summary.tongTienCom > 0.0) {
-        drawRow("Tổng Tiền Cơm (${summary.workingDays} ngày)", "+${fmt.format(summary.tongTienCom)}đ", isGreenVal = true)
+    // 4. Kỹ thuật
+    if (config.pcKyThuat > 0.0) {
+        drawRow("Kỹ thuật", "+${fmt.format(pcKyThuatShowPNG)}đ", isGreenVal = true)
     }
 
+    // 5. Hiệu suất
+    if (config.pcHieuSuat > 0.0) {
+        drawRow("Hiệu suất", "+${fmt.format(pcHieuSuatShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 6. Sản phẩm
+    if (config.pcSanPham > 0.0) {
+        drawRow("Sản phẩm", "+${fmt.format(pcSanPhamShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 7. Chức vụ
+    if (config.pcChucVu > 0.0) {
+        drawRow("Chức vụ", "+${fmt.format(pcChucVuShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 8. Độc hại
+    if (config.pcDocHai > 0.0) {
+        drawRow("Độc hại", "+${fmt.format(pcDocHaiShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 9. Doanh thu
+    if (config.pcDtDoanhThu > 0.0) {
+        drawRow("Doanh thu", "+${fmt.format(pcDtDoanhThuShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 10. Thâm niên
+    if (config.pcThamNien > 0.0) {
+        drawRow("Thâm niên", "+${fmt.format(pcThamNienShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 11. Cơm/ca
+    if (pcComCaShowPNG > 0.0) {
+        drawRow("Cơm/ ca", "+${fmt.format(pcComCaShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 12. Cơm OT
+    if (pcComOtShowPNG > 0.0) {
+        drawRow("Cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 13. OT 1.5
     if (summary.tienOtNgay > 0.0) {
         drawRow("OT 1.5 (${df.format(summary.otDayHours)}h)", "+${fmt.format(summary.tienOtNgay)}đ", isGreenVal = true)
     }
+    if (selectedTab == 1 && customOt15DaysCount > 0.0) {
+        drawRow("OT 1.5 (${df.format(customOt15DaysCount)} ngày)", "+${fmt.format(customOt15Pay)}đ", isGreenVal = true)
+    }
+
+    // 14. OT 2.0
     if (summary.tienChuNhat > 0.0) {
         drawRow("OT 2.0 (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", isGreenVal = true)
     }
+    if (selectedTab == 1 && includeSundayInProjection && remainingSundays > 0) {
+        drawRow("OT 2.0 ($remainingSundays)", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", isGreenVal = true)
+    }
 
+    // 15. OT 3.0
+    if (summary.tienOtLe > 0.0) {
+        drawRow("OT 3.0 (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", isGreenVal = true)
+    }
+
+    // 16. Phụ cấp đêm
+    val finalPcCaDemCountPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") summary.caDemCount + customOt15DaysCount.toInt() else summary.caDemCount
+    val finalPcCaDemPNG = if (selectedTab == 1) (summary.pcCaDemVal + customNightAllowance) else summary.pcCaDemVal
+    if (finalPcCaDemPNG > 0.0) {
+        drawRow("Phụ cấp đêm ($finalPcCaDemCountPNG)", "+${fmt.format(finalPcCaDemPNG)}đ", isGreenVal = true)
+    }
+
+    // 17. Xăng xe
+    if (config.pcXangXe > 0.0) {
+        drawRow("Xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 18. Nhà ở
+    if (config.pcNhaO > 0.0) {
+        drawRow("Nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", isGreenVal = true)
+    }
+
+    // 19. Khác (Merged into Night Allowance)
+    // if (config.pcKhac > 0.0) {
+    //     drawRow("Khác", "+${fmt.format(pcKhacShowPNG)}đ", isGreenVal = true)
+    // }
+
+    // 20. Khác 1
+    if (config.pcKhac1 > 0.0) {
+        drawRow("Khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", isGreenVal = true)
+    }
     currentY += 10f
     canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
     currentY += 45f

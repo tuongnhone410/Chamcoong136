@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.TimePickerDialog
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +36,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +58,7 @@ import com.example.ui.theme.LightGray
 import com.example.ui.theme.MediumGray
 import com.example.ui.theme.NeonBlue
 import com.example.ui.theme.White
+import com.example.ui.theme.NightPurple
 import com.example.viewmodel.TimeSnapViewModel
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -354,10 +364,13 @@ fun HistoryScreen(
             val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
             val isFutureDate = day.dateString > todayStr
 
-            var checkInHour by remember { mutableStateOf("08") }
-            var checkInMin by remember { mutableStateOf("00") }
-            var checkOutHour by remember { mutableStateOf("17") }
-            var checkOutMin by remember { mutableStateOf("00") }
+            var checkInHour by remember { mutableStateOf(TextFieldValue("08")) }
+            var checkInMin by remember { mutableStateOf(TextFieldValue("00")) }
+            var checkOutHour by remember { mutableStateOf(TextFieldValue("17")) }
+            var checkOutMin by remember { mutableStateOf(TextFieldValue("00")) }
+            
+            val focusRequesters = remember { List(4) { FocusRequester() } }
+            
             var leaveCheckOutEmpty by remember { mutableStateOf(false) }
             
             var selectedDayType by remember { mutableStateOf("NORMAL") }
@@ -372,15 +385,17 @@ fun HistoryScreen(
                     
                     if (existing.checkInTime != null) {
                         val cal = Calendar.getInstance().apply { timeInMillis = existing.checkInTime }
-                        checkInHour = String.format("%02d", cal.get(Calendar.HOUR_OF_DAY))
-                        checkInMin = String.format("%02d", cal.get(Calendar.MINUTE))
+                        checkInHour = TextFieldValue(String.format("%02d", cal.get(Calendar.HOUR_OF_DAY)))
+                        checkInMin = TextFieldValue(String.format("%02d", cal.get(Calendar.MINUTE)))
                         
                         if (existing.checkOutTime != null) {
                             val outCal = Calendar.getInstance().apply { timeInMillis = existing.checkOutTime }
-                            checkOutHour = String.format("%02d", outCal.get(Calendar.HOUR_OF_DAY))
-                            checkOutMin = String.format("%02d", outCal.get(Calendar.MINUTE))
+                            checkOutHour = TextFieldValue(String.format("%02d", outCal.get(Calendar.HOUR_OF_DAY)))
+                            checkOutMin = TextFieldValue(String.format("%02d", outCal.get(Calendar.MINUTE)))
                             leaveCheckOutEmpty = false
                         } else {
+                            checkOutHour = TextFieldValue("17")
+                            checkOutMin = TextFieldValue("00")
                             leaveCheckOutEmpty = true
                         }
                     }
@@ -392,10 +407,10 @@ fun HistoryScreen(
                     } else {
                         selectedDayType = if (day.isSunday) "SUNDAY" else "NORMAL"
                     }
-                    checkInHour = "08"
-                    checkInMin = "00"
-                    checkOutHour = "17"
-                    checkOutMin = "00"
+                    checkInHour = TextFieldValue("08")
+                    checkInMin = TextFieldValue("00")
+                    checkOutHour = TextFieldValue("17")
+                    checkOutMin = TextFieldValue("00")
                     leaveCheckOutEmpty = false
                 }
             }
@@ -418,6 +433,45 @@ fun HistoryScreen(
                             .padding(vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        fun createTimeField(
+                            value: TextFieldValue,
+                            onValueChange: (TextFieldValue) -> Unit,
+                            focusRequester: FocusRequester,
+                            nextFocusRequester: FocusRequester? = null,
+                            modifier: Modifier = Modifier,
+                            enabled: Boolean = true
+                        ): @Composable () -> Unit = {
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isFocused by interactionSource.collectIsFocusedAsState()
+                            
+                            LaunchedEffect(isFocused) {
+                                if (isFocused) {
+                                    delay(50)
+                                    onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+                                }
+                            }
+                            
+                            OutlinedTextField(
+                                value = value,
+                                onValueChange = { 
+                                    if (it.text.length <= 2) {
+                                        val textChanged = it.text != value.text
+                                        onValueChange(it)
+                                        if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
+                                            nextFocusRequester.requestFocus()
+                                        }
+                                    }
+                                },
+                                modifier = modifier.focusRequester(focusRequester),
+                                interactionSource = interactionSource,
+                                enabled = enabled,
+                                shape = RoundedCornerShape(8.dp),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done)
+                            )
+                        }
+
                         // Choice of Day Type
                         Text("Phân loại ngày này:", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         
@@ -489,25 +543,45 @@ fun HistoryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text("Giờ Vào Ca:", color = LightGray, modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
-                                OutlinedTextField(
+
+                                createTimeField(
                                     value = checkInHour,
-                                    onValueChange = { if (it.length <= 2) checkInHour = it },
-                                    modifier = Modifier.width(62.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                                )
+                                    onValueChange = { 
+                                        val h = it.text.toIntOrNull() ?: 0
+                                        if (h > 24) {
+                                            checkInHour = it.copy(text = "07", selection = TextRange(2))
+                                            checkInMin = checkInMin.copy(text = "30", selection = TextRange(2))
+                                        } else if (h == 24 && (checkInMin.text.toIntOrNull() ?: 0) > 0) {
+                                            checkInHour = it.copy(text = "07", selection = TextRange(2))
+                                            checkInMin = checkInMin.copy(text = "30", selection = TextRange(2))
+                                        } else {
+                                            checkInHour = it
+                                        }
+                                    },
+                                    focusRequester = focusRequesters[0],
+                                    nextFocusRequester = focusRequesters[1],
+                                    modifier = Modifier.width(62.dp)
+                                )()
+
                                 Text(":", color = White, fontWeight = FontWeight.Black)
-                                OutlinedTextField(
+
+                                createTimeField(
                                     value = checkInMin,
-                                    onValueChange = { if (it.length <= 2) checkInMin = it },
-                                    modifier = Modifier.width(62.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                                )
+                                    onValueChange = { 
+                                        val m = it.text.toIntOrNull() ?: 0
+                                        if (m > 59) {
+                                            checkInMin = it.copy(text = "59", selection = TextRange(2))
+                                        } else if (m > 0 && (checkInHour.text.toIntOrNull() ?: 0) == 24) {
+                                            checkInHour = checkInHour.copy(text = "07", selection = TextRange(2))
+                                            checkInMin = it.copy(text = "30", selection = TextRange(2))
+                                        } else {
+                                            checkInMin = it
+                                        }
+                                    },
+                                    focusRequester = focusRequesters[1],
+                                    nextFocusRequester = focusRequesters[2],
+                                    modifier = Modifier.width(62.dp)
+                                )()
                             }
 
                             // CheckOut Selection
@@ -516,27 +590,47 @@ fun HistoryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text("Giờ Ra Ca:", color = if (leaveCheckOutEmpty) MediumGray else LightGray, modifier = Modifier.width(90.dp), fontWeight = FontWeight.Bold)
-                                OutlinedTextField(
+
+                                createTimeField(
                                     value = checkOutHour,
-                                    onValueChange = { if (it.length <= 2) checkOutHour = it },
+                                    onValueChange = { 
+                                        val h = it.text.toIntOrNull() ?: 0
+                                        if (h > 24) {
+                                            checkOutHour = it.copy(text = "07", selection = TextRange(2))
+                                            checkOutMin = checkOutMin.copy(text = "30", selection = TextRange(2))
+                                        } else if (h == 24 && (checkOutMin.text.toIntOrNull() ?: 0) > 0) {
+                                            checkOutHour = it.copy(text = "07", selection = TextRange(2))
+                                            checkOutMin = checkOutMin.copy(text = "30", selection = TextRange(2))
+                                        } else {
+                                            checkOutHour = it
+                                        }
+                                    },
+                                    focusRequester = focusRequesters[2],
+                                    nextFocusRequester = focusRequesters[3],
                                     enabled = !leaveCheckOutEmpty,
-                                    modifier = Modifier.width(62.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                                )
+                                    modifier = Modifier.width(62.dp)
+                                )()
+
                                 Text(":", color = if (leaveCheckOutEmpty) MediumGray else White, fontWeight = FontWeight.Black)
-                                OutlinedTextField(
+
+                                createTimeField(
                                     value = checkOutMin,
-                                    onValueChange = { if (it.length <= 2) checkOutMin = it },
+                                    onValueChange = { 
+                                        val m = it.text.toIntOrNull() ?: 0
+                                        if (m > 59) {
+                                            checkOutMin = it.copy(text = "59", selection = TextRange(2))
+                                        } else if (m > 0 && (checkOutHour.text.toIntOrNull() ?: 0) == 24) {
+                                            checkOutHour = checkOutHour.copy(text = "07", selection = TextRange(2))
+                                            checkOutMin = it.copy(text = "30", selection = TextRange(2))
+                                        } else {
+                                            checkOutMin = it
+                                        }
+                                    },
+                                    focusRequester = focusRequesters[3],
+                                    nextFocusRequester = null,
                                     enabled = !leaveCheckOutEmpty,
-                                    modifier = Modifier.width(62.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontSize = 15.sp),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                                )
+                                    modifier = Modifier.width(62.dp)
+                                )()
                             }
 
                             // Special switch: "Quên chấm công khi đang trong ca"
@@ -652,10 +746,10 @@ fun HistoryScreen(
                                             noteStr = noteString.ifEmpty { "Nghỉ phép trước" }
                                         )
                                     } else {
-                                        val inHour = checkInHour.toIntOrNull() ?: 8
-                                        val inMin = checkInMin.toIntOrNull() ?: 0
-                                        val outHour = if (leaveCheckOutEmpty) null else (checkOutHour.toIntOrNull() ?: 17)
-                                        val outMin = if (leaveCheckOutEmpty) null else (checkOutMin.toIntOrNull() ?: 0)
+                                        val inHour = checkInHour.text.toIntOrNull() ?: 8
+                                        val inMin = checkInMin.text.toIntOrNull() ?: 0
+                                        val outHour = if (leaveCheckOutEmpty) null else (checkOutHour.text.toIntOrNull() ?: 17)
+                                        val outMin = if (leaveCheckOutEmpty) null else (checkOutMin.text.toIntOrNull() ?: 0)
 
                                         viewModel.addSingleEntry(
                                             dateStr = day.dateString,
@@ -763,26 +857,16 @@ fun HistoryScreen(
 
         // ==================== BULK SHIFT SELECT PRESET DIALOG (CHẾ ĐỘ 2) ====================
         if (showBulkDialog) {
-            var startHour by remember { mutableStateOf("08") }
-            var startMin by remember { mutableStateOf("00") }
-            var endHour by remember { mutableStateOf("17") }
-            var endMin by remember { mutableStateOf("00") }
+            var startHour by remember { mutableStateOf(TextFieldValue("08")) }
+            var startMin by remember { mutableStateOf(TextFieldValue("00")) }
+            var endHour by remember { mutableStateOf(TextFieldValue("17")) }
+            var endMin by remember { mutableStateOf(TextFieldValue("00")) }
+            
+            val bulkFocusRequesters = remember { List(4) { FocusRequester() } }
 
             var skipSunday by remember { mutableStateOf(false) }
             var skipHoliday by remember { mutableStateOf(false) }
             var autoRecognizeOtCoefficients by remember { mutableStateOf(true) }
-            var isNightShiftOverride by remember { mutableStateOf(false) }
-
-            val startHourInt = startHour.toIntOrNull() ?: 0
-            val startMinInt = startMin.toIntOrNull() ?: 0
-            val startTotalMinutes = startHourInt * 60 + startMinInt
-            val showNightShiftOption = startTotalMinutes in (18 * 60)..(19 * 60 + 30)
-
-            androidx.compose.runtime.LaunchedEffect(showNightShiftOption) {
-                if (!showNightShiftOption) {
-                    isNightShiftOverride = false
-                }
-            }
 
             androidx.compose.runtime.LaunchedEffect(skipSunday, skipHoliday) {
                 if (skipSunday || skipHoliday) {
@@ -801,6 +885,42 @@ fun HistoryScreen(
                             .padding(vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        fun createBulkTimeField(
+                            value: TextFieldValue,
+                            onValueChange: (TextFieldValue) -> Unit,
+                            focusRequester: FocusRequester,
+                            nextFocusRequester: FocusRequester? = null,
+                            modifier: Modifier = Modifier
+                        ): @Composable () -> Unit = {
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isFocused by interactionSource.collectIsFocusedAsState()
+                            
+                            LaunchedEffect(isFocused) {
+                                if (isFocused) {
+                                    delay(50)
+                                    onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+                                }
+                            }
+                            
+                            OutlinedTextField(
+                                value = value,
+                                onValueChange = { 
+                                    if (it.text.length <= 2) {
+                                        val textChanged = it.text != value.text
+                                        onValueChange(it)
+                                        if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
+                                            nextFocusRequester.requestFocus()
+                                        }
+                                    }
+                                },
+                                modifier = modifier.focusRequester(focusRequester),
+                                interactionSource = interactionSource,
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done)
+                            )
+                        }
+
                         Text(
                             text = "Cấu hình giờ chung cho ${selectedDates.size} ngày đã chọn:",
                             color = NeonBlue,
@@ -814,23 +934,45 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text("Giờ Vào:", color = LightGray, modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
+
+                            createBulkTimeField(
                                 value = startHour,
-                                onValueChange = { if (it.length <= 2) startHour = it },
-                                modifier = Modifier.width(62.dp),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                            )
+                                onValueChange = { 
+                                    val h = it.text.toIntOrNull() ?: 0
+                                    if (h > 24) {
+                                        startHour = it.copy(text = "07", selection = TextRange(2))
+                                        startMin = startMin.copy(text = "30", selection = TextRange(2))
+                                    } else if (h == 24 && (startMin.text.toIntOrNull() ?: 0) > 0) {
+                                        startHour = it.copy(text = "07", selection = TextRange(2))
+                                        startMin = startMin.copy(text = "30", selection = TextRange(2))
+                                    } else {
+                                        startHour = it
+                                    }
+                                },
+                                focusRequester = bulkFocusRequesters[0],
+                                nextFocusRequester = bulkFocusRequesters[1],
+                                modifier = Modifier.width(62.dp)
+                            )()
+
                             Text(":", color = White)
-                            OutlinedTextField(
+
+                            createBulkTimeField(
                                 value = startMin,
-                                onValueChange = { if (it.length <= 2) startMin = it },
-                                modifier = Modifier.width(62.dp),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                            )
+                                onValueChange = { 
+                                    val m = it.text.toIntOrNull() ?: 0
+                                    if (m > 59) {
+                                        startMin = it.copy(text = "59", selection = TextRange(2))
+                                    } else if (m > 0 && (startHour.text.toIntOrNull() ?: 0) == 24) {
+                                        startHour = startHour.copy(text = "07", selection = TextRange(2))
+                                        startMin = it.copy(text = "30", selection = TextRange(2))
+                                    } else {
+                                        startMin = it
+                                    }
+                                },
+                                focusRequester = bulkFocusRequesters[1],
+                                nextFocusRequester = bulkFocusRequesters[2],
+                                modifier = Modifier.width(62.dp)
+                            )()
                         }
 
                         // Hours Ra
@@ -839,47 +981,48 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text("Giờ Ra:", color = LightGray, modifier = Modifier.width(80.dp), fontWeight = FontWeight.Bold)
-                            OutlinedTextField(
+
+                            createBulkTimeField(
                                 value = endHour,
-                                onValueChange = { if (it.length <= 2) endHour = it },
-                                modifier = Modifier.width(62.dp),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                            )
+                                onValueChange = { 
+                                    val h = it.text.toIntOrNull() ?: 0
+                                    if (h > 24) {
+                                        endHour = it.copy(text = "07", selection = TextRange(2))
+                                        endMin = endMin.copy(text = "30", selection = TextRange(2))
+                                    } else if (h == 24 && (endMin.text.toIntOrNull() ?: 0) > 0) {
+                                        endHour = it.copy(text = "07", selection = TextRange(2))
+                                        endMin = endMin.copy(text = "30", selection = TextRange(2))
+                                    } else {
+                                        endHour = it
+                                    }
+                                },
+                                focusRequester = bulkFocusRequesters[2],
+                                nextFocusRequester = bulkFocusRequesters[3],
+                                modifier = Modifier.width(62.dp)
+                            )()
+
                             Text(":", color = White)
-                            OutlinedTextField(
+
+                            createBulkTimeField(
                                 value = endMin,
-                                onValueChange = { if (it.length <= 2) endMin = it },
-                                modifier = Modifier.width(62.dp),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-                            )
+                                onValueChange = { 
+                                    val m = it.text.toIntOrNull() ?: 0
+                                    if (m > 59) {
+                                        endMin = it.copy(text = "59", selection = TextRange(2))
+                                    } else if (m > 0 && (endHour.text.toIntOrNull() ?: 0) == 24) {
+                                        endHour = endHour.copy(text = "07", selection = TextRange(2))
+                                        endMin = it.copy(text = "30", selection = TextRange(2))
+                                    } else {
+                                        endMin = it
+                                    }
+                                },
+                                focusRequester = bulkFocusRequesters[3],
+                                nextFocusRequester = null,
+                                modifier = Modifier.width(62.dp)
+                            )()
                         }
 
                         Divider(color = Color(0xFF2C2C2C))
-
-                        // Preference Switches
-                        if (showNightShiftOption) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clickable { isNightShiftOverride = !isNightShiftOverride }
-                                    .padding(vertical = 4.dp)
-                            ) {
-                                Checkbox(
-                                    checked = isNightShiftOverride,
-                                    onCheckedChange = { isNightShiftOverride = it },
-                                    colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text("Chấm công làm Ca Đêm", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                    Text("Đánh dấu tất cả ngày đã chọn là ca đêm (+100k phụ cấp/ca)", color = MediumGray, fontSize = 10.sp)
-                                }
-                            }
-                        }
 
                         // Checkbox A: Bỏ qua (OT 2.0)
                         Row(
@@ -962,22 +1105,33 @@ fun HistoryScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Button(
                             onClick = {
-                                val inH = startHour.toIntOrNull() ?: 8
-                                val inM = startMin.toIntOrNull() ?: 0
-                                val outH = endHour.toIntOrNull() ?: 17
-                                val outM = endMin.toIntOrNull() ?: 0
+                                val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                                val hasFuture = selectedDates.any { it > todayStr }
+                                if (hasFuture) {
+                                    Toast.makeText(context, "Không được chấm công cho ngày tương lai", Toast.LENGTH_LONG).show()
+                                }
 
-                                viewModel.addBulkEntries(
-                                    selectedDates = selectedDates.toList(),
-                                    checkInHour = inH,
-                                    checkInMin = inM,
-                                    checkOutHour = outH,
-                                    checkOutMin = outM,
-                                    skipSunday = skipSunday,
-                                    skipHoliday = skipHoliday,
-                                    autoRecognizeOt = autoRecognizeOtCoefficients,
-                                    isNightShiftOverride = isNightShiftOverride
-                                )
+                                val validDates = selectedDates.filter { it <= todayStr }
+                                if (validDates.isNotEmpty()) {
+                                    val inH = startHour.text.toIntOrNull() ?: 8
+                                    val inM = startMin.text.toIntOrNull() ?: 0
+                                    val outH = endHour.text.toIntOrNull() ?: 17
+                                    val outM = endMin.text.toIntOrNull() ?: 0
+                                    val startTotalMinutes = inH * 60 + inM
+                                    val isNightShiftOverride = startTotalMinutes in (18 * 60)..(19 * 60 + 30)
+
+                                    viewModel.addBulkEntries(
+                                        selectedDates = validDates,
+                                        checkInHour = inH,
+                                        checkInMin = inM,
+                                        checkOutHour = outH,
+                                        checkOutMin = outM,
+                                        skipSunday = skipSunday,
+                                        skipHoliday = skipHoliday,
+                                        autoRecognizeOt = autoRecognizeOtCoefficients,
+                                        isNightShiftOverride = isNightShiftOverride
+                                    )
+                                }
 
                                 showBulkDialog = false
                                 isMultiSelectMode = false
@@ -1004,11 +1158,26 @@ fun DayGridCell(
     config: UserConfig?,
     onClick: () -> Unit
 ) {
+    val isNightShift = remember(entry) {
+        if (entry != null && entry.checkInTime != null) {
+            val inCal = java.util.Calendar.getInstance().apply { timeInMillis = entry.checkInTime }
+            val inHour = inCal.get(java.util.Calendar.HOUR_OF_DAY)
+            val inMin = inCal.get(java.util.Calendar.MINUTE)
+            val inTotalMin = inHour * 60 + inMin
+            (inTotalMin in (18 * 60)..(19 * 60 + 30)) || 
+            inHour >= 22 || inHour <= 6 || 
+            entry.dayType == "NIGHT"
+        } else {
+            entry?.dayType == "NIGHT"
+        }
+    }
+
     val borderColor = when {
         isSelected -> NeonBlue
         entry?.dayType == "PAID_LEAVE" -> NeonBlue
         entry?.dayType == "UNPAID_LEAVE" -> AccentOrange
         entry?.isWorking == true -> AccentOrange
+        isNightShift -> NightPurple
         entry != null -> AccentGreen
         else -> Color.Transparent
     }
@@ -1018,6 +1187,7 @@ fun DayGridCell(
         entry?.dayType == "PAID_LEAVE" -> NeonBlue.copy(alpha = 0.15f)
         entry?.dayType == "UNPAID_LEAVE" -> AccentOrange.copy(alpha = 0.12f)
         entry?.isWorking == true -> AccentOrange.copy(alpha = 0.15f)
+        isNightShift -> NightPurple.copy(alpha = 0.2f)
         entry != null -> AccentGreen.copy(alpha = 0.12f)
         day.isSunday -> AccentRed.copy(alpha = 0.08f)
         else -> DarkContainer
@@ -1067,7 +1237,7 @@ fun DayGridCell(
                         if (entry.isWorking) {
                             Text(
                                 text = "Vào ca",
-                                color = AccentOrange,
+                                color = if (isNightShift) NightPurple else AccentOrange,
                                 fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1084,10 +1254,11 @@ fun DayGridCell(
                                     workedHrs
                                 }
                             }
+                            
                             val df = DecimalFormat("#.#")
                             Text(
-                                text = "${df.format(roundedHrs)}h",
-                                color = AccentGreen,
+                                text = "${df.format(roundedHrs)}h ${if (isNightShift) "🌙" else "☀️"}",
+                                color = if (isNightShift) NightPurple else AccentGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )

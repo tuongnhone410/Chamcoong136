@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.*
+import com.example.ui.screens.AdminScreen // Ensure it is imported if not covered by *
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NeonBlue
@@ -50,7 +52,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge() // Mandatory Edge-to-Edge immersive windowing support
+        enableEdgeToEdge()
         
         setContent {
             MyApplicationTheme {
@@ -460,6 +462,35 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                     ),
                     modifier = Modifier.testTag("nav_settings_tab")
                 )
+
+                // Item 5: Quan tri (Only for admin)
+                val userConfig by viewModel.userConfig.collectAsStateWithLifecycle()
+                val session by viewModel.currentUserSession.collectAsStateWithLifecycle()
+                val isAdmin = userConfig?.isAdmin == true || session?.email?.lowercase() == "khoatubexxx@gmail.com"
+
+                if (isAdmin) {
+                    NavigationBarItem(
+                        selected = currentTab == "admin",
+                        onClick = {
+                            currentTab = "admin"
+                            tabNavController.navigate("admin") {
+                                popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Quản trị", modifier = Modifier.size(22.dp)) },
+                        label = { Text("Quản trị", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = White,
+                            selectedTextColor = NeonBlue,
+                            indicatorColor = NeonBlue,
+                            unselectedIconColor = Color(0xFF828282),
+                            unselectedTextColor = Color(0xFF828282)
+                        ),
+                        modifier = Modifier.testTag("nav_admin_tab")
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -479,6 +510,16 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
             }
             composable("settings") {
                 SettingsScreen(viewModel = viewModel)
+            }
+            composable("admin") {
+                AdminScreen(onBack = {
+                    currentTab = "home"
+                    tabNavController.navigate("home") {
+                        popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                })
             }
         }
     }

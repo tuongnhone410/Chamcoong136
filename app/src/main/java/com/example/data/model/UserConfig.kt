@@ -9,7 +9,7 @@ data class UserConfig(
     val luongCoBan: Double = 0.0, // Base Salary (LCB) in VND
     val luongDongBaoHiem: Double = 0.0, // Insurance Salary (LBH) in VND
     val tiLeDongBaoHiem: Double = 10.5, // Social insurance rate (%)
-    val ngayChotLuong: Int = 25, // Salary cutoff day of month
+    val ngayChotLuong: Int = 1, // Salary cutoff day of month
     val doanPhiCongDoan: Double = 0.0, // Union fee in VND
     
     // OT multiplication coefficients
@@ -37,6 +37,7 @@ data class UserConfig(
     val pcThamNien: Double = 0.0, // Thâm niên
     val pcKhac1: Double = 0.0,
     val pcKhac: Double = 0.0,
+    val allowanceCalcTypes: String = "", // Stores calc type overrides as "field1:type1;field2:type2..."
     val soGioNghiGiaiLao: Double = 1.5, // Break hours (unpaid hours) per shift
     val tinhKhauTruNghi: Boolean = false, // Enable break time deduction from hours worked
     
@@ -44,6 +45,7 @@ data class UserConfig(
     val hoVaTen: String = "User Demo",
     val maNhanVien: String = "demo_9bcad9a7",
     val emailDangKy: String = "",
+    val ngayVaoLam: String = "", // Ngày vào làm/bắt đầu tính công (yyyy-MM-dd)
     
     // Retrocompatibility keys (to prevent DB compilation errors)
     val tienComMoiNgay: Double = 50000.0,
@@ -55,5 +57,39 @@ data class UserConfig(
     val thuong: Double = 800000.0,
     val heSoOtDem: Double = 1.75,
     val caDemStart: String = "22:00",
-    val caDemEnd: String = "06:00"
-)
+    val caDemEnd: String = "06:00",
+    val isAdmin: Boolean = false
+) {
+    fun getCalcTypeFor(field: String): String {
+        if (allowanceCalcTypes.isBlank()) {
+            return getDefaultCalcType(field)
+        }
+        val map = allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }
+        return map[field] ?: getDefaultCalcType(field)
+    }
+
+    fun copyWithCalcType(field: String, calcType: String): UserConfig {
+        val map = allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }.toMutableMap()
+        map[field] = calcType
+        val newStr = map.entries.joinToString(";") { "${it.key}:${it.value}" }
+        return this.copy(allowanceCalcTypes = newStr)
+    }
+
+    companion object {
+        fun getDefaultCalcType(field: String): String {
+            return when (field) {
+                "pcComCa" -> "PER_WORK_DAY"
+                "pcComOt" -> "OT_MEAL_GE_2H"
+                "pcKhac" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
+                "pcThamNien" -> "MONTHLY_FLAT"
+                else -> "MONTHLY_PRO_RATED"
+            }
+        }
+    }
+}

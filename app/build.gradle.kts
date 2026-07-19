@@ -15,8 +15,8 @@ android {
     applicationId = "com.aistudio.timesnappro.vklypa"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.4"
+    versionCode = 100
+    versionName = "2.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -83,6 +83,7 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.androidx.compose.ui.tooling)
   implementation(libs.androidx.core.ktx)
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
@@ -120,24 +121,9 @@ dependencies {
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
-  debugImplementation(libs.androidx.compose.ui.tooling)
+  // debugImplementation(libs.androidx.compose.ui.tooling) // Already in main implementation
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
-}
-
-tasks.matching { it.name == "assembleDebug" }.all {
-    val apkFilePath = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk").get().asFile.absolutePath
-    val destFilePath = file("${rootDir}/Timesnap.apk").absolutePath
-    doLast {
-        val apkFile = File(apkFilePath)
-        val destFile = File(destFilePath)
-        if (apkFile.exists()) {
-            apkFile.copyTo(destFile, overwrite = true)
-            println("Successfully copied APK to root: ${destFile.absolutePath}")
-        } else {
-            println("APK file not found at: ${apkFile.absolutePath}")
-        }
-    }
 }
 
 

@@ -32,4 +32,7 @@ interface TimeEntryDao {
 
     @Query("DELETE FROM time_entries WHERE userId = :userId AND date LIKE :monthPattern")
     suspend fun deleteEntriesInMonth(userId: String, monthPattern: String)
+
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND checkInTime IS NOT NULL AND checkOutTime IS NOT NULL ORDER BY date DESC LIMIT :limit")
+    suspend fun getLastCompletedEntries(userId: String, limit: Int): List<TimeEntry>
 }

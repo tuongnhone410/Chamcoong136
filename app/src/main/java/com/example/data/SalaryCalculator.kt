@@ -1,31 +1,522 @@
 package com.example.data
 
+import com.example.data.model.TimeEntry
+import com.example.data.model.UserConfig
+import com.example.viewmodel.SalarySummary
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+data class ShiftConfig(
+    val shiftId: String,
+    val shiftType: String, // "DAY", "DAY_REST", "NIGHT"
+    val startTime: String, // "HH:mm"
+    val endTime: String,   // "HH:mm"
+    val checkInWindowStart: String,
+    val checkInWindowEnd: String,
+    val checkOutWindowStart: String,
+    val checkOutWindowEnd: String,
+    val breakHours: Double,
+    val standardHours: Double = 8.0
+)
+
 object SalaryCalculator {
 
-    fun isHoliday(dateString: String): Boolean {
-        if (dateString.length >= 5) {
-            val dayMonth = dateString.substring(0, 5) // "dd/MM"
-            val holidays = setOf(
-                "01/01", // New Year
-                "30/04", // Reunification Day
-                "01/05", // Labor Day
-                "02/09", // National Day
-                "10/03"  // Hung Kings Commemoration (March 10 Lunar, represented statically)
+    val SHIFTS = mapOf(
+        "ca1" to ShiftConfig(
+            shiftId = "ca1",
+            shiftType = "DAY",
+            startTime = "07:30",
+            endTime = "19:30",
+            checkInWindowStart = "07:00",
+            checkInWindowEnd = "07:30",
+            checkOutWindowStart = "19:30",
+            checkOutWindowEnd = "20:00",
+            breakHours = 0.0,
+            standardHours = 8.0
+        ),
+        "ca2" to ShiftConfig(
+            shiftId = "ca2",
+            shiftType = "DAY_REST",
+            startTime = "07:30",
+            endTime = "20:00",
+            checkInWindowStart = "07:00",
+            checkInWindowEnd = "07:30",
+            checkOutWindowStart = "20:00",
+            checkOutWindowEnd = "20:30",
+            breakHours = 1.5,
+            standardHours = 8.0
+        ),
+        "ca_dem" to ShiftConfig(
+            shiftId = "ca_dem",
+            shiftType = "NIGHT",
+            startTime = "19:30",
+            endTime = "07:30",
+            checkInWindowStart = "19:00",
+            checkInWindowEnd = "19:30",
+            checkOutWindowStart = "07:30",
+            checkOutWindowEnd = "08:00",
+            breakHours = 0.0,
+            standardHours = 8.0
+        )
+    )
+
+    fun getShiftForEntry(entry: TimeEntry): ShiftConfig {
+        val shiftId = entry.shiftId
+        if (shiftId != null && SHIFTS.containsKey(shiftId)) {
+            return SHIFTS[shiftId]!!
+        }
+        // Fallback: detect based on old data or check-in time
+        val inTime = entry.checkInTime ?: return SHIFTS["ca1"]!!
+        val cal = Calendar.getInstance().apply { timeInMillis = inTime }
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        if (hour >= 18 || hour < 6) {
+            return SHIFTS["ca_dem"]!!
+        }
+        val outTime = entry.checkOutTime
+        if (outTime != null) {
+            val calOut = Calendar.getInstance().apply { timeInMillis = outTime }
+            val outHour = calOut.get(Calendar.HOUR_OF_DAY)
+            val outMin = calOut.get(Calendar.MINUTE)
+            val outTotalMin = outHour * 60 + outMin
+            if (outTotalMin >= 19 * 60 + 45) { // 19:45
+                return SHIFTS["ca2"]!!
+            }
+        }
+        return SHIFTS["ca1"]!!
+    }
+
+    private fun getMillisForTime(baseTimeMs: Long, timeStr: String, dayOffset: Int = 0): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = baseTimeMs }
+        val parts = timeStr.split(":")
+        val hour = parts[0].toInt()
+        val min = parts[1].toInt()
+        cal.set(Calendar.HOUR_OF_DAY, hour)
+        cal.set(Calendar.MINUTE, min)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        if (dayOffset != 0) {
+            cal.add(Calendar.DAY_OF_MONTH, dayOffset)
+        }
+        return cal.timeInMillis
+    }
+
+    /**
+     * Step 1 - 6: Process and calculate single record details.
+     * Returns a new TimeEntry with populated/re-calculated fields.
+     */
+    fun calculateSingleEntry(entry: TimeEntry): TimeEntry {
+        if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE" || entry.dayType == "UNPAID_LEAVE") {
+            val workD = when (entry.dayType) {
+                "PAID_LEAVE", "HOLIDAY_LEAVE" -> 1.0
+                else -> 0.0
+            }
+            return entry.copy(
+                workDay = workD,
+                otHours = 0.0,
+                lateMinutes = 0,
+                earlyLeaveMinutes = 0,
+                rawCheckIn = null,
+                rawCheckOut = null,
+                normalizedCheckIn = null,
+                normalizedCheckOut = null
             )
-            return holidays.contains(dayMonth)
+        }
+
+        val rawIn = entry.checkInTime ?: return entry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
+        val rawOut = entry.checkOutTime
+
+        // 1. Load Shift configuration
+        val shift = getShiftForEntry(entry)
+
+        // 2. Normalization
+        val stdInMs = getMillisForTime(rawIn, shift.startTime, 0)
+        val winInEndMs = getMillisForTime(rawIn, shift.checkInWindowEnd, 0)
+
+        // Check-In Normalization
+        val normInMs = if (rawIn <= winInEndMs) {
+            stdInMs
+        } else {
+            rawIn
+        }
+
+        val normOutMs = if (rawOut != null) {
+            val dayOffset = if (shift.shiftType == "NIGHT") 1 else 0
+            val stdOutMs = getMillisForTime(rawIn, shift.endTime, dayOffset)
+            val winOutStartMs = getMillisForTime(rawIn, shift.checkOutWindowStart, dayOffset)
+
+            if (rawOut >= winOutStartMs) {
+                stdOutMs
+            } else {
+                rawOut
+            }
+        } else {
+            null
+        }
+
+        // 3. Late Check-In Minutes
+        val lateMin = if (normInMs > stdInMs) {
+            ((normInMs - stdInMs) / 60000.0).toInt()
+        } else {
+            0
+        }
+
+        // 4. Early Leave Minutes
+        val earlyLeaveMin = if (normOutMs != null) {
+            val dayOffset = if (shift.shiftType == "NIGHT") 1 else 0
+            val stdOutMs = getMillisForTime(rawIn, shift.endTime, dayOffset)
+            if (normOutMs < stdOutMs) {
+                ((stdOutMs - normOutMs) / 60000.0).toInt()
+            } else {
+                0
+            }
+        } else {
+            0
+        }
+
+        // 5. Calculate WorkDay according to company rules
+        val maxLateOrEarly = Math.max(lateMin, earlyLeaveMin)
+        val workD = if (rawOut == null) {
+            // Checked in but still working
+            if (lateMin < 15) 1.0 else if (lateMin < 120) 0.5 else 0.0
+        } else {
+            // Completed check-out
+            when {
+                maxLateOrEarly < 15 -> 1.0
+                maxLateOrEarly < 120 -> 0.5
+                else -> 0.0
+            }
+        }
+
+        // 6. Calculate OT Hours according to shift
+        val otHrs = if (normOutMs != null) {
+            val workedHrs = (normOutMs - normInMs) / 3600000.0
+            val actualWorkedHrs = (workedHrs - shift.breakHours).coerceAtLeast(0.0)
+            (actualWorkedHrs - shift.standardHours).coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
+
+        return entry.copy(
+            shiftId = shift.shiftId,
+            shiftType = shift.shiftType,
+            rawCheckIn = rawIn,
+            rawCheckOut = rawOut,
+            normalizedCheckIn = normInMs,
+            normalizedCheckOut = normOutMs,
+            workDay = workD,
+            otHours = otHrs,
+            lateMinutes = lateMin,
+            earlyLeaveMinutes = earlyLeaveMin
+        )
+    }
+
+    fun calculateAllowanceValue(
+        fieldName: String,
+        allowanceValue: Double,
+        calcType: String,
+        totalWorkDays: Double,
+        comCaCount: Int,
+        comOtCount: Int,
+        nightShiftsCount: Int
+    ): Double {
+        return when (calcType) {
+            "MONTHLY_PRO_RATED" -> {
+                val allowanceDivisor = 26.0
+                Math.round((allowanceValue / allowanceDivisor) * totalWorkDays).toDouble().coerceAtMost(allowanceValue)
+            }
+            "MONTHLY_FLAT" -> {
+                allowanceValue
+            }
+            "PER_WORK_DAY" -> {
+                comCaCount * allowanceValue
+            }
+            "OT_MEAL_GE_2H" -> {
+                comOtCount * allowanceValue
+            }
+            "PER_NIGHT_SHIFT" -> {
+                nightShiftsCount * allowanceValue
+            }
+            else -> {
+                // Default to MONTHLY_PRO_RATED if unknown
+                val allowanceDivisor = 26.0
+                Math.round((allowanceValue / allowanceDivisor) * totalWorkDays).toDouble().coerceAtMost(allowanceValue)
+            }
+        }
+    }
+
+    /**
+     * Steps 7 & 8: Calculate Diligence and Monthly Salary Summary
+     */
+    fun calculateMonthlySalary(
+        entries: List<TimeEntry>,
+        config: UserConfig,
+        scheduledDays: Int,
+        earliestDate: String?,
+        selectedMonth: String,
+        todayStr: String,
+        isCurrentSelectedMonth: Boolean,
+        holidayDatesInMonth: Set<String>
+    ): SalarySummary {
+        val luongBasic = config.luongCoBan
+        val dailySalary = luongBasic / 26.0
+        val hourlySalary = dailySalary / 8.0
+
+        // Process all entries through steps 1-6
+        val processedEntries = entries.map { calculateSingleEntry(it) }
+
+        // Identify which holiday dates have been worked (have check-in logged)
+        val workedHolidayDates = processedEntries.filter { e ->
+            holidayDatesInMonth.contains(e.date) && e.rawCheckIn != null
+        }.map { it.date }.toSet()
+
+        // Unworked holidays automatically merit full 1-day standard salary as a Holiday Leave
+        val unworkedHolidaysCount = (holidayDatesInMonth - workedHolidayDates).size
+
+        // Aggregators
+        var totalWorkDays = unworkedHolidaysCount.toDouble()
+        var actualPresenceDaysCount = 0
+        var totalStandardHours = unworkedHolidaysCount * 8.0
+        var totalOtDayHours = 0.0
+        var totalOtNightHours = 0.0
+        var totalOtLeHours = 0.0
+        var totalSundayHours = 0.0
+
+        var otDayPay = 0.0
+        var otLePay = 0.0
+        var otNightPay = 0.0
+        var sundayPay = 0.0
+        var comOtDaysCount = 0
+        var nightShiftsCount = 0
+
+        for (e in processedEntries) {
+            // Do not calculate future days/leaves as they have not happened yet if they are unworked
+            if (isCurrentSelectedMonth && e.date > todayStr && e.rawCheckIn == null) {
+                continue
+            }
+
+            val isHolidayDateVal = holidayDatesInMonth.contains(e.date)
+            if (isHolidayDateVal && e.rawCheckIn == null) {
+                // Already counted automatically as unworked holiday, skip processing to avoid duplication
+                continue
+            }
+
+            if (e.dayType == "PAID_LEAVE" || e.dayType == "HOLIDAY_LEAVE") {
+                totalWorkDays += 1.0
+                totalStandardHours += 8.0
+                continue
+            }
+            if (e.dayType == "UNPAID_LEAVE") {
+                continue
+            }
+
+            if (e.rawCheckIn == null) continue
+
+            // Night shift count
+            if (e.shiftType == "NIGHT") {
+                nightShiftsCount++
+            }
+
+            val isSundayVal = e.dayType == "SUNDAY" || (isSunday(e.date) && e.shiftType == "NIGHT")
+
+            // If checked-in but currently working (no check-out yet)
+            if (e.rawCheckOut == null && e.isWorking) {
+                if (isSundayVal) {
+                    actualPresenceDaysCount++
+                    totalSundayHours += 8.0
+                    sundayPay += 8.0 * hourlySalary * config.heSoOtChuNhat
+                } else {
+                    totalWorkDays += e.workDay
+                    actualPresenceDaysCount++
+                    totalStandardHours += 8.0
+                }
+                continue
+            }
+
+            if (e.rawCheckOut == null) continue
+
+            // Standard Day Work Contribution
+            if (isSundayVal) {
+                actualPresenceDaysCount++
+                val workedHrs = (e.normalizedCheckOut!! - e.normalizedCheckIn!!) / 3600000.0
+                val actualHours = (workedHrs - (SHIFTS[e.shiftId]?.breakHours ?: 0.0)).coerceAtLeast(0.0)
+                totalSundayHours += actualHours
+                sundayPay += actualHours * hourlySalary * config.heSoOtChuNhat
+
+                // Com OT threshold is >= 10h real duration
+                val workedDurationHrs = (e.rawCheckOut!! - e.rawCheckIn!!) / 3600000.0
+                if (workedDurationHrs >= 10.0) {
+                    comOtDaysCount++
+                }
+            } else {
+                totalWorkDays += e.workDay
+                actualPresenceDaysCount++
+                
+                val workedHrs = (e.normalizedCheckOut!! - e.normalizedCheckIn!!) / 3600000.0
+                val actualHours = (workedHrs - (SHIFTS[e.shiftId]?.breakHours ?: 0.0)).coerceAtLeast(0.0)
+                val finalStandardHours = actualHours.coerceAtMost(8.0)
+                totalStandardHours += finalStandardHours
+
+                val workedDurationHrs = (e.rawCheckOut!! - e.rawCheckIn!!) / 3600000.0
+                if (workedDurationHrs >= 10.0) {
+                    comOtDaysCount++
+                }
+
+                val finalOtHours = e.otHours
+                if (finalOtHours > 0.0) {
+                    if (e.dayType == "HOLIDAY") {
+                        totalOtLeHours += finalOtHours
+                        otLePay += finalOtHours * (hourlySalary * config.heSoOtNgayLe)
+                    } else if (e.shiftType == "NIGHT") {
+                        totalOtNightHours += finalOtHours
+                        otNightPay += finalOtHours * (hourlySalary * config.heSoOtDem)
+                    } else {
+                        totalOtDayHours += finalOtHours
+                        otDayPay += finalOtHours * (hourlySalary * config.heSoOtNgayThuong)
+                    }
+                }
+            }
+        }
+
+        // Calculate counts for meal and OT allowances
+        var comCaCount = 0
+        var comOtCount = 0
+
+        for (e in processedEntries) {
+            if (isCurrentSelectedMonth && e.date > todayStr && e.rawCheckIn == null) {
+                continue
+            }
+            if (e.rawCheckIn == null) continue
+
+            if (e.workDay >= 1.0) {
+                comCaCount++
+            }
+            if (e.otHours >= 2.0) {
+                comOtCount++
+            }
+        }
+
+        // Dynamic Allowance Calculation Engine based on Calculation Types
+        val pcKyThuatPr = calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcTrachNhiemPr = calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcChucVuPr = calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcHieuSuatPr = calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcSanPhamPr = calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcComCaPr = calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcComOtPr = calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcNhaOPr = calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcDocHaiPr = calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcDtDoanhThuPr = calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcXangXePr = calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcThamNienPr = calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcKhac1Pr = calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        
+        // pcKhac is Phụ cấp ca đêm (mỗi ca)
+        val pcKhacPr = calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcCaDemPr = pcKhacPr
+
+        val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
+                pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
+                pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
+                pcKhac1Pr + pcCaDemPr
+
+        // 7. Calculate Chuyên cần (Diligence)
+        val hasUnpaidOrAbsent = processedEntries.any { 
+            it.dayType == "UNPAID_LEAVE" && (earliestDate == null || it.date >= earliestDate)
+        } || (scheduledDays > 0 && totalWorkDays < scheduledDays)
+
+        val chuyenCanValue = if (hasUnpaidOrAbsent) {
+            0.0
+        } else {
+            config.tienChuyenCanGoc
+        }
+
+        // Deductions
+        val tieuBaoHiem = Math.round(config.luongDongBaoHiem * (config.tiLeDongBaoHiem / 100.0)).toDouble()
+        val doanPhi = config.doanPhiCongDoan
+        val tienKhauTruNghi = 0.0
+
+        // 8. Calculate Monthly Salary
+        val baseBasicSalary = Math.round(totalWorkDays * dailySalary).toDouble()
+
+        val roundedOtDay = Math.round(otDayPay).toDouble()
+        val roundedOtLePay = Math.round(otLePay).toDouble()
+        val roundedOtNight = Math.round(otNightPay).toDouble()
+        val roundedSundayPay = Math.round(sundayPay).toDouble()
+
+        val grossAdditions = baseBasicSalary + roundedOtDay + roundedOtLePay + roundedOtNight + roundedSundayPay + phuCapTong + chuyenCanValue
+        val totalDeductions = tieuBaoHiem + doanPhi + tienKhauTruNghi
+        val luongThucNhan = Math.round(grossAdditions - totalDeductions).coerceAtLeast(0L).toDouble()
+
+        return SalarySummary(
+            workingDays = totalWorkDays.toInt(),
+            standardHours = totalStandardHours,
+            otDayHours = totalOtDayHours,
+            otNightHours = totalOtNightHours,
+            tienOtNgay = roundedOtDay,
+            tienOtDem = roundedOtNight,
+            tongTienCom = pcComCaPr + pcComOtPr,
+            phuCap = phuCapTong,
+            phuCapXangXe = pcXangXePr,
+            phuCapDienThoai = pcDtDoanhThuPr,
+            phuCapNhaO = pcNhaOPr,
+            phuCapChuyenCan = chuyenCanValue,
+            thuong = 0.0,
+            tienBh = tieuBaoHiem,
+            doanPhi = doanPhi,
+            tienKhauTruNghi = tienKhauTruNghi,
+            luongThucNhan = luongThucNhan,
+            baseBasicSalary = baseBasicSalary,
+            expectedWorkDays = scheduledDays,
+            standardWorkDays = 26,
+            isCurrentMonth = isCurrentSelectedMonth,
+            
+            pcKyThuatVal = pcKyThuatPr,
+            pcTrachNhiemVal = pcTrachNhiemPr,
+            pcChucVuVal = pcChucVuPr,
+            pcHieuSuatVal = pcHieuSuatPr,
+            pcSanPhamVal = pcSanPhamPr,
+            pcComCaVal = pcComCaPr,
+            pcComOtVal = pcComOtPr,
+            pcNhaOVal = pcNhaOPr,
+            pcDocHaiVal = pcDocHaiPr,
+            pcDtDoanhThuVal = pcDtDoanhThuPr,
+            pcXangXeVal = pcXangXePr,
+            pcThamNienVal = pcThamNienPr,
+            pcKhac1Val = pcKhac1Pr,
+            pcKhacVal = pcKhacPr,
+            pcCaDemVal = pcCaDemPr,
+            caDemCount = nightShiftsCount,
+            
+            tienChuNhat = roundedSundayPay,
+            otLeHours = totalOtLeHours,
+            tienOtLe = roundedOtLePay,
+            chuNhatHours = totalSundayHours
+        )
+    }
+
+    // Static compatibility methods for holiday/sunday detection
+    fun isHoliday(dateString: String): Boolean {
+        val parts = dateString.split("-", "/")
+        if (parts.size >= 2) {
+            val day = parts.last().padStart(2, '0')
+            val month = parts[parts.size - 2].padStart(2, '0')
+            val md = "$day/$month"
+            val holidays = setOf("01/01", "30/04", "01/05", "02/09")
+            return holidays.contains(md)
         }
         return false
     }
 
     fun isSunday(dateString: String): Boolean {
         return try {
-            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-            val date = sdf.parse(dateString) ?: return false
+            val parser = if (dateString.contains("-")) {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            } else {
+                SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            }
+            val date = parser.parse(dateString) ?: return false
             val cal = Calendar.getInstance()
             cal.time = date
             cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
@@ -38,11 +529,11 @@ object SalaryCalculator {
         val outTime = clockOutTime ?: System.currentTimeMillis()
         val calIn = Calendar.getInstance().apply { timeInMillis = clockInTime }
         val startHour = calIn.get(Calendar.HOUR_OF_DAY)
-        if (startHour >= 21 || startHour <= 5) return true
+        if (startHour >= 18 || startHour <= 5) return true
 
         val calOut = Calendar.getInstance().apply { timeInMillis = outTime }
         val endHour = calOut.get(Calendar.HOUR_OF_DAY)
-        if (endHour >= 22 || endHour <= 6) return true
+        if (endHour >= 22 || endHour <= 7) return true
 
         return false
     }
@@ -55,98 +546,10 @@ object SalaryCalculator {
         }
     }
 
-    fun calculateRecordDetails(
-        record: AttendanceRecord,
-        hourlyRate: Double,
-        forceEnableCoefficients: Boolean = true,
-        heSoNormal: Double = 1.5,
-        heSoSunday: Double = 2.0,
-        heSoHoliday: Double = 3.0
-    ): RecordCalculation {
-        if (record.status == "PaidLeave" || record.status == "PaidHolidayLeave") {
-            val regEarnings = 8.0 * hourlyRate
-            return RecordCalculation(
-                totalHours = 8.0,
-                regularHours = 8.0,
-                otHours = 0.0,
-                regularCoefficient = 1.0,
-                otCoefficient = 1.0,
-                regularEarnings = regEarnings,
-                otEarnings = 0.0,
-                totalEarnings = regEarnings,
-                isSunday = false,
-                isHoliday = record.status == "PaidHolidayLeave",
-                isNightShift = false
-            )
-        }
-
-        val clockOut = record.clockOutTime ?: System.currentTimeMillis()
-        val durationMillis = clockOut - record.clockInTime
-        val totalHours = durationMillis.toDouble() / (1000.0 * 60.0 * 60.0)
-
-        val regularHours: Double
-        val otHours: Double
-
-        if (totalHours <= 8.0) {
-            regularHours = totalHours
-            otHours = 0.0
-        } else if (totalHours <= 8.5) {
-            regularHours = 8.0
-            otHours = 0.0
-        } else {
-            regularHours = 8.0
-            otHours = totalHours - 8.0
-        }
-
-        val isSun = isSunday(record.dateString)
-        val isHol = isHoliday(record.dateString)
-        val isNight = isNightShift(record.clockInTime, record.clockOutTime)
-
-        val regCoeff: Double
-        val otCoeff: Double
-
-        if (forceEnableCoefficients) {
-            when {
-                isHol -> {
-                    regCoeff = heSoHoliday
-                    otCoeff = heSoHoliday
-                }
-                isSun -> {
-                    regCoeff = heSoSunday
-                    otCoeff = heSoSunday
-                }
-                else -> {
-                    regCoeff = 1.0
-                    otCoeff = if (isNight) 1.75 else heSoNormal
-                }
-            }
-        } else {
-            regCoeff = 1.0
-            otCoeff = if (isNight) 1.75 else heSoNormal
-        }
-
-        val regEarnings = regularHours * hourlyRate * regCoeff
-        val otEarnings = otHours * hourlyRate * otCoeff
-        val totalEarnings = regEarnings + otEarnings
-
-        return RecordCalculation(
-            totalHours = totalHours,
-            regularHours = regularHours,
-            otHours = otHours,
-            regularCoefficient = regCoeff,
-            otCoefficient = otCoeff,
-            regularEarnings = regEarnings,
-            otEarnings = otEarnings,
-            totalEarnings = totalEarnings,
-            isSunday = isSun,
-            isHoliday = isHol,
-            isNightShift = isNight
-        )
+    fun getRoundedTime(timeMillis: Long, isClockIn: Boolean): Long {
+        return timeMillis
     }
 
-    /**
-     * Calculate progressive Personal Income Tax (PIT) for Vietnam.
-     */
     fun calculatePIT(taxableIncome: Double): Double {
         if (taxableIncome <= 0) return 0.0
         return when {
@@ -160,17 +563,3 @@ object SalaryCalculator {
         }
     }
 }
-
-data class RecordCalculation(
-    val totalHours: Double,
-    val regularHours: Double,
-    val otHours: Double,
-    val regularCoefficient: Double,
-    val otCoefficient: Double,
-    val regularEarnings: Double,
-    val otEarnings: Double,
-    val totalEarnings: Double,
-    val isSunday: Boolean,
-    val isHoliday: Boolean,
-    val isNightShift: Boolean
-)

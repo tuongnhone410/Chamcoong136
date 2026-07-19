@@ -12,11 +12,13 @@ import com.example.data.repository.TimeRepository
 import com.example.data.repository.CloudSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TimeSnapViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
@@ -36,7 +38,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     // Date formatter
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     private val monthFormatter = SimpleDateFormat("yyyy-MM", Locale.getDefault())
-
+    
     // UI Selected month (For Calendar View: "yyyy-MM")
     private val _currentSelectedMonth = MutableStateFlow(monthFormatter.format(Date()))
     val currentSelectedMonth: StateFlow<String> = _currentSelectedMonth
@@ -49,6 +51,19 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         .flatMapLatest { session ->
             if (session != null) {
                 repository.getConfig(session.uid)
+            } else {
+                flowOf(null)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Reactive flow of user's earliest recorded entry date (used for auto-detecting new user start date)
+    val userEarliestEntryDate: StateFlow<String?> = currentUserSession
+        .flatMapLatest { session ->
+            if (session != null) {
+                repository.getEntries(session.uid).map { entries ->
+                    entries.minByOrNull { it.date }?.date
+                }
             } else {
                 flowOf(null)
             }
@@ -127,16 +142,29 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     _cloudSyncStatus.value = "Đang kiểm tra..."
                     checkAndFetchSalaryConfigFromFirestore(session.uid)
                     try {
-                        val currentEntries = repository.getEntries(session.uid).first()
+                        // 1. Migrate local guest records if any
+                        migrateGuestDataToUser(session.uid)
+                        
+                        // 2. Normalize any existing local TimeEntry date formats (from dd/MM/yyyy to yyyy-MM-dd)
+                        normalizeTimeEntryDates(session.uid)
+                        
+                        // 3. If local entries is empty, try to pull from new cloud backup (overtime_sync/backup)
+                        var currentEntries = repository.getEntries(session.uid).first()
                         if (currentEntries.isEmpty()) {
-                            restoreDataFromServer(session.uid)
-                        } else {
-                            // If user is already active locally, keep the cloud DB updated with any offline changes
-                            val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
-                            cloudSyncManager.uploadToServer(session.uid, currentEntries, config)
-                            hasRestoredForSession[session.uid] = true
-                            _cloudSyncStatus.value = "Đã đồng bộ"
+                            restoreDataFromServerSuspended(session.uid)
+                            currentEntries = repository.getEntries(session.uid).first()
                         }
+                        
+                        // 4. Check and migrate legacy AttendanceRecord logs (from local and remote databases)
+                        migrateLegacyData(session.uid)
+                        
+                        // 5. Final sync: Upload current merged state to the server to ensure cloud is up to date
+                        val finalEntries = repository.getEntries(session.uid).first()
+                        val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
+                        cloudSyncManager.uploadToServer(session.uid, finalEntries, config)
+                        
+                        hasRestoredForSession[session.uid] = true
+                        _cloudSyncStatus.value = "Đã đồng bộ"
                     } catch (e: Exception) {
                         android.util.Log.e("TimeSnapViewModel", "Auto-restore initialization failed", e)
                         hasRestoredForSession[session.uid] = true
@@ -195,11 +223,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
         // Calculate pay slip summaries automatically when month entries or config changes
         viewModelScope.launch(Dispatchers.Default) {
-            combine(monthTimeEntries, userConfig) { entries, config ->
-                Pair(entries, config)
-            }.collectLatest { (entries, config) ->
+            combine(monthTimeEntries, userConfig, userEarliestEntryDate) { entries, config, earliestDate ->
+                Triple(entries, config, earliestDate)
+            }.collectLatest { (entries, config, earliestDate) ->
                 if (config != null) {
-                    val summary = calculateSalarySummary(entries, config)
+                    val summary = calculateSalarySummary(entries, config, earliestDate)
                     _salarySummaryState.value = summary
                 } else {
                     _salarySummaryState.value = null
@@ -230,12 +258,17 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
                 val isSunday = (dayOfWeek == Calendar.SUNDAY)
                 val isHoliday = isHolidayDate(todayStr)
+                val hour = cal.get(Calendar.HOUR_OF_DAY)
                 
                 val dayType = when {
+                    hour >= 18 -> "NIGHT"
                     isHoliday -> "HOLIDAY"
                     isSunday -> "SUNDAY"
                     else -> "NORMAL"
                 }
+
+                val sId = if (hour >= 18) "ca_dem" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else "DAY"
 
                 val newEntry = TimeEntry(
                     id = existing?.id ?: 0,
@@ -245,17 +278,29 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     checkOutTime = null,
                     isWorking = true,
                     dayType = dayType,
-                    note = note.takeIf { it.isNotBlank() }
+                    note = note.takeIf { it.isNotBlank() },
+                    shiftId = sId,
+                    shiftType = sType
                 )
-                repository.insertOrUpdate(newEntry)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry)
+                repository.insertOrUpdate(calculated)
             } else {
                 // Perform check-out
+                val cal = Calendar.getInstance()
+                val hour = cal.get(Calendar.HOUR_OF_DAY)
+                
+                val sId = if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
+                val sType = if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
+
                 val updated = active.copy(
                     checkOutTime = System.currentTimeMillis(),
                     isWorking = false,
-                    note = if (note.isNotBlank()) note else active.note
+                    note = if (note.isNotBlank()) note else active.note,
+                    shiftId = sId,
+                    shiftType = sType
                 )
-                repository.insertOrUpdate(updated)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated)
+                repository.insertOrUpdate(calculated)
             }
             triggerSync()
         }
@@ -319,28 +364,178 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     // Clear and pull fully from mock cloud server
     fun restoreDataFromServer(userId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            _cloudSyncStatus.value = "Khôi phục dữ liệu..."
             try {
-                val remoteData = cloudSyncManager.downloadFromServer(userId)
-                if (remoteData != null) {
-                    val (entries, config) = remoteData
-                    if (config != null) {
-                        repository.saveConfig(config)
-                    }
-                    database.timeEntryDao().clearAllForUser(userId)
-                    for (entry in entries) {
-                        repository.insertOrUpdate(entry)
-                    }
-                    _cloudSyncStatus.value = "Đã đồng bộ"
-                    _triggerRefresh.value += 1
-                } else {
-                    _cloudSyncStatus.value = "Không tìm thấy dữ liệu mây"
-                }
-            } catch (e: Exception) {
-                _cloudSyncStatus.value = "Lỗi khôi phục đám mây"
+                restoreDataFromServerSuspended(userId)
             } finally {
                 hasRestoredForSession[userId] = true
             }
+        }
+    }
+
+    private suspend fun restoreDataFromServerSuspended(userId: String) {
+        _cloudSyncStatus.value = "Khôi phục dữ liệu..."
+        try {
+            val remoteData = cloudSyncManager.downloadFromServer(userId)
+            if (remoteData != null) {
+                val (entries, config) = remoteData
+                if (config != null) {
+                    repository.saveConfig(config)
+                }
+                database.timeEntryDao().clearAllForUser(userId)
+                for (entry in entries) {
+                    repository.insertOrUpdate(entry)
+                }
+                _cloudSyncStatus.value = "Đã khôi phục đám mây"
+                _triggerRefresh.value += 1
+            } else {
+                _cloudSyncStatus.value = "Không tìm thấy dữ liệu mây"
+            }
+        } catch (e: Exception) {
+            _cloudSyncStatus.value = "Lỗi khôi phục đám mây"
+            android.util.Log.e("TimeSnapViewModel", "Failed suspended server restore", e)
+        }
+    }
+
+    private suspend fun normalizeTimeEntryDates(userId: String) {
+        try {
+            val entries = repository.getEntries(userId).first()
+            var updatedCount = 0
+            for (entry in entries) {
+                if (entry.date.contains("/")) {
+                    val dateStr = entry.date
+                    try {
+                        val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        val date = parser.parse(dateStr)
+                        if (date != null) {
+                            val formattedDate = formatter.format(date)
+                            val updatedEntry = entry.copy(date = formattedDate)
+                            // Recalculate metrics just in case
+                            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updatedEntry)
+                            repository.insertOrUpdate(calculated)
+                            updatedCount++
+                            android.util.Log.d("TimeSnapViewModel", "Normalized TimeEntry date from $dateStr to $formattedDate")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to normalize date format for: $dateStr", e)
+                    }
+                }
+            }
+            if (updatedCount > 0) {
+                android.util.Log.d("TimeSnapViewModel", "Successfully normalized $updatedCount TimeEntry records to yyyy-MM-dd")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Error normalizing TimeEntry dates", e)
+        }
+    }
+
+    private suspend fun migrateLegacyData(userId: String) {
+        if (userId.startsWith("demo") || userId.contains("demo")) return
+        try {
+            android.util.Log.d("TimeSnapViewModel", "Starting legacy data migration for $userId")
+            
+            // 1. Get existing new entries to avoid duplicates
+            val currentEntries = repository.getEntries(userId).first()
+            val existingDates = currentEntries.map { it.date }.toSet()
+            
+            val legacyRecordsToMigrate = mutableListOf<com.example.data.AttendanceRecord>()
+
+            // 2. Check and migrate local legacy database "timesnap_pro.db"
+            val dbFile = getApplication<Application>().getDatabasePath("timesnap_pro.db")
+            if (dbFile.exists()) {
+                android.util.Log.d("TimeSnapViewModel", "Local legacy database timesnap_pro.db found. Reading local records...")
+                try {
+                    com.example.data.DatabaseHelper.init(getApplication())
+                    val localRecords = com.example.data.DatabaseHelper.instance.getRecords(userId).first()
+                    android.util.Log.d("TimeSnapViewModel", "Found ${localRecords.size} local legacy records.")
+                    legacyRecordsToMigrate.addAll(localRecords)
+                } catch (e: Exception) {
+                    android.util.Log.e("TimeSnapViewModel", "Error reading local legacy records", e)
+                }
+            } else {
+                android.util.Log.d("TimeSnapViewModel", "No local legacy database timesnap_pro.db found.")
+            }
+
+            // 3. Check and migrate remote legacy records from Firestore "attendance_logs"
+            try {
+                android.util.Log.d("TimeSnapViewModel", "Checking for remote legacy records on Firestore...")
+                val remoteRecords = com.example.data.FirestoreService.getAttendanceLogsForUser(userId)
+                android.util.Log.d("TimeSnapViewModel", "Found ${remoteRecords.size} remote legacy records.")
+                // Add those that aren't already in the local migration list (by date)
+                for (remoteRecord in remoteRecords) {
+                    if (legacyRecordsToMigrate.none { it.dateString == remoteRecord.dateString }) {
+                        legacyRecordsToMigrate.add(remoteRecord)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Error reading remote legacy records from Firestore", e)
+            }
+
+            // 4. Perform the migration
+            if (legacyRecordsToMigrate.isNotEmpty()) {
+                android.util.Log.d("TimeSnapViewModel", "Total unique legacy records to migrate: ${legacyRecordsToMigrate.size}")
+                var migratedCount = 0
+                for (log in legacyRecordsToMigrate) {
+                    // Convert dateString to yyyy-MM-dd
+                    val dateStr = log.dateString
+                    var formattedDate = dateStr
+                    try {
+                        if (dateStr.contains("/")) {
+                            val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val date = parser.parse(dateStr)
+                            if (date != null) {
+                                formattedDate = formatter.format(date)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to parse legacy date: $dateStr", e)
+                    }
+
+                    // Only migrate if we don't already have an entry for this formattedDate
+                    if (!existingDates.contains(formattedDate)) {
+                        val cal = Calendar.getInstance()
+                        var isSunday = false
+                        try {
+                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val date = parser.parse(formattedDate)
+                            if (date != null) {
+                                cal.time = date
+                                isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+
+                        val dayType = if (isSunday) "SUNDAY" else "NORMAL"
+
+                        val entry = TimeEntry(
+                            id = 0,
+                            userId = userId,
+                            date = formattedDate,
+                            checkInTime = log.clockInTime,
+                            checkOutTime = log.clockOutTime,
+                            isWorking = (log.clockOutTime == null),
+                            dayType = dayType,
+                            note = log.notes.takeIf { it.isNotBlank() }
+                        )
+
+                        // Calculate metrics using SalaryCalculator
+                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                        repository.insertOrUpdate(calculated)
+                        migratedCount++
+                    }
+                }
+
+                android.util.Log.d("TimeSnapViewModel", "Successfully migrated $migratedCount legacy records to time_entries database for $userId")
+                if (migratedCount > 0) {
+                    _triggerRefresh.value += 1
+                }
+            } else {
+                android.util.Log.d("TimeSnapViewModel", "No legacy records to migrate.")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Failed to execute legacy data migration", e)
         }
     }
 
@@ -357,6 +552,34 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 android.util.Log.e("TimeSnapViewModel", "Failed to restore salary settings from firestore: ${e.message}")
             }
+        }
+    }
+
+    private suspend fun migrateGuestDataToUser(newUserId: String) {
+        if (newUserId == "local_user" || newUserId.startsWith("local")) return
+        try {
+            val sharedPrefs = getApplication<Application>().getSharedPreferences("timesnap_auth", android.content.Context.MODE_PRIVATE)
+            val lastUid = sharedPrefs.getString("last_logged_in_uid", "local_user") ?: "local_user"
+            if (lastUid != newUserId && lastUid.startsWith("local")) {
+                val guestEntries = repository.getEntries(lastUid).first()
+                if (guestEntries.isNotEmpty()) {
+                    val userEntries = repository.getEntries(newUserId).first()
+                    if (userEntries.isEmpty()) {
+                        android.util.Log.d("TimeSnapViewModel", "Migrating ${guestEntries.size} entries from local UID $lastUid to $newUserId")
+                        for (entry in guestEntries) {
+                            repository.insertOrUpdate(entry.copy(userId = newUserId))
+                        }
+                        val guestConfig = repository.getConfigDirect(lastUid)
+                        if (guestConfig != null) {
+                            repository.saveConfig(guestConfig.copy(userId = newUserId))
+                        }
+                        // Clear guest entries so we don't migrate again
+                        database.timeEntryDao().clearAllForUser(lastUid)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Failed to migrate guest data: ${e.message}")
         }
     }
 
@@ -450,6 +673,12 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 dayType = dayTypeOverride
             }
 
+            // Auto detect night shift if checkInHour >= 18
+            val isAutoNightShift = (checkInHour >= 18)
+            if (isAutoNightShift && dayType == "NORMAL") {
+                dayType = "NIGHT"
+            }
+
             // ENFORCE RULE: Future dates cannot be normal working days. Only leaves allowed.
             if (isFuture) {
                 if (dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "HOLIDAY_LEAVE") {
@@ -510,18 +739,25 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
+            val isLeave = finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "HOLIDAY_LEAVE"
+            val sId = if (isLeave) null else if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"
+            val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null
+
             val newEntry = TimeEntry(
                 id = existing?.id ?: 0,
                 userId = session.uid,
                 date = dateStr,
-                checkInTime = if (finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "HOLIDAY_LEAVE") null else checkInMs,
-                checkOutTime = if (finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "HOLIDAY_LEAVE") null else checkOutMs,
+                checkInTime = if (isLeave) null else checkInMs,
+                checkOutTime = if (isLeave) null else checkOutMs,
                 isWorking = isWorking,
                 dayType = finalDayType,
-                note = noteStr
+                note = noteStr,
+                shiftId = sId,
+                shiftType = sType
             )
 
-            repository.insertOrUpdate(newEntry)
+            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry)
+            repository.insertOrUpdate(calculated)
             triggerSync()
         }
     }
@@ -565,8 +801,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 if (skipSunday && isSunday) continue
                 if (skipHoliday && isHoliday) continue
 
+                val isAutoNightShift = (checkInHour >= 18)
                 val dayType = when {
-                    isNightShiftOverride -> "NIGHT"
+                    isAutoNightShift -> "NIGHT"
                     autoRecognizeOt && isHoliday -> "HOLIDAY"
                     autoRecognizeOt && isSunday -> "SUNDAY"
                     else -> "NORMAL"
@@ -598,6 +835,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
+                val sId = if (isNightShiftOverride || isAutoNightShift) "ca_dem" else if (checkOutHour >= 20) "ca2" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else "DAY"
+
                 val entry = TimeEntry(
                     id = existing?.id ?: 0,
                     userId = session.uid,
@@ -605,9 +845,12 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     checkInTime = checkInMs,
                     checkOutTime = checkOutMs,
                     isWorking = false,
-                    dayType = dayType
+                    dayType = dayType,
+                    shiftId = sId,
+                    shiftType = sType
                 )
-                repository.insertOrUpdate(entry)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                repository.insertOrUpdate(calculated)
             }
             triggerSync()
         }
@@ -683,15 +926,31 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         return false
     }
 
-    private fun roundCheckInTime(timeMs: Long): Long {
-        // Return exact check-in time without rounding up to ensure continuous shifts (e.g. 7:30 - 15:30)
-        // are computed exactly as 8.0 hours and overtime is 100% accurate.
-        return timeMs
+    private fun roundCheckInGrace(timeMs: Long): Long {
+        return com.example.data.SalaryCalculator.getRoundedTime(timeMs, true)
     }
 
-    private fun calculateSalarySummary(entries: List<TimeEntry>, config: UserConfig): SalarySummary {
-        val luongBasic = config.luongCoBan
+    private fun roundCheckOutGrace(timeMs: Long): Long {
+        return com.example.data.SalaryCalculator.getRoundedTime(timeMs, false)
+    }
 
+    private fun isSundayDate(dateStr: String): Boolean {
+        return try {
+            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val dateVal = parser.parse(dateStr)
+            if (dateVal != null) {
+                val cal = Calendar.getInstance()
+                cal.time = dateVal
+                cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun calculateSalarySummary(entries: List<TimeEntry>, config: UserConfig, firstEntryDate: String? = null): SalarySummary {
         val selectedMonth = currentSelectedMonth.value
         var targetYear = 2026
         var targetMonth = 5
@@ -709,273 +968,83 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         val isCurrentSelectedMonth = (targetYear == currentYear && targetMonth == currentMonth)
         val todayStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, todayDayOfMonth)
 
-        val expectedWorkDaysCount = 26
-        val standardWorkDaysInMonth = 26
-        val dailySalary = luongBasic / 26.0
-        val hourlySalary = dailySalary / 8.0
+        val maxDaysInMo = Calendar.getInstance().apply {
+            set(Calendar.YEAR, targetYear)
+            set(Calendar.MONTH, targetMonth - 1)
+        }.getActualMaximum(Calendar.DAY_OF_MONTH)
 
         // Find all public holidays in the selected month
         val holidayDatesInMonth = mutableSetOf<String>()
-        try {
-            val maxDaysInMo = Calendar.getInstance().apply {
-                set(Calendar.YEAR, targetYear)
-                set(Calendar.MONTH, targetMonth - 1)
-            }.getActualMaximum(Calendar.DAY_OF_MONTH)
-            for (day in 1..maxDaysInMo) {
-                val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                if (isHolidayDate(dateStr)) {
-                    // Do not include future holiday/leaves if it is currently selected month and date is in future
-                    if (!isCurrentSelectedMonth || dateStr <= todayStr) {
-                        holidayDatesInMonth.add(dateStr)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        // Identify which holiday dates have been worked (have check-in logged)
-        val workedHolidayDates = entries.filter { e ->
-            holidayDatesInMonth.contains(e.date) && e.checkInTime != null
-        }.map { it.date }.toSet()
-
-        // Unworked holidays automatically merit full 1-day standard salary as a Holiday Leave
-        val unworkedHolidaysCount = (holidayDatesInMonth - workedHolidayDates).size
-
-        var workingDaysCount = unworkedHolidaysCount
-        var actualPresenceDaysCount = 0
-        var totalStandardHours = unworkedHolidaysCount * 8.0
-        var totalOtDayHours = 0.0
-        var totalOtNightHours = 0.0
-
-        var otDayPay = 0.0
-        var otNightPay = 0.0
-        var comOtDaysCount = 0
-        var totalSundayHours = 0.0
-        var sundayPay = 0.0
-        var nightShiftsCount = 0
-
-        for (e in entries) {
-            // Do not calculate future days/leaves as they have not happened yet
-            if (isCurrentSelectedMonth && e.date > todayStr) {
-                continue
-            }
-
-            val isHolidayDateVal = holidayDatesInMonth.contains(e.date)
-            if (isHolidayDateVal && e.checkInTime == null) {
-                // Already counted automatically as unworked holiday, skip processing to avoid duplication
-                continue
-            }
-
-            if (e.dayType == "PAID_LEAVE" || e.dayType == "HOLIDAY_LEAVE") {
-                workingDaysCount++
-                totalStandardHours += 8.0
-                continue
-            }
-            if (e.dayType == "UNPAID_LEAVE") {
-                continue
-            }
-
-            if (e.checkInTime == null) continue
-
-            val inCal = Calendar.getInstance()
-            inCal.timeInMillis = e.checkInTime
-            val inHour = inCal.get(Calendar.HOUR_OF_DAY)
-            val isNightShift = if (e.checkOutTime != null) {
-                val outCal = Calendar.getInstance()
-                outCal.timeInMillis = e.checkOutTime
-                val outHour = outCal.get(Calendar.HOUR_OF_DAY)
-                inHour >= 22 || inHour <= 6 || outHour >= 22 || outHour <= 6 || e.dayType == "NIGHT"
-            } else {
-                inHour >= 22 || inHour <= 6 || e.dayType == "NIGHT"
-            }
-            if (isNightShift) {
-                nightShiftsCount++
-            }
-
-            val isSunday = (e.dayType == "SUNDAY")
-
-            if (e.isWorking) {
-                if (isSunday) {
-                    actualPresenceDaysCount++
-                    totalSundayHours += 8.0
-                    sundayPay += 8.0 * hourlySalary * config.heSoOtChuNhat
-                } else {
-                    workingDaysCount++
-                    actualPresenceDaysCount++
-                    totalStandardHours += 8.0
-                }
-                continue
-            }
-
-            if (e.checkOutTime == null) continue
-
-            val originalCheckIn = e.checkInTime
-            val roundedCheckIn = roundCheckInTime(originalCheckIn)
-            val finalCheckIn = if (roundedCheckIn < e.checkOutTime) roundedCheckIn else originalCheckIn
-
-            val durationMs = e.checkOutTime - finalCheckIn
-            val rawHours = durationMs / 3600000.0
-            
-            // Subtract unpaid bridge/break hours per company standard contract if enabled
-            val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
-            val actualHours = (rawHours - breakHours).coerceAtLeast(0.0)
-
-            val finalStandardHours = actualHours.coerceAtMost(8.0)
-            val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
-
-            if (isSunday) {
-                actualPresenceDaysCount++
-                totalSundayHours += actualHours
-                val dayPay = actualHours * hourlySalary * config.heSoOtChuNhat
-                sundayPay += dayPay
-                if (finalOtHours >= 2.0) {
-                    comOtDaysCount++
-                }
-            } else {
-                workingDaysCount++
-                actualPresenceDaysCount++
-                totalStandardHours += finalStandardHours
-
-                if (finalOtHours >= 2.0) {
-                    comOtDaysCount++
-                }
-
-                if (finalOtHours > 0.0) {
-                    totalOtDayHours += finalOtHours
-                    val coeff = when (e.dayType) {
-                        "HOLIDAY" -> config.heSoOtNgayLe
-                        else -> config.heSoOtNgayThuong
-                    }
-                    otDayPay += finalOtHours * (hourlySalary * coeff)
+        for (day in 1..maxDaysInMo) {
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            if (isHolidayDate(dateStr)) {
+                if (!isCurrentSelectedMonth || dateStr <= todayStr) {
+                    holidayDatesInMonth.add(dateStr)
                 }
             }
         }
 
-        val allowanceDivisor = 26.0
+        val effectiveJoinDate: String? = if (config.ngayVaoLam.isNotBlank()) {
+            config.ngayVaoLam.trim()
+        } else if (firstEntryDate != null && firstEntryDate.startsWith(selectedMonth)) {
+            firstEntryDate
+        } else {
+            null
+        }
 
-        val pcKyThuatPr = Math.round((config.pcKyThuat / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcKyThuat)
-        val pcTrachNhiemPr = Math.round((config.pcTrachNhiem / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcTrachNhiem)
-        val pcChucVuPr = Math.round((config.pcChucVu / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcChucVu)
-        val pcHieuSuatPr = Math.round((config.pcHieuSuat / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcHieuSuat)
-        val pcSanPhamPr = Math.round((config.pcSanPham / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcSanPham)
-        val pcComCaPr = (actualPresenceDaysCount * config.pcComCa)
-        val pcComOtPr = (comOtDaysCount * config.pcComOt) // calculated on exact overtime days where total shift >= 10h
-        val pcNhaOPr = Math.round((config.pcNhaO / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcNhaO)
-        val pcDocHaiPr = Math.round((config.pcDocHai / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcDocHai)
-        val pcDtDoanhThuPr = Math.round((config.pcDtDoanhThu / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcDtDoanhThu)
-        val pcXangXePr = Math.round((config.pcXangXe / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcXangXe)
-        val pcThamNienPr = config.pcThamNien // 100% full monthly value, never deducted, as requested
-        val pcKhac1Pr = Math.round((config.pcKhac1 / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcKhac1)
-        val pcKhacPr = Math.round((config.pcKhac / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcKhac)
-
-        val pcCaDemPr = nightShiftsCount * 100000.0
-
-        val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
-                pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
-                pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
-                pcKhac1Pr + pcKhacPr + pcCaDemPr
-
-        // Missed day deduction (Compare with dynamically expected workdays count up to today/full month)
-        var missedDays = 0
+        var expectedWorkDaysCount = 0
         if (isCurrentSelectedMonth) {
-            try {
-                for (day in 1 until todayDayOfMonth) {
-                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+            for (day in 1 until todayDayOfMonth) {
+                val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+                if (effectiveJoinDate != null && dateStr < effectiveJoinDate) {
+                    continue
+                }
+                val cal = Calendar.getInstance()
+                cal.set(currentYear, currentMonth - 1, day)
+                val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+                val isHoliday = isHolidayDate(dateStr)
+                if (!isSunday && !isHoliday) {
+                    expectedWorkDaysCount++
+                }
+            }
+        } else {
+            if (effectiveJoinDate != null && effectiveJoinDate.startsWith(selectedMonth)) {
+                for (day in 1..maxDaysInMo) {
+                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                    if (dateStr < effectiveJoinDate) {
+                        continue
+                    }
                     val cal = Calendar.getInstance()
-                    cal.set(currentYear, currentMonth - 1, day)
+                    cal.set(targetYear, targetMonth - 1, day)
                     val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
                     val isHoliday = isHolidayDate(dateStr)
                     if (!isSunday && !isHoliday) {
-                        // Check if they worked or had a paid leave on this day
-                        val entryForDay = entries.find { it.date == dateStr }
-                        val workedOrPaid = entryForDay != null && (
-                            entryForDay.checkInTime != null || 
-                            entryForDay.dayType == "PAID_LEAVE" || 
-                            entryForDay.dayType == "HOLIDAY_LEAVE" || 
-                            entryForDay.isWorking
-                        )
-                        if (!workedOrPaid) {
-                            missedDays++
-                        }
+                        expectedWorkDaysCount++
                     }
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } else {
+                for (day in 1..maxDaysInMo) {
+                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                    val cal = Calendar.getInstance()
+                    cal.set(targetYear, targetMonth - 1, day)
+                    val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+                    val isHoliday = isHolidayDate(dateStr)
+                    if (!isSunday && !isHoliday) {
+                        expectedWorkDaysCount++
+                    }
+                }
             }
-        } else {
-            missedDays = (expectedWorkDaysCount - workingDaysCount).coerceAtLeast(0)
         }
 
-        // Chuyen can block calculated per standard work / dynamic standard days * working day contribution
-        // Chuyên cần is completely lost (0.0) if there's any unexcused absence (missedDays > 0) or unpaid leave (UNPAID_LEAVE)
-        val hasUnpaidOrAbsent = missedDays > 0 || entries.any { it.dayType == "UNPAID_LEAVE" }
-        val chuyenCanValue = if (hasUnpaidOrAbsent) {
-            0.0
-        } else {
-            Math.round((config.tienChuyenCanGoc / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.tienChuyenCanGoc)
-        }
-
-        // Remaining retro-compatible values for standard slots (set to 0 to prevent double-counting dynamic meal allowances)
-        val tongCom = 0.0
-
-        // Deductions
-        val tieuBaoHiem = Math.round(config.luongDongBaoHiem * (config.tiLeDongBaoHiem / 100.0)).toDouble()
-        val doanPhi = config.doanPhiCongDoan
-
-        val baseBasicSalary = Math.round((luongBasic / 26.0) * workingDaysCount).toDouble().coerceAtMost(luongBasic)
-        val tienKhauTruNghi = 0.0
-
-        val roundedOtDay = Math.round(otDayPay).toDouble()
-        val roundedOtNight = Math.round(otNightPay).toDouble()
-        val roundedSundayPay = Math.round(sundayPay).toDouble()
-
-        val grossAdditions = baseBasicSalary + roundedOtDay + roundedOtNight + roundedSundayPay + tongCom + phuCapTong + chuyenCanValue
-        val totalDeductions = tieuBaoHiem + doanPhi + tienKhauTruNghi
-        val luongThucNhan = Math.round(grossAdditions - totalDeductions).coerceAtLeast(0L).toDouble()
-
-        return SalarySummary(
-            workingDays = workingDaysCount,
-            standardHours = totalStandardHours,
-            otDayHours = totalOtDayHours,
-            otNightHours = totalOtNightHours,
-            tienOtNgay = roundedOtDay,
-            tienOtDem = roundedOtNight,
-            tongTienCom = tongCom,
-            phuCap = phuCapTong,
-            phuCapXangXe = pcXangXePr,
-            phuCapDienThoai = pcDtDoanhThuPr,
-            phuCapNhaO = pcNhaOPr,
-            phuCapChuyenCan = chuyenCanValue,
-            thuong = 0.0,
-            tienBh = tieuBaoHiem,
-            doanPhi = doanPhi,
-            tienKhauTruNghi = tienKhauTruNghi,
-            luongThucNhan = luongThucNhan,
-            baseBasicSalary = baseBasicSalary,
-            expectedWorkDays = expectedWorkDaysCount,
-            standardWorkDays = standardWorkDaysInMonth,
-            isCurrentMonth = isCurrentSelectedMonth,
-            
-            pcKyThuatVal = pcKyThuatPr,
-            pcTrachNhiemVal = pcTrachNhiemPr,
-            pcChucVuVal = pcChucVuPr,
-            pcHieuSuatVal = pcHieuSuatPr,
-            pcSanPhamVal = pcSanPhamPr,
-            pcComCaVal = pcComCaPr,
-            pcComOtVal = pcComOtPr,
-            pcNhaOVal = pcNhaOPr,
-            pcDocHaiVal = pcDocHaiPr,
-            pcDtDoanhThuVal = pcDtDoanhThuPr,
-            pcXangXeVal = pcXangXePr,
-            pcThamNienVal = pcThamNienPr,
-            pcKhac1Val = pcKhac1Pr,
-            pcKhacVal = pcKhacPr,
-            pcCaDemVal = pcCaDemPr,
-            caDemCount = nightShiftsCount,
-            
-            tienChuNhat = roundedSundayPay,
-            chuNhatHours = totalSundayHours
+        return com.example.data.SalaryCalculator.calculateMonthlySalary(
+            entries = entries,
+            config = config,
+            scheduledDays = expectedWorkDaysCount,
+            earliestDate = effectiveJoinDate,
+            selectedMonth = selectedMonth,
+            todayStr = todayStr,
+            isCurrentSelectedMonth = isCurrentSelectedMonth,
+            holidayDatesInMonth = holidayDatesInMonth
         )
     }
 
@@ -1022,5 +1091,7 @@ data class SalarySummary(
     val pcCaDemVal: Double = 0.0,
     val caDemCount: Int = 0,
     val tienChuNhat: Double = 0.0,
-    val chuNhatHours: Double = 0.0
+    val chuNhatHours: Double = 0.0,
+    val otLeHours: Double = 0.0,
+    val tienOtLe: Double = 0.0
 )
