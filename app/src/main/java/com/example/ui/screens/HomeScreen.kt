@@ -727,8 +727,8 @@ fun HomeScreen(
                                             fontWeight = FontWeight.Bold
                                         )
                                         
-                                        val processedEntry = remember(entry) {
-                                            com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                                        val processedEntry = remember(entry, configState) {
+                                            com.example.data.SalaryCalculator.calculateSingleEntry(entry, configState)
                                         }
                                         val shift = remember(entry) {
                                             com.example.data.SalaryCalculator.getShiftForEntry(entry)
@@ -972,7 +972,7 @@ private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> 
 
 private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.model.UserConfig?): Double {
     if (config == null) return 0.0
-    val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+    val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry, config)
     val hourlySalary = config.luongCoBan / 26.0 / 8.0
     
     if (processed.dayType == "PAID_LEAVE" || processed.dayType == "HOLIDAY_LEAVE") {

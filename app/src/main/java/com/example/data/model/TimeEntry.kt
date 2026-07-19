@@ -23,5 +23,7 @@ data class TimeEntry(
     val workDay: Double = 0.0,
     val otHours: Double = 0.0,
     val lateMinutes: Int = 0,
-    val earlyLeaveMinutes: Int = 0
+    val earlyLeaveMinutes: Int = 0,
+    val customBreakDeduction: Boolean? = null,
+    val customBreakHours: Double? = null
 )

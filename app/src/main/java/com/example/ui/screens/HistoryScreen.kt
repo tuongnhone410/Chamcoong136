@@ -375,6 +375,7 @@ fun HistoryScreen(
             
             var selectedDayType by remember { mutableStateOf("NORMAL") }
             var noteString by remember { mutableStateOf("") }
+            var isBreakDeducted by remember { mutableStateOf(configState?.tinhKhauTruNghi ?: true) }
 
             // Pre-fill if entry already exists
             val existing = entries.find { it.date == day.dateString }
@@ -382,6 +383,7 @@ fun HistoryScreen(
                 if (existing != null) {
                     noteString = existing.note ?: ""
                     selectedDayType = existing.dayType
+                    isBreakDeducted = existing.customBreakDeduction ?: configState?.tinhKhauTruNghi ?: true
                     
                     if (existing.checkInTime != null) {
                         val cal = Calendar.getInstance().apply { timeInMillis = existing.checkInTime }
@@ -407,6 +409,7 @@ fun HistoryScreen(
                     } else {
                         selectedDayType = if (day.isSunday) "SUNDAY" else "NORMAL"
                     }
+                    isBreakDeducted = configState?.tinhKhauTruNghi ?: true
                     checkInHour = TextFieldValue("08")
                     checkInMin = TextFieldValue("00")
                     checkOutHour = TextFieldValue("17")
@@ -653,6 +656,27 @@ fun HistoryScreen(
                                     fontWeight = FontWeight.W500
                                 )
                             }
+
+                            // Special switch: "Thông ca (Không khấu trừ nghỉ)"
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clickable { isBreakDeducted = !isBreakDeducted }
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = !isBreakDeducted, // Checked means CONTINUOUS (not deducted)
+                                    onCheckedChange = { isBreakDeducted = !it },
+                                    colors = CheckboxDefaults.colors(checkedColor = AccentGreen)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Làm thông ca (Không khấu trừ ${configState?.soGioNghiGiaiLao ?: 1.5}g nghỉ ca này)",
+                                    color = AccentGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         } else if (isFutureDate) {
                             // Notice for Future Leave setups
                             Box(
@@ -758,7 +782,8 @@ fun HistoryScreen(
                                             checkOutHour = outHour,
                                             checkOutMin = outMin,
                                             dayTypeOverride = selectedDayType,
-                                            noteStr = noteString.ifEmpty { null }
+                                            noteStr = noteString.ifEmpty { null },
+                                            customBreakDeduction = isBreakDeducted
                                         )
                                     }
                                     showSingleDayDialog = null
@@ -1242,7 +1267,7 @@ fun DayGridCell(
                                 fontWeight = FontWeight.Bold
                             )
                         } else if (entry.checkInTime != null && entry.checkOutTime != null) {
-                            val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                            val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry, config)
                             val shift = com.example.data.SalaryCalculator.getShiftForEntry(entry)
                             val stdHrs = processed.workDay * shift.standardHours
                             val totalHrs = stdHrs + processed.otHours

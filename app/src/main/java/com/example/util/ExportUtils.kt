@@ -212,7 +212,8 @@ object ExportUtils {
             val rawHours = durationMs / 3600000.0
             
             val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
-            val actualHours = (rawHours - breakHours).coerceAtLeast(0.0)
+            val eBreakHours = e.customBreakHours ?: breakHours
+            val actualHours = (rawHours - eBreakHours).coerceAtLeast(0.0)
 
             val finalStandardHours = actualHours.coerceAtMost(8.0)
             val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
@@ -501,7 +502,7 @@ object ExportUtils {
         val pcChuyenCanShowPNG = if (selectedTab == 1) {
             if (hasLoggedUnpaidOrAbsent) 0.0 else config.tienChuyenCanGoc
         } else {
-            if (isCurrentSelectedMonth) 0.0 else summary.phuCapChuyenCan
+            summary.phuCapChuyenCan
         }
 
         // 1. Create offline Bitmap with Dynamic Height

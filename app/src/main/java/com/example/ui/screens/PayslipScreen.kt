@@ -335,12 +335,12 @@ fun PayslipScreen(
                 val pcChuyenCanShow = if (selectedTab == 1) {
                     if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc
                 } else {
-                    if (isCurrentSelectedMonth) 0.0 else s.phuCapChuyenCan
+                    s.phuCapChuyenCan
                 }
 
                 val currentProratedAllowancesSum = s.pcKyThuatVal + s.pcTrachNhiemVal + s.pcChucVuVal + s.pcHieuSuatVal +
                         s.pcSanPhamVal + s.pcComCaVal + s.pcComOtVal + s.pcNhaOVal + s.pcDocHaiVal + 
-                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhacVal + s.pcKhac1Val + s.pcThamNienVal + (if (isCurrentSelectedMonth) 0.0 else s.phuCapChuyenCan) +
+                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhacVal + s.pcKhac1Val + s.pcThamNienVal + s.phuCapChuyenCan +
                         s.pcCaDemVal
 
                 val fullProjectedAllowancesSum = c.pcKyThuat + c.pcTrachNhiem + c.pcChucVu + c.pcHieuSuat +
@@ -1111,7 +1111,7 @@ fun savePayslipAsPngImage(
     val pcChuyenCanShowPNG = if (selectedTab == 1) {
         if (hasLoggedUnpaidOrAbsent) 0.0 else config.tienChuyenCanGoc
     } else {
-        if (isCurrentSelectedMonth) 0.0 else summary.phuCapChuyenCan
+        summary.phuCapChuyenCan
     }
 
     // 1. Create offline Bitmap with Dynamic Height to prevent truncation or empty gaps

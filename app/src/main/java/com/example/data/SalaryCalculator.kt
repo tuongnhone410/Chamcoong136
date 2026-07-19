@@ -106,7 +106,7 @@ object SalaryCalculator {
      * Step 1 - 6: Process and calculate single record details.
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
-    fun calculateSingleEntry(entry: TimeEntry): TimeEntry {
+    fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
         if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE" || entry.dayType == "UNPAID_LEAVE") {
             val workD = when (entry.dayType) {
                 "PAID_LEAVE", "HOLIDAY_LEAVE" -> 1.0
@@ -141,17 +141,15 @@ object SalaryCalculator {
             rawIn
         }
 
-        // Check-Out Normalization: Late check-out grace period is 15 minutes.
-        // If late check-out is within 15 minutes, it is normalized to standard shift end (stdOutMs) so no extra OT is counted.
-        // If late check-out exceeds 15 minutes, the raw check-out time is kept, counting the exceeded time as OT.
+        // Check-Out Normalization: Any check-out within the shift's check-out window (stdOutMs to checkOutWindowEnd)
+        // is normalized to standard shift end (stdOutMs), so no extra OT or variation is counted.
+        // Any check-out exceeding the window is kept raw to count extra OT. Any check-out before standard end is kept raw (early leave).
         val normOutMs = if (rawOut != null) {
             val dayOffset = if (shift.shiftType == "NIGHT") 1 else 0
             val stdOutMs = getMillisForTime(rawIn, shift.endTime, dayOffset)
-            val lateGraceMs = 15 * 60 * 1000L // 15 minutes grace period
+            val windowEndMs = getMillisForTime(rawIn, shift.checkOutWindowEnd, dayOffset)
 
-            if (rawOut > stdOutMs + lateGraceMs) {
-                rawOut
-            } else if (rawOut >= stdOutMs) {
+            if (rawOut in stdOutMs..windowEndMs) {
                 stdOutMs
             } else {
                 rawOut
@@ -194,10 +192,17 @@ object SalaryCalculator {
             }
         }
 
+        val resolvedBreakDeduction = entry.customBreakDeduction ?: config?.tinhKhauTruNghi ?: (shift.breakHours > 0.0)
+        val breakHrsToUse = if (resolvedBreakDeduction) {
+            entry.customBreakHours ?: config?.soGioNghiGiaiLao ?: shift.breakHours
+        } else {
+            0.0
+        }
+
         // 6. Calculate OT Hours according to shift
         val otHrs = if (normOutMs != null) {
             val workedHrs = (normOutMs - normInMs) / 3600000.0
-            val actualWorkedHrs = (workedHrs - shift.breakHours).coerceAtLeast(0.0)
+            val actualWorkedHrs = (workedHrs - breakHrsToUse).coerceAtLeast(0.0)
             (actualWorkedHrs - shift.standardHours).coerceAtLeast(0.0)
         } else {
             0.0
@@ -213,7 +218,9 @@ object SalaryCalculator {
             workDay = workD,
             otHours = otHrs,
             lateMinutes = lateMin,
-            earlyLeaveMinutes = earlyLeaveMin
+            earlyLeaveMinutes = earlyLeaveMin,
+            customBreakDeduction = resolvedBreakDeduction,
+            customBreakHours = breakHrsToUse
         )
     }
 
@@ -273,7 +280,7 @@ object SalaryCalculator {
         val hourlySalary = dailySalary / 8.0
 
         // Process all entries through steps 1-6
-        val processedEntries = entries.map { calculateSingleEntry(it) }
+        val processedEntries = entries.map { calculateSingleEntry(it, config) }
 
         // Identify which holiday dates have been worked (have check-in logged)
         val workedHolidayDates = processedEntries.filter { e ->
@@ -298,6 +305,8 @@ object SalaryCalculator {
         var sundayPay = 0.0
         var comOtDaysCount = 0
         var nightShiftsCount = 0
+
+        val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
 
         for (e in processedEntries) {
             // Do not calculate future days/leaves as they have not happened yet if they are unworked
@@ -345,11 +354,13 @@ object SalaryCalculator {
 
             if (e.rawCheckOut == null) continue
 
+            val eBreakHours = e.customBreakHours ?: breakHours
+
             // Standard Day Work Contribution
             if (isSundayVal) {
                 actualPresenceDaysCount++
                 val workedHrs = (e.normalizedCheckOut!! - e.normalizedCheckIn!!) / 3600000.0
-                val actualHours = (workedHrs - (SHIFTS[e.shiftId]?.breakHours ?: 0.0)).coerceAtLeast(0.0)
+                val actualHours = (workedHrs - eBreakHours).coerceAtLeast(0.0)
                 totalSundayHours += actualHours
                 sundayPay += actualHours * hourlySalary * config.heSoOtChuNhat
 
@@ -363,7 +374,7 @@ object SalaryCalculator {
                 actualPresenceDaysCount++
                 
                 val workedHrs = (e.normalizedCheckOut!! - e.normalizedCheckIn!!) / 3600000.0
-                val actualHours = (workedHrs - (SHIFTS[e.shiftId]?.breakHours ?: 0.0)).coerceAtLeast(0.0)
+                val actualHours = (workedHrs - eBreakHours).coerceAtLeast(0.0)
                 val finalStandardHours = actualHours.coerceAtMost(8.0)
                 totalStandardHours += finalStandardHours
 
@@ -435,7 +446,7 @@ object SalaryCalculator {
             it.dayType == "UNPAID_LEAVE" && (earliestDate == null || it.date >= earliestDate)
         } || (scheduledDays > 0 && totalWorkDays < scheduledDays)
 
-        val chuyenCanValue = if (hasUnpaidOrAbsent || isCurrentSelectedMonth) {
+        val chuyenCanValue = if (hasUnpaidOrAbsent) {
             0.0
         } else {
             calculateAllowanceValue(

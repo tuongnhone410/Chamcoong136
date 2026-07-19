@@ -282,7 +282,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
                 repository.insertOrUpdate(calculated)
             } else {
                 // Perform check-out
@@ -299,7 +299,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
                 repository.insertOrUpdate(calculated)
             }
             triggerSync()
@@ -411,7 +411,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                             val formattedDate = formatter.format(date)
                             val updatedEntry = entry.copy(date = formattedDate)
                             // Recalculate metrics just in case
-                            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updatedEntry)
+                            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updatedEntry, userConfig.value)
                             repository.insertOrUpdate(calculated)
                             updatedCount++
                             android.util.Log.d("TimeSnapViewModel", "Normalized TimeEntry date from $dateStr to $formattedDate")
@@ -521,7 +521,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         )
 
                         // Calculate metrics using SalaryCalculator
-                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value)
                         repository.insertOrUpdate(calculated)
                         migratedCount++
                     }
@@ -642,7 +642,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         checkOutHour: Int?,
         checkOutMin: Int?,
         dayTypeOverride: String? = null,
-        noteStr: String? = null
+        noteStr: String? = null,
+        customBreakDeduction: Boolean? = null
     ) {
         val session = currentUserSession.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -753,10 +754,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 dayType = finalDayType,
                 note = noteStr,
                 shiftId = sId,
-                shiftType = sType
+                shiftType = sType,
+                customBreakDeduction = customBreakDeduction
             )
 
-            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry)
+            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
             repository.insertOrUpdate(calculated)
             triggerSync()
         }
@@ -849,7 +851,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value)
                 repository.insertOrUpdate(calculated)
             }
             triggerSync()
