@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.QueryBuilder
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -117,6 +120,7 @@ fun HomeScreen(
 
     // Load active note dynamically so they can type inside Home
     var quickNoteText by remember { mutableStateOf("") }
+    var isExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(activeEntry) {
         quickNoteText = activeEntry?.note ?: ""
     }
@@ -187,6 +191,51 @@ fun HomeScreen(
                 modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
             )
 
+            // NEW: QUICK SUMMARY ROW
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val totalHrs = (summaryState?.standardHours ?: 0.0) + 
+                               (summaryState?.otDayHours ?: 0.0) + 
+                               (summaryState?.otNightHours ?: 0.0) +
+                               (summaryState?.chuNhatHours ?: 0.0) +
+                               (summaryState?.otLeHours ?: 0.0)
+                val fmtHrs = DecimalFormat("#.##").format(totalHrs)
+                val realSalary = summaryState?.luongThucNhan ?: 0.0
+                val formattedSalary = DecimalFormat("#,###").format(realSalary)
+                val workingDays = summaryState?.workingDays ?: 0
+
+                // Item 1: Total Hours
+                QuickSummaryItem(
+                    label = "Tổng giờ làm",
+                    value = "${fmtHrs}g",
+                    icon = Icons.Default.Schedule,
+                    color = NeonBlue,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Item 2: Working Days
+                QuickSummaryItem(
+                    label = "Số ngày công",
+                    value = "${workingDays}n",
+                    icon = Icons.Default.Timeline,
+                    color = NightPurple,
+                    modifier = Modifier.weight(0.9f)
+                )
+
+                // Item 3: Total Est Income
+                QuickSummaryItem(
+                    label = "Thu nhập",
+                    value = "${formattedSalary}đ",
+                    icon = Icons.Default.LocalAtm,
+                    color = AccentGreen,
+                    modifier = Modifier.weight(1.2f)
+                )
+            }
+
             // CARD 1: NET ESTIMATED INCOME CARD (THỰC LĨNH DỰ KIẾN)
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkContainer),
@@ -225,9 +274,15 @@ fun HomeScreen(
                         if (isNarrow) {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp)
+                                    Text("Tổng ngày công / Giờ làm", color = MediumGray, fontSize = 11.sp)
+                                    val totalHrs = (summaryState?.standardHours ?: 0.0) + 
+                                                   (summaryState?.otDayHours ?: 0.0) + 
+                                                   (summaryState?.otNightHours ?: 0.0) +
+                                                   (summaryState?.chuNhatHours ?: 0.0) +
+                                                   (summaryState?.otLeHours ?: 0.0)
+                                    val fmtHrs = DecimalFormat("#.##").format(totalHrs)
                                     Text(
-                                        text = "${summaryState?.workingDays ?: 0} ngày công",
+                                        text = "${summaryState?.workingDays ?: 0} ngày (${fmtHrs}g)",
                                         color = White,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
@@ -260,9 +315,15 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("Tổng ngày công / Giờ làm", color = MediumGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val totalHrs = (summaryState?.standardHours ?: 0.0) + 
+                                                   (summaryState?.otDayHours ?: 0.0) + 
+                                                   (summaryState?.otNightHours ?: 0.0) +
+                                                   (summaryState?.chuNhatHours ?: 0.0) +
+                                                   (summaryState?.otLeHours ?: 0.0)
+                                    val fmtHrs = DecimalFormat("#.##").format(totalHrs)
                                     Text(
-                                        text = "${summaryState?.workingDays ?: 0} ngày công",
+                                        text = "${summaryState?.workingDays ?: 0} ngày (${fmtHrs}g)",
                                         color = White,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
@@ -606,28 +667,56 @@ fun HomeScreen(
                         .padding(16.dp)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.Default.Schedule, "Recent history logs", tint = NeonBlue, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "CHẤM CÔNG GẦN ĐÂY",
-                            color = White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Schedule, "Recent history logs", tint = NeonBlue, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isExpanded) "CHẤM CÔNG TRONG THÁNG" else "CHẤM CÔNG GẦN ĐÂY",
+                                color = White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isExpanded) "Thu gọn" else "Xem tất cả tháng này",
+                                color = NeonBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = "Toggle Expand",
+                                tint = NeonBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
                     val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-                    val sortedLogs = remember(recentEntries, todayStr) {
-                        recentEntries
-                            .filter { it.date <= todayStr }
-                            .sortedByDescending { it.date }
-                            .take(3)
+                    val currentYearMonth = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) }
+                    val sortedLogs = remember(recentEntries, todayStr, isExpanded, currentYearMonth) {
+                        val filtered = recentEntries.filter { it.date <= todayStr }
+                        if (isExpanded) {
+                            filtered
+                                .filter { it.date.startsWith(currentYearMonth) }
+                                .sortedByDescending { it.date }
+                        } else {
+                            filtered
+                                .sortedByDescending { it.date }
+                                .take(3)
+                        }
                     }
 
                     if (sortedLogs.isEmpty()) {
@@ -1063,9 +1152,11 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
         }
     }
 
-    val finalCheckIn = processed.normalizedCheckIn ?: processed.checkInTime!!
-    val finalCheckOut = processed.normalizedCheckOut ?: processed.checkOutTime!!
-    val durationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
+    val finalCheckIn = processed.normalizedCheckIn ?: processed.rawCheckIn ?: processed.checkInTime!!
+    val finalCheckOut = processed.normalizedCheckOut ?: processed.rawCheckOut ?: processed.checkOutTime!!
+    val rawDurationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
+    // Round duration to the nearest minute to avoid sub-minute floating point variance
+    val durationMs = Math.round(rawDurationMs / 60000.0) * 60000L
     val rawHours = durationMs / 3600000.0
     val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
     val actualHours = (rawHours - breakHours).coerceAtLeast(0.0)
@@ -1098,4 +1189,51 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
     }
 
     return earned
+}
+
+@Composable
+fun QuickSummaryItem(
+    label: String,
+    value: String,
+    icon: ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = DarkContainer,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color(0xFF2C2C2C))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(color.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = label, 
+                color = MediumGray, 
+                fontSize = 9.sp, 
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = value, 
+                color = White, 
+                fontSize = 14.sp, 
+                fontWeight = FontWeight.Black,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
 }

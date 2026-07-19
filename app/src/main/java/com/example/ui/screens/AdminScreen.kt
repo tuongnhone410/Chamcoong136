@@ -23,14 +23,21 @@ import com.example.data.model.UserConfig
 import com.example.data.AttendanceRecord
 import com.example.ui.theme.*
 import com.example.viewmodel.AdminViewModel
+import com.example.util.ThousandSeparatorVisualTransformation
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val adminViewModel: AdminViewModel = viewModel()
     val employees by adminViewModel.employees.collectAsStateWithLifecycle()
     val isLoading by adminViewModel.isLoading.collectAsStateWithLifecycle()
@@ -45,8 +52,6 @@ fun AdminScreen(
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-
-    val context = androidx.compose.ui.platform.LocalContext.current
 
     val exportSuccessCount by adminViewModel.exportSuccessCount.collectAsStateWithLifecycle()
 
@@ -164,9 +169,9 @@ fun AdminScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Chỉ nhập vào ô muốn thay đổi cho tất cả đã chọn:", color = Color.Gray, fontSize = 12.sp)
-                    AdminInputField("Lương Cơ Bản mới", batchLcb) { batchLcb = it }
-                    AdminInputField("Phụ cấp xăng xe mới", batchPcXangXe) { batchPcXangXe = it }
-                    AdminInputField("Tiền chuyên cần mới", batchChuyenCan) { batchChuyenCan = it }
+                    AdminInputField("Lương Cơ Bản mới", batchLcb, onValueChange = { batchLcb = it }, isNumeric = true)
+                    AdminInputField("Phụ cấp xăng xe mới", batchPcXangXe, onValueChange = { batchPcXangXe = it }, isNumeric = true)
+                    AdminInputField("Tiền chuyên cần mới", batchChuyenCan, onValueChange = { batchChuyenCan = it }, isNumeric = true)
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Thêm công hàng loạt cho ngày hiện tại:", color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -290,14 +295,16 @@ fun AdminScreen(
     }
 
     if (showBatchExportDialog) {
+        var exportMonth by remember { mutableStateOf(SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())) }
+        
         AlertDialog(
             onDismissRequest = { if (!isExportingByVM) showBatchExportDialog = false },
             title = { Text("Xuất Phiếu Lương Hàng Loạt", color = White) },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (isExportingByVM) {
                         Text("Đang tổng hợp và xuất dữ liệu... ${(exportProgressByVM * 100).toInt()}%", color = White)
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { exportProgressByVM },
                             modifier = Modifier.fillMaxWidth(),
@@ -305,14 +312,22 @@ fun AdminScreen(
                             trackColor = DarkBackground
                         )
                     } else {
-                        Text("Tính năng này sẽ tổng hợp và xuất phiếu lương cho toàn bộ ${employees.size} nhân viên trong tháng hiện tại dưới dạng hình ảnh (.PNG).", color = Color.Gray)
+                        Text("Chọn tháng muốn xuất phiếu lương:", color = White, fontSize = 14.sp)
+                        OutlinedTextField(
+                            value = exportMonth,
+                            onValueChange = { exportMonth = it },
+                            label = { Text("Tháng (yyyy-MM)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                        )
+                        Text("Hệ thống sẽ tổng hợp và xuất phiếu lương cho toàn bộ ${employees.size} nhân viên dưới dạng hình ảnh (.PNG).", color = Color.Gray, fontSize = 12.sp)
+                        Text("Lưu ý: Dữ liệu được lấy từ cloud. Nếu nhân viên chưa đồng bộ, dữ liệu có thể bị thiếu.", color = AccentOrange.copy(alpha = 0.8f), fontSize = 11.sp)
                     }
                 }
             },
             confirmButton = {
                 if (!isExportingByVM) {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    Button(onClick = { adminViewModel.performBatchExport(context) }) {
+                    Button(onClick = { adminViewModel.performBatchExport(context, exportMonth) }) {
                         Text("Bắt đầu xuất")
                     }
                 }
@@ -654,52 +669,52 @@ fun EmployeeConfigEdit(
     ) {
         item {
             ConfigSection(title = "Thông tin cơ bản", icon = Icons.Default.Person) {
-                AdminInputField("Họ và Tên", name) { name = it }
-                AdminInputField("Mã Nhân Viên", msnv) { msnv = it }
-                AdminInputField("Email Đăng Ký", email) { email = it }
-                AdminInputField("Ngày Vào Làm", ngayVaoLam) { ngayVaoLam = it }
+                AdminInputField("Họ và Tên", name, onValueChange = { name = it })
+                AdminInputField("Mã Nhân Viên", msnv, onValueChange = { msnv = it })
+                AdminInputField("Email Đăng Ký", email, onValueChange = { email = it })
+                AdminInputField("Ngày Vào Làm", ngayVaoLam, onValueChange = { ngayVaoLam = it })
             }
         }
 
         item {
             ConfigSection(title = "Lương & Bảo Hiểm", icon = Icons.Default.Payments) {
-                AdminInputField("Lương Cơ Bản", lcb) { lcb = it }
-                AdminInputField("Lương Đóng BH", lbh) { lbh = it }
-                AdminInputField("Tỉ lệ đóng BH (%)", tiLeBh) { tiLeBh = it }
-                AdminInputField("Đoàn phí công đoàn (%)", dpcd) { dpcd = it }
+                AdminInputField("Lương Cơ Bản", lcb, onValueChange = { lcb = it }, isNumeric = true)
+                AdminInputField("Lương Đóng BH", lbh, onValueChange = { lbh = it }, isNumeric = true)
+                AdminInputField("Tỉ lệ đóng BH (%)", tiLeBh, onValueChange = { tiLeBh = it }, isNumeric = true)
+                AdminInputField("Đoàn phí công đoàn (%)", dpcd, onValueChange = { dpcd = it }, isNumeric = true)
             }
         }
 
         item {
             ConfigSection(title = "Hệ Số Tăng Ca", icon = Icons.Default.History) {
-                AdminInputField("Ngày thường", hsOtThuong) { hsOtThuong = it }
-                AdminInputField("Chủ nhật", hsOtChuNhat) { hsOtChuNhat = it }
-                AdminInputField("Ngày lễ", hsOtLe) { hsOtLe = it }
-                AdminInputField("OT đêm", hsOtDem) { hsOtDem = it }
+                AdminInputField("Ngày thường", hsOtThuong, onValueChange = { hsOtThuong = it }, isNumeric = true)
+                AdminInputField("Chủ nhật", hsOtChuNhat, onValueChange = { hsOtChuNhat = it }, isNumeric = true)
+                AdminInputField("Ngày lễ", hsOtLe, onValueChange = { hsOtLe = it }, isNumeric = true)
+                AdminInputField("OT đêm", hsOtDem, onValueChange = { hsOtDem = it }, isNumeric = true)
             }
         }
 
         item {
             ConfigSection(title = "Phụ Cấp", icon = Icons.Default.CardGiftcard) {
-                AdminInputField("Phụ cấp kỹ thuật", pcKyThuat) { pcKyThuat = it }
-                AdminInputField("Phụ cấp trách nhiệm", pcTrachNhiem) { pcTrachNhiem = it }
-                AdminInputField("Phụ cấp chức vụ", pcChucVu) { pcChucVu = it }
-                AdminInputField("Phụ cấp hiệu suất", pcHieuSuat) { pcHieuSuat = it }
-                AdminInputField("Phụ cấp sản phẩm", pcSanPham) { pcSanPham = it }
-                AdminInputField("Phụ cấp cơm ca", pcComCa) { pcComCa = it }
-                AdminInputField("Phụ cấp cơm OT", pcComOt) { pcComOt = it }
-                AdminInputField("Phụ cấp nhà ở", pcNhaO) { pcNhaO = it }
-                AdminInputField("Phụ cấp độc hại", pcDocHai) { pcDocHai = it }
-                AdminInputField("Phụ cấp xăng xe", pcXangXe) { pcXangXe = it }
-                AdminInputField("Phụ cấp khác", pcKhac) { pcKhac = it }
+                AdminInputField("Phụ cấp kỹ thuật", pcKyThuat, onValueChange = { pcKyThuat = it }, isNumeric = true)
+                AdminInputField("Phụ cấp trách nhiệm", pcTrachNhiem, onValueChange = { pcTrachNhiem = it }, isNumeric = true)
+                AdminInputField("Phụ cấp chức vụ", pcChucVu, onValueChange = { pcChucVu = it }, isNumeric = true)
+                AdminInputField("Phụ cấp hiệu suất", pcHieuSuat, onValueChange = { pcHieuSuat = it }, isNumeric = true)
+                AdminInputField("Phụ cấp sản phẩm", pcSanPham, onValueChange = { pcSanPham = it }, isNumeric = true)
+                AdminInputField("Phụ cấp cơm ca", pcComCa, onValueChange = { pcComCa = it }, isNumeric = true)
+                AdminInputField("Phụ cấp cơm OT", pcComOt, onValueChange = { pcComOt = it }, isNumeric = true)
+                AdminInputField("Phụ cấp nhà ở", pcNhaO, onValueChange = { pcNhaO = it }, isNumeric = true)
+                AdminInputField("Phụ cấp độc hại", pcDocHai, onValueChange = { pcDocHai = it }, isNumeric = true)
+                AdminInputField("Phụ cấp xăng xe", pcXangXe, onValueChange = { pcXangXe = it }, isNumeric = true)
+                AdminInputField("Phụ cấp khác", pcKhac, onValueChange = { pcKhac = it }, isNumeric = true)
             }
         }
 
         item {
             ConfigSection(title = "Cài đặt khác", icon = Icons.Default.Settings) {
-                AdminInputField("Tiền chuyên cần", chuyenCan) { chuyenCan = it }
-                AdminInputField("Số ngày phép năm", phepNam) { phepNam = it }
-                AdminInputField("Tiền thưởng", thuong) { thuong = it }
+                AdminInputField("Tiền chuyên cần", chuyenCan, onValueChange = { chuyenCan = it }, isNumeric = true)
+                AdminInputField("Số ngày phép năm", phepNam, onValueChange = { phepNam = it }, isNumeric = true)
+                AdminInputField("Tiền thưởng", thuong, onValueChange = { thuong = it }, isNumeric = true)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                     Checkbox(
                         checked = isAdmin,
@@ -777,12 +792,25 @@ fun formatCurrency(value: Double): String {
 }
 
 @Composable
-fun AdminInputField(label: String, value: String, onValueChange: (String) -> Unit) {
+fun AdminInputField(
+    label: String, 
+    value: String, 
+    onValueChange: (String) -> Unit,
+    isNumeric: Boolean = false
+) {
     OutlinedTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { input ->
+            if (isNumeric) {
+                onValueChange(input.replace(".", "").filter { it.isDigit() || it == '.' })
+            } else {
+                onValueChange(input)
+            }
+        },
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        keyboardOptions = if (isNumeric) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
+        visualTransformation = if (isNumeric && !label.contains("%") && !label.contains("Hệ số")) ThousandSeparatorVisualTransformation() else VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = White,
             unfocusedTextColor = White,

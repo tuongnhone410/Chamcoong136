@@ -462,35 +462,6 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                     ),
                     modifier = Modifier.testTag("nav_settings_tab")
                 )
-
-                // Item 5: Quan tri (Only for admin)
-                val userConfig by viewModel.userConfig.collectAsStateWithLifecycle()
-                val session by viewModel.currentUserSession.collectAsStateWithLifecycle()
-                val isAdmin = userConfig?.isAdmin == true || session?.email?.lowercase() == "khoatubexxx@gmail.com"
-
-                if (isAdmin) {
-                    NavigationBarItem(
-                        selected = currentTab == "admin",
-                        onClick = {
-                            currentTab = "admin"
-                            tabNavController.navigate("admin") {
-                                popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(Icons.Default.SupervisorAccount, contentDescription = "Quản trị", modifier = Modifier.size(22.dp)) },
-                        label = { Text("Quản trị", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = White,
-                            selectedTextColor = NeonBlue,
-                            indicatorColor = NeonBlue,
-                            unselectedIconColor = Color(0xFF828282),
-                            unselectedTextColor = Color(0xFF828282)
-                        ),
-                        modifier = Modifier.testTag("nav_admin_tab")
-                    )
-                }
             }
         }
     ) { innerPadding ->
@@ -509,12 +480,18 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                 PayslipScreen(viewModel = viewModel)
             }
             composable("settings") {
-                SettingsScreen(viewModel = viewModel)
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateToAdmin = {
+                        currentTab = "admin"
+                        tabNavController.navigate("admin")
+                    }
+                )
             }
             composable("admin") {
                 AdminScreen(onBack = {
-                    currentTab = "home"
-                    tabNavController.navigate("home") {
+                    currentTab = "settings"
+                    tabNavController.navigate("settings") {
                         popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true
                         restoreState = true

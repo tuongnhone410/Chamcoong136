@@ -124,8 +124,11 @@ object SalaryCalculator {
             )
         }
 
-        val rawIn = entry.checkInTime ?: return entry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
-        val rawOut = entry.checkOutTime
+        val rawInRaw = entry.checkInTime ?: return entry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
+        // Round to nearest minute to avoid sub-minute floating point variance across different days
+        val rawIn = Math.round(rawInRaw / 60000.0) * 60000L
+        val rawOutRaw = entry.checkOutTime
+        val rawOut = rawOutRaw?.let { Math.round(it / 60000.0) * 60000L }
 
         // 1. Load Shift configuration
         val shift = getShiftForEntry(entry)

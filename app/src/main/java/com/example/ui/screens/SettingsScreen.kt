@@ -62,57 +62,12 @@ import java.text.DecimalFormat
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.AnnotatedString
+import com.example.util.ThousandSeparatorVisualTransformation
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.focus.onFocusChanged
 
-class ThousandSeparatorVisualTransformation : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val originalText = text.text
-        if (originalText.isEmpty()) {
-            return TransformedText(text, OffsetMapping.Identity)
-        }
-
-        val formatted = StringBuilder()
-        val originalLen = originalText.length
-        val originalToTransformed = IntArray(originalLen + 1)
-
-        var dotCount = 0
-        for (i in 0 until originalLen) {
-            val distFromEnd = originalLen - i
-            if (i > 0 && distFromEnd % 3 == 0) {
-                formatted.append('.')
-                dotCount++
-            }
-            originalToTransformed[i] = i + dotCount
-            formatted.append(originalText[i])
-        }
-        originalToTransformed[originalLen] = originalLen + dotCount
-
-        val transformedText = formatted.toString()
-        val transformedLen = transformedText.length
-
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                val clamped = offset.coerceIn(0, originalLen)
-                return originalToTransformed[clamped]
-            }
-
-            override fun transformedToOriginal(offset: Int): Int {
-                val clamped = offset.coerceIn(0, transformedLen)
-                for (i in 0..originalLen) {
-                    if (originalToTransformed[i] >= clamped) {
-                        return i
-                    }
-                }
-                return originalLen
-            }
-        }
-
-        return TransformedText(AnnotatedString(transformedText), offsetMapping)
-    }
-}
 
 fun formatNumberWithDots(rawInput: String): String {
     val clean = rawInput.replace(".", "").filter { it.isDigit() }
@@ -155,12 +110,15 @@ fun interpretBreakHours(input: String, fallback: Double = 1.5): Triple<String, S
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    viewModel: TimeSnapViewModel
+    viewModel: TimeSnapViewModel,
+    onNavigateToAdmin: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val configState by viewModel.userConfig.collectAsStateWithLifecycle()
     val syncStatus by viewModel.cloudSyncStatus.collectAsStateWithLifecycle()
     val sessionState by viewModel.currentUserSession.collectAsStateWithLifecycle()
+
+    val isAdmin = configState?.isAdmin == true || sessionState?.email?.lowercase() == "khoatubexxx@gmail.com"
 
     var latestVersionText by remember { mutableStateOf("") }
     var downloadUrlText by remember { mutableStateOf("") }
@@ -445,6 +403,57 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             
+            if (isAdmin) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToAdmin() },
+                    color = NeonBlue.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(NeonBlue.copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Group,
+                                contentDescription = null,
+                                tint = NeonBlue,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "QUẢN TRỊ HỆ THỐNG",
+                                color = White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                text = "Quản lý nhân viên, cấu hình chung & dữ liệu",
+                                color = LightGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = NeonBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
             // CATEGORY 0: HỒ SƠ NHÂN VIÊN
             CategoryLayout(title = "HỒ SƠ CÁ NHÂN NHÂN VIÊN", icon = Icons.Default.VerifiedUser) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -154,7 +154,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun performBatchExport(context: Context) {
+    fun performBatchExport(context: Context, targetMonthStr: String? = null) {
         viewModelScope.launch {
             _isExporting.value = true
             _exportProgress.value = 0f
@@ -166,31 +166,54 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            // Target current month
+            // Target month logic
             val cal = Calendar.getInstance()
-            val monthStr = String.format(Locale.US, "%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
-            val monthLabel = SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(cal.time)
+            val finalMonthStr = targetMonthStr ?: String.format(Locale.US, "%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+            
+            val monthLabel = if (finalMonthStr.contains("-")) {
+                val parts = finalMonthStr.split("-")
+                "${parts[1]}/${parts[0]}"
+            } else {
+                finalMonthStr
+            }
 
             var successCount = 0
             allEmployees.forEachIndexed { index, employee ->
-                // 1. Fetch records for this employee for the month
-                val records = FirestoreService.getAttendanceLogsForUser(employee.userId)
-                val monthEntries = records.filter { it.dateString.startsWith(monthStr) }.map { record: AttendanceRecord -> record.toTimeEntry() }
-                
-                // 2. Calculate summary
-                val summary = ExportUtils.calculateSalarySummary(monthEntries, employee, monthStr)
-                
-                // 3. Generate and save PNG
-                val saved = ExportUtils.savePayslipAsPngImage(
-                    context = context,
-                    summary = summary,
-                    config = employee,
-                    userSession = null,
-                    monthLabel = monthLabel,
-                    selectedMonth = monthStr
-                )
-                
-                if (saved) successCount++
+                try {
+                    // 1. Fetch records for this employee for the month
+                    val records = FirestoreService.getAttendanceLogsForUser(employee.userId)
+                    
+                    // Filter records for the target month (handles yyyy-MM-dd and dd/MM/yyyy)
+                    val monthEntries = records.filter { record ->
+                        val ds = record.dateString
+                        // Match yyyy-MM (e.g. 2026-07-19 starts with 2026-07)
+                        val matchYmd = ds.startsWith(finalMonthStr)
+                        // Match dd/MM/yyyy (e.g. 19/07/2026 matches /07/2026)
+                        val matchDmy = if (finalMonthStr.contains("-")) {
+                            val parts = finalMonthStr.split("-")
+                            ds.contains("/${parts[1]}/${parts[0]}")
+                        } else false
+                        
+                        matchYmd || matchDmy
+                    }.map { it.toTimeEntry() }
+                    
+                    // 2. Calculate summary
+                    val summary = ExportUtils.calculateSalarySummary(monthEntries, employee, finalMonthStr)
+                    
+                    // 3. Generate and save PNG
+                    val saved = ExportUtils.savePayslipAsPngImage(
+                        context = context,
+                        summary = summary,
+                        config = employee,
+                        userSession = null,
+                        monthLabel = monthLabel,
+                        selectedMonth = finalMonthStr
+                    )
+                    
+                    if (saved) successCount++
+                } catch (e: Exception) {
+                    android.util.Log.e("AdminViewModel", "Export failed for ${employee.hoVaTen}: ${e.message}")
+                }
                 _exportProgress.value = (index + 1).toFloat() / allEmployees.size
             }
 
