@@ -19,16 +19,17 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    # Hạ xuống bản 8.7 chuẩn Android để không bị xung đột hệ thống
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-version: 9.3.1
+        gradle-version: 8.7
 
     # Bơm API Key vào file .env
     - name: Inject API Key
       run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
-    # Ép chế độ không màn hình (headless) và tắt config cache để KSP không bị nổ dữ liệu
+    # Ép chế độ headless né lỗi đồ họa cũ và tắt config cache
     - name: Build Debug APK
       env:
         GRADLE_OPTS: -Djava.awt.headless=true
