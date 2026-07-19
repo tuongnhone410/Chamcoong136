@@ -195,19 +195,42 @@ object FirestoreService {
 
     suspend fun getAllUserConfigs(): List<com.example.data.model.UserConfig> {
         val firestore = getDb() ?: return emptyList()
-        return try {
-            // Collection group query to find all 'settings' documents in any 'salary_config' subcollection
+        val allConfigs = mutableListOf<com.example.data.model.UserConfig>()
+        val processedIds = mutableSetOf<String>()
+
+        try {
+            // 1. Try New Structure: Collection group query for 'salary_config'
             val snapshot = firestore.collectionGroup("salary_config")
                 .get()
                 .awaitTaskFirestore()
-            snapshot?.documents?.mapNotNull { doc ->
-                val userId = doc.reference.parent.parent?.id ?: return@mapNotNull null
-                doc.toUserSalaryConfig(userId)
-            } ?: emptyList()
+            
+            snapshot?.documents?.forEach { doc ->
+                val userId = doc.reference.parent.parent?.id ?: return@forEach
+                if (!processedIds.contains(userId)) {
+                    val config = doc.toUserSalaryConfig(userId)
+                    allConfigs.add(config)
+                    processedIds.add(userId)
+                }
+            }
+
+            // 2. Try Old Structure: 'users_salary' collection
+            val oldSnapshot = firestore.collection("users_salary")
+                .get()
+                .awaitTaskFirestore()
+            
+            oldSnapshot?.documents?.forEach { doc ->
+                val userId = doc.id
+                if (!processedIds.contains(userId)) {
+                    val config = doc.toUserSalaryConfig(userId)
+                    allConfigs.add(config)
+                    processedIds.add(userId)
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching all user configs: ${e.message}")
-            emptyList()
         }
+        
+        return allConfigs
     }
 
     suspend fun getAttendanceLogsForUser(uid: String): List<AttendanceRecord> {
@@ -615,39 +638,54 @@ object FirestoreService {
 }
 
 fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.UserConfig {
+    val pcKyThuatVal = getDouble("pcKyThuat") ?: getDouble("phu_cap_ky_thuat") ?: 0.0
+    val pcTrachNhiemVal = getDouble("pcTrachNhiem") ?: getDouble("phu_cap_trach_nhiem") ?: 0.0
+    val pcChucVuVal = getDouble("pcChucVu") ?: getDouble("phu_cap_chuc_vu") ?: 0.0
+    val pcHieuSuatVal = getDouble("pcHieuSuat") ?: getDouble("phu_cap_hieu_suat") ?: 0.0
+    val pcSanPhamVal = getDouble("pcSanPham") ?: getDouble("phu_cap_san_pham") ?: 0.0
+    val pcComCaVal = getDouble("pcComCa") ?: getDouble("phu_cap_com_ca") ?: 0.0
+    val pcComOtVal = getDouble("pcComOt") ?: getDouble("phu_cap_com_ot") ?: 0.0
+    val pcNhaOVal = getDouble("pcNhaO") ?: getDouble("phu_cap_nha_o") ?: 0.0
+    val pcDocHaiVal = getDouble("pcDocHai") ?: getDouble("phu_cap_doc_hai") ?: 0.0
+    val pcDtDoanhThuVal = getDouble("pcDtDoanhThu") ?: getDouble("phu_cap_dien_thoai") ?: 0.0
+    val pcXangXeVal = getDouble("pcXangXe") ?: getDouble("phu_cap_xang_xe") ?: 0.0
+    val pcThamNienVal = getDouble("pcThamNien") ?: getDouble("phu_cap_tham_nien") ?: 0.0
+    val pcKhac1Val = getDouble("pcKhac1") ?: 0.0
+    val pcKhacVal = getDouble("pcKhac") ?: getDouble("phu_cap_khac") ?: 0.0
+
     return com.example.data.model.UserConfig(
         userId = userId,
-        luongCoBan = getDouble("luongCoBan") ?: 0.0,
-        luongDongBaoHiem = getDouble("luongDongBaoHiem") ?: 0.0,
-        tiLeDongBaoHiem = getDouble("tiLeDongBaoHiem") ?: 10.5,
-        ngayChotLuong = getLong("ngayChotLuong")?.toInt() ?: 1,
-        doanPhiCongDoan = getDouble("doanPhiCongDoan") ?: 0.0,
-        heSoOtNgayThuong = getDouble("heSoOtNgayThuong") ?: 1.5,
-        heSoOtChuNhat = getDouble("heSoOtChuNhat") ?: 2.0,
-        heSoOtNgayLe = getDouble("heSoOtNgayLe") ?: 3.0,
-        tienChuyenCanGoc = getDouble("tienChuyenCanGoc") ?: 0.0,
-        soNgayPhepNam = getLong("soNgayPhepNam")?.toInt() ?: 0,
+        luongCoBan = getDouble("luongCoBan") ?: getDouble("luong_co_ban") ?: 0.0,
+        luongDongBaoHiem = getDouble("luongDongBaoHiem") ?: getDouble("luong_bao_hiem") ?: 0.0,
+        tiLeDongBaoHiem = getDouble("tiLeDongBaoHiem") ?: getDouble("tile_bao_hiem") ?: 10.5,
+        ngayChotLuong = getLong("ngayChotLuong")?.toInt() ?: getLong("ngay_chot_luong")?.toInt() ?: 1,
+        doanPhiCongDoan = getDouble("doanPhiCongDoan") ?: getDouble("doan_phi_40k") ?: 0.0,
+        heSoOtNgayThuong = getDouble("heSoOtNgayThuong") ?: getDouble("he_so_ot_normal") ?: 1.5,
+        heSoOtChuNhat = getDouble("heSoOtChuNhat") ?: getDouble("he_so_ot_sunday") ?: 2.0,
+        heSoOtNgayLe = getDouble("heSoOtNgayLe") ?: getDouble("he_so_ot_holiday") ?: 3.0,
+        tienChuyenCanGoc = getDouble("tienChuyenCanGoc") ?: getDouble("tien_chuyen_can") ?: 0.0,
+        soNgayPhepNam = getLong("soNgayPhepNam")?.toInt() ?: getLong("so_ngay_nghi_phep")?.toInt() ?: 0,
         phepNamConLai = getLong("phepNamConLai")?.toInt() ?: 0,
-        lastAccumulatedMonth = getString("lastAccumulatedMonth") ?: "",
-        pcKyThuat = getDouble("pcKyThuat") ?: 0.0,
-        pcTrachNhiem = getDouble("pcTrachNhiem") ?: 0.0,
-        pcChucVu = getDouble("pcChucVu") ?: 0.0,
-        pcHieuSuat = getDouble("pcHieuSuat") ?: 0.0,
-        pcSanPham = getDouble("pcSanPham") ?: 0.0,
-        pcComCa = getDouble("pcComCa") ?: 0.0,
-        pcComOt = getDouble("pcComOt") ?: 0.0,
-        pcNhaO = getDouble("pcNhaO") ?: 0.0,
-        pcDocHai = getDouble("pcDocHai") ?: 0.0,
-        pcDtDoanhThu = getDouble("pcDtDoanhThu") ?: 0.0,
-        pcXangXe = getDouble("pcXangXe") ?: 0.0,
-        pcThamNien = getDouble("pcThamNien") ?: 0.0,
-        pcKhac1 = getDouble("pcKhac1") ?: 0.0,
-        pcKhac = getDouble("pcKhac") ?: 0.0,
+        lastAccumulatedMonth = getString("lastAccumulatedMonth") ?: getString("last_accumulated_month") ?: "",
+        pcKyThuat = pcKyThuatVal,
+        pcTrachNhiem = pcTrachNhiemVal,
+        pcChucVu = pcChucVuVal,
+        pcHieuSuat = pcHieuSuatVal,
+        pcSanPham = pcSanPhamVal,
+        pcComCa = pcComCaVal,
+        pcComOt = pcComOtVal,
+        pcNhaO = pcNhaOVal,
+        pcDocHai = pcDocHaiVal,
+        pcDtDoanhThu = pcDtDoanhThuVal,
+        pcXangXe = pcXangXeVal,
+        pcThamNien = pcThamNienVal,
+        pcKhac1 = pcKhac1Val,
+        pcKhac = pcKhacVal,
         allowanceCalcTypes = getString("allowanceCalcTypes") ?: "",
         soGioNghiGiaiLao = getDouble("soGioNghiGiaiLao") ?: 1.5,
         tinhKhauTruNghi = getBoolean("tinhKhauTruNghi") ?: false,
-        hoVaTen = getString("hoVaTen") ?: "User Demo",
-        maNhanVien = getString("maNhanVien") ?: "demo_${userId.takeLast(6)}",
+        hoVaTen = getString("hoVaTen") ?: getString("fullName") ?: "User Demo",
+        maNhanVien = getString("maNhanVien") ?: getString("maNhanVien") ?: "demo_${userId.takeLast(6)}",
         emailDangKy = getString("emailDangKy") ?: "",
         ngayVaoLam = getString("ngayVaoLam") ?: "",
         tienComMoiNgay = getDouble("tienComMoiNgay") ?: 50000.0,
@@ -657,8 +695,8 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         phuCapNhaO = getDouble("phuCapNhaO") ?: 1000000.0,
         phuCapChuyenCan = getDouble("phuCapChuyenCan") ?: 500000.0,
         thuong = getDouble("thuong") ?: 800000.0,
-        heSoOtDem = getDouble("heSoOtDem") ?: 1.75,
-        caDemStart = getString("caDemStart") ?: "22:00",
+        heSoOtDem = getDouble("heSoOtDem") ?: getDouble("he_so_ot_dem") ?: 1.75,
+        caDemStart = getString("caDemStart") ?: getString("thoi_gian_ca_dem") ?: "22:00",
         caDemEnd = getString("caDemEnd") ?: "06:00",
         isAdmin = getBoolean("isAdmin") ?: false
     )
@@ -682,45 +720,45 @@ data class PublishedVersionResult(
 fun DocumentSnapshot.toUserConfig(uid: String): UserConfig {
     return UserConfig(
         uid = uid,
-        fullName = getString("fullName") ?: "Nhân viên mới",
-        hourlyRate = getDouble("hourlyRate") ?: 50000.0,
+        fullName = getString("fullName") ?: getString("hoVaTen") ?: "Nhân viên mới",
+        hourlyRate = getDouble("hourlyRate") ?: ( (getDouble("luongCoBan") ?: getDouble("luong_co_ban") ?: 6000000.0) / 26.0 / 8.0 ),
         currency = getString("currency") ?: "đ",
         dailyTargetHours = getDouble("dailyTargetHours") ?: 8.0,
-        he_so_ot_dem = getDouble("he_so_ot_dem") ?: 1.75,
-        thoi_gian_ca_dem = getString("thoi_gian_ca_dem") ?: "22:00",
+        he_so_ot_dem = getDouble("he_so_ot_dem") ?: getDouble("heSoOtDem") ?: 1.75,
+        thoi_gian_ca_dem = getString("thoi_gian_ca_dem") ?: getString("caDemStart") ?: "22:00",
         
-        luong_co_ban = getDouble("luong_co_ban") ?: 6000000.0,
-        luong_bao_hiem = getDouble("luong_bao_hiem") ?: 5000000.0,
-        tile_bao_hiem = getDouble("tile_bao_hiem") ?: 10.5,
-        doan_phi_40k = getDouble("doan_phi_40k") ?: 40000.0,
-        ngay_chot_luong = getLong("ngay_chot_luong")?.toInt() ?: 25,
+        luong_co_ban = getDouble("luong_co_ban") ?: getDouble("luongCoBan") ?: 6000000.0,
+        luong_bao_hiem = getDouble("luong_bao_hiem") ?: getDouble("luongDongBaoHiem") ?: 5000000.0,
+        tile_bao_hiem = getDouble("tile_bao_hiem") ?: getDouble("tiLeDongBaoHiem") ?: 10.5,
+        doan_phi_40k = getDouble("doan_phi_40k") ?: getDouble("doanPhiCongDoan") ?: 40000.0,
+        ngay_chot_luong = getLong("ngay_chot_luong")?.toInt() ?: getLong("ngayChotLuong")?.toInt() ?: 25,
         
-        he_so_ot_normal = getDouble("he_so_ot_normal") ?: 1.5,
-        he_so_ot_sunday = getDouble("he_so_ot_sunday") ?: 2.0,
-        he_so_ot_holiday = getDouble("he_so_ot_holiday") ?: 3.0,
+        he_so_ot_normal = getDouble("he_so_ot_normal") ?: getDouble("heSoOtNgayThuong") ?: 1.5,
+        he_so_ot_sunday = getDouble("he_so_ot_sunday") ?: getDouble("heSoOtChuNhat") ?: 2.0,
+        he_so_ot_holiday = getDouble("he_so_ot_holiday") ?: getDouble("heSoOtNgayLe") ?: 3.0,
         
-        tien_chuyen_can = getDouble("tien_chuyen_can") ?: 500000.0,
-        so_ngay_nghi_phep = getLong("so_ngay_nghi_phep")?.toInt() ?: 12,
+        tien_chuyen_can = getDouble("tien_chuyen_can") ?: getDouble("tienChuyenCanGoc") ?: 500000.0,
+        so_ngay_nghi_phep = getLong("so_ngay_nghi_phep")?.toInt() ?: getLong("soNgayPhepNam")?.toInt() ?: 12,
         
-        phu_cap_ky_thuat = getDouble("phu_cap_ky_thuat") ?: 0.0,
-        phu_cap_trach_nhiem = getDouble("phu_cap_trach_nhiem") ?: 0.0,
-        phu_cap_chuc_vu = getDouble("phu_cap_chuc_vu") ?: 0.0,
-        phu_cap_hieu_suat = getDouble("phu_cap_hieu_suat") ?: 0.0,
-        phu_cap_san_pham = getDouble("phu_cap_san_pham") ?: 0.0,
-        phu_cap_com_ca = getDouble("phu_cap_com_ca") ?: 30000.0,
-        phu_cap_com_ot = getDouble("phu_cap_com_ot") ?: 15000.0,
-        phu_cap_tham_nien = getDouble("phu_cap_tham_nien") ?: 0.0,
-        phu_cap_nha_o = getDouble("phu_cap_nha_o") ?: 0.0,
-        phu_cap_doc_hai = getDouble("phu_cap_doc_hai") ?: 0.0,
-        phu_cap_dien_thoai = getDouble("phu_cap_dien_thoai") ?: 0.0,
-        phu_cap_xang_xe = getDouble("phu_cap_xang_xe") ?: 0.0,
-        phu_cap_khac = getDouble("phu_cap_khac") ?: 0.0,
+        phu_cap_ky_thuat = getDouble("phu_cap_ky_thuat") ?: getDouble("pcKyThuat") ?: 0.0,
+        phu_cap_trach_nhiem = getDouble("phu_cap_trach_nhiem") ?: getDouble("pcTrachNhiem") ?: 0.0,
+        phu_cap_chuc_vu = getDouble("phu_cap_chuc_vu") ?: getDouble("pcChucVu") ?: 0.0,
+        phu_cap_hieu_suat = getDouble("phu_cap_hieu_suat") ?: getDouble("pcHieuSuat") ?: 0.0,
+        phu_cap_san_pham = getDouble("phu_cap_san_pham") ?: getDouble("pcSanPham") ?: 0.0,
+        phu_cap_com_ca = getDouble("phu_cap_com_ca") ?: getDouble("pcComCa") ?: 30000.0,
+        phu_cap_com_ot = getDouble("phu_cap_com_ot") ?: getDouble("pcComOt") ?: 15000.0,
+        phu_cap_tham_nien = getDouble("phu_cap_tham_nien") ?: getDouble("pcThamNien") ?: 0.0,
+        phu_cap_nha_o = getDouble("phu_cap_nha_o") ?: getDouble("pcNhaO") ?: 0.0,
+        phu_cap_doc_hai = getDouble("phu_cap_doc_hai") ?: getDouble("pcDocHai") ?: 0.0,
+        phu_cap_dien_thoai = getDouble("phu_cap_dien_thoai") ?: getDouble("pcDtDoanhThu") ?: 0.0,
+        phu_cap_xang_xe = getDouble("phu_cap_xang_xe") ?: getDouble("pcXangXe") ?: 0.0,
+        phu_cap_khac = getDouble("phu_cap_khac") ?: getDouble("pcKhac") ?: 0.0,
         
         phu_cap = getDouble("phu_cap") ?: 500000.0,
         thuong = getDouble("thuong") ?: 200000.0,
-        tien_khau_tru_nghi = getDouble("tien_khau_tru_nghi") ?: 0.0,
+        tien_khau_tru_nghi = getDouble("tien_khau_tru_nghi") ?: getBoolean("tinhKhauTruNghi")?.let { if (it) 1.0 else 0.0 } ?: 0.0,
         tong_tien_com = getDouble("tong_tien_com") ?: 600000.0,
-        last_accumulated_month = getLong("last_accumulated_month")?.toInt() ?: -1
+        last_accumulated_month = getLong("last_accumulated_month")?.toInt() ?: getString("lastAccumulatedMonth")?.hashCode() ?: -1
     )
 }
 

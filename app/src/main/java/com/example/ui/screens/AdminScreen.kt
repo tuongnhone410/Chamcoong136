@@ -655,66 +655,29 @@ fun EmployeeConfigEdit(
     var pcNhaO by remember { mutableStateOf(formatCurrency(employee.pcNhaO)) }
     var pcDocHai by remember { mutableStateOf(formatCurrency(employee.pcDocHai)) }
     var pcXangXe by remember { mutableStateOf(formatCurrency(employee.pcXangXe)) }
+    var pcThamNien by remember { mutableStateOf(formatCurrency(employee.pcThamNien)) }
+    var pcDtDoanhThu by remember { mutableStateOf(formatCurrency(employee.pcDtDoanhThu)) }
     var pcKhac by remember { mutableStateOf(formatCurrency(employee.pcKhac)) }
 
     // Others
     var chuyenCan by remember { mutableStateOf(formatCurrency(employee.tienChuyenCanGoc)) }
     var phepNam by remember { mutableStateOf(employee.soNgayPhepNam.toString()) }
     var thuong by remember { mutableStateOf(formatCurrency(employee.thuong)) }
+    var breakHours by remember { mutableStateOf(employee.soGioNghiGiaiLao.toString()) }
+    var tinhKhauTru by remember { mutableStateOf(employee.tinhKhauTruNghi) }
     var isAdmin by remember { mutableStateOf(employee.isAdmin) }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp), 
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), 
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp)
     ) {
         item {
-            ConfigSection(title = "Thông tin cơ bản", icon = Icons.Default.Person) {
+            ConfigSection(title = "Thông tin nhân sự", icon = Icons.Default.Badge) {
                 AdminInputField("Họ và Tên", name, onValueChange = { name = it })
                 AdminInputField("Mã Nhân Viên", msnv, onValueChange = { msnv = it })
                 AdminInputField("Email Đăng Ký", email, onValueChange = { email = it })
                 AdminInputField("Ngày Vào Làm", ngayVaoLam, onValueChange = { ngayVaoLam = it })
-            }
-        }
-
-        item {
-            ConfigSection(title = "Lương & Bảo Hiểm", icon = Icons.Default.Payments) {
-                AdminInputField("Lương Cơ Bản", lcb, onValueChange = { lcb = it }, isNumeric = true)
-                AdminInputField("Lương Đóng BH", lbh, onValueChange = { lbh = it }, isNumeric = true)
-                AdminInputField("Tỉ lệ đóng BH (%)", tiLeBh, onValueChange = { tiLeBh = it }, isNumeric = true)
-                AdminInputField("Đoàn phí công đoàn (%)", dpcd, onValueChange = { dpcd = it }, isNumeric = true)
-            }
-        }
-
-        item {
-            ConfigSection(title = "Hệ Số Tăng Ca", icon = Icons.Default.History) {
-                AdminInputField("Ngày thường", hsOtThuong, onValueChange = { hsOtThuong = it }, isNumeric = true)
-                AdminInputField("Chủ nhật", hsOtChuNhat, onValueChange = { hsOtChuNhat = it }, isNumeric = true)
-                AdminInputField("Ngày lễ", hsOtLe, onValueChange = { hsOtLe = it }, isNumeric = true)
-                AdminInputField("OT đêm", hsOtDem, onValueChange = { hsOtDem = it }, isNumeric = true)
-            }
-        }
-
-        item {
-            ConfigSection(title = "Phụ Cấp", icon = Icons.Default.CardGiftcard) {
-                AdminInputField("Phụ cấp kỹ thuật", pcKyThuat, onValueChange = { pcKyThuat = it }, isNumeric = true)
-                AdminInputField("Phụ cấp trách nhiệm", pcTrachNhiem, onValueChange = { pcTrachNhiem = it }, isNumeric = true)
-                AdminInputField("Phụ cấp chức vụ", pcChucVu, onValueChange = { pcChucVu = it }, isNumeric = true)
-                AdminInputField("Phụ cấp hiệu suất", pcHieuSuat, onValueChange = { pcHieuSuat = it }, isNumeric = true)
-                AdminInputField("Phụ cấp sản phẩm", pcSanPham, onValueChange = { pcSanPham = it }, isNumeric = true)
-                AdminInputField("Phụ cấp cơm ca", pcComCa, onValueChange = { pcComCa = it }, isNumeric = true)
-                AdminInputField("Phụ cấp cơm OT", pcComOt, onValueChange = { pcComOt = it }, isNumeric = true)
-                AdminInputField("Phụ cấp nhà ở", pcNhaO, onValueChange = { pcNhaO = it }, isNumeric = true)
-                AdminInputField("Phụ cấp độc hại", pcDocHai, onValueChange = { pcDocHai = it }, isNumeric = true)
-                AdminInputField("Phụ cấp xăng xe", pcXangXe, onValueChange = { pcXangXe = it }, isNumeric = true)
-                AdminInputField("Phụ cấp khác", pcKhac, onValueChange = { pcKhac = it }, isNumeric = true)
-            }
-        }
-
-        item {
-            ConfigSection(title = "Cài đặt khác", icon = Icons.Default.Settings) {
-                AdminInputField("Tiền chuyên cần", chuyenCan, onValueChange = { chuyenCan = it }, isNumeric = true)
-                AdminInputField("Số ngày phép năm", phepNam, onValueChange = { phepNam = it }, isNumeric = true)
-                AdminInputField("Tiền thưởng", thuong, onValueChange = { thuong = it }, isNumeric = true)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                     Checkbox(
                         checked = isAdmin,
@@ -722,6 +685,72 @@ fun EmployeeConfigEdit(
                         colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
                     )
                     Text("Quyền Quản Trị (Admin)", color = White, fontSize = 14.sp)
+                }
+            }
+        }
+
+        item {
+            ConfigSection(title = "Cấu hình lương & Bảo hiểm", icon = Icons.Default.AccountBalanceWallet) {
+                AdminInputField("Lương Cơ Bản", lcb, onValueChange = { lcb = it }, isNumeric = true)
+                AdminInputField("Lương Đóng BH", lbh, onValueChange = { lbh = it }, isNumeric = true)
+                AdminInputField("Tỉ lệ đóng BH (%)", tiLeBh, onValueChange = { tiLeBh = it }, isNumeric = true)
+                AdminInputField("Đoàn phí công đoàn", dpcd, onValueChange = { dpcd = it }, isNumeric = true)
+            }
+        }
+
+        item {
+            ConfigSection(title = "Hệ số tăng ca", icon = Icons.Default.TrendingUp) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("Ngày thường", hsOtThuong, onValueChange = { hsOtThuong = it }, isNumeric = true)
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("Chủ nhật", hsOtChuNhat, onValueChange = { hsOtChuNhat = it }, isNumeric = true)
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("Ngày lễ", hsOtLe, onValueChange = { hsOtLe = it }, isNumeric = true)
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("OT đêm", hsOtDem, onValueChange = { hsOtDem = it }, isNumeric = true)
+                    }
+                }
+            }
+        }
+
+        item {
+            ConfigSection(title = "Các khoản phụ cấp", icon = Icons.Default.LocalActivity) {
+                AdminInputField("Phụ cấp kỹ thuật", pcKyThuat, onValueChange = { pcKyThuat = it }, isNumeric = true)
+                AdminInputField("Phụ cấp trách nhiệm", pcTrachNhiem, onValueChange = { pcTrachNhiem = it }, isNumeric = true)
+                AdminInputField("Phụ cấp chức vụ", pcChucVu, onValueChange = { pcChucVu = it }, isNumeric = true)
+                AdminInputField("Phụ cấp hiệu suất", pcHieuSuat, onValueChange = { pcHieuSuat = it }, isNumeric = true)
+                AdminInputField("Phụ cấp sản phẩm", pcSanPham, onValueChange = { pcSanPham = it }, isNumeric = true)
+                AdminInputField("Phụ cấp cơm ca", pcComCa, onValueChange = { pcComCa = it }, isNumeric = true)
+                AdminInputField("Phụ cấp cơm OT", pcComOt, onValueChange = { pcComOt = it }, isNumeric = true)
+                AdminInputField("Phụ cấp thâm niên", pcThamNien, onValueChange = { pcThamNien = it }, isNumeric = true)
+                AdminInputField("Phụ cấp nhà ở", pcNhaO, onValueChange = { pcNhaO = it }, isNumeric = true)
+                AdminInputField("Phụ cấp độc hại", pcDocHai, onValueChange = { pcDocHai = it }, isNumeric = true)
+                AdminInputField("Phụ cấp điện thoại", pcDtDoanhThu, onValueChange = { pcDtDoanhThu = it }, isNumeric = true)
+                AdminInputField("Phụ cấp xăng xe", pcXangXe, onValueChange = { pcXangXe = it }, isNumeric = true)
+                AdminInputField("Phụ cấp khác", pcKhac, onValueChange = { pcKhac = it }, isNumeric = true)
+            }
+        }
+
+        item {
+            ConfigSection(title = "Cài đặt & Chế độ khác", icon = Icons.Default.AutoFixHigh) {
+                AdminInputField("Tiền chuyên cần", chuyenCan, onValueChange = { chuyenCan = it }, isNumeric = true)
+                AdminInputField("Số ngày phép năm", phepNam, onValueChange = { phepNam = it }, isNumeric = true)
+                AdminInputField("Tiền thưởng tháng", thuong, onValueChange = { thuong = it }, isNumeric = true)
+                AdminInputField("Số giờ nghỉ giải lao", breakHours, onValueChange = { breakHours = it }, isNumeric = true)
+                
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    Checkbox(
+                        checked = tinhKhauTru,
+                        onCheckedChange = { tinhKhauTru = it },
+                        colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                    )
+                    Text("Khấu trừ giờ nghỉ vào OT", color = White, fontSize = 14.sp)
                 }
             }
         }
@@ -751,38 +780,41 @@ fun EmployeeConfigEdit(
                         pcComOt = pcComOt.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcNhaO = pcNhaO.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcDocHai = pcDocHai.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        pcThamNien = pcThamNien.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcKhac = pcKhac.replace(".", "").toDoubleOrNull() ?: 0.0,
                         tienChuyenCanGoc = chuyenCan.replace(".", "").toDoubleOrNull() ?: 0.0,
                         soNgayPhepNam = phepNam.toIntOrNull() ?: 12,
                         thuong = thuong.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        soGioNghiGiaiLao = breakHours.toDoubleOrNull() ?: 1.5,
+                        tinhKhauTruNghi = tinhKhauTru,
                         isAdmin = isAdmin
                     ))
                 },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
             ) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Lưu tất cả thay đổi", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.CloudUpload, contentDescription = null)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("LƯU CẤU HÌNH", fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
             }
         }
 
         item {
             OutlinedButton(
                 onClick = onDelete,
-                modifier = Modifier.fillMaxWidth().height(52.dp).padding(bottom = 8.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentOrange),
-                border = androidx.compose.foundation.BorderStroke(1.dp, AccentOrange)
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, AccentOrange)
             ) {
-                Icon(Icons.Default.Delete, contentDescription = null)
+                Icon(Icons.Default.PersonRemove, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Xóa nhân viên này")
+                Text("XÓA NHÂN VIÊN", fontWeight = FontWeight.Bold)
             }
         }
-        
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 }
@@ -798,25 +830,40 @@ fun AdminInputField(
     onValueChange: (String) -> Unit,
     isNumeric: Boolean = false
 ) {
+    val isDecimal = label.contains("Hệ số") || label.contains("%") || label.contains("giờ")
+    
     OutlinedTextField(
         value = value,
         onValueChange = { input ->
             if (isNumeric) {
-                onValueChange(input.replace(".", "").filter { it.isDigit() || it == '.' })
+                // If it's a number field, we filter non-digits but allow one dot if it's decimal
+                val filtered = if (isDecimal) {
+                    input.replace(",", ".").filter { it.isDigit() || it == '.' }
+                } else {
+                    input.filter { it.isDigit() }
+                }
+                onValueChange(filtered)
             } else {
                 onValueChange(input)
             }
         },
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        keyboardOptions = if (isNumeric) KeyboardOptions(keyboardType = KeyboardType.Decimal) else KeyboardOptions.Default,
-        visualTransformation = if (isNumeric && !label.contains("%") && !label.contains("Hệ số")) ThousandSeparatorVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (isNumeric) {
+                if (isDecimal) KeyboardType.Decimal else KeyboardType.Number
+            } else KeyboardType.Text
+        ),
+        visualTransformation = if (isNumeric && !isDecimal) ThousandSeparatorVisualTransformation() else VisualTransformation.None,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = White,
             unfocusedTextColor = White,
             focusedLabelColor = NeonBlue,
             unfocusedLabelColor = Color.Gray,
-            focusedBorderColor = NeonBlue
+            focusedBorderColor = NeonBlue,
+            unfocusedBorderColor = DarkContainer,
+            focusedContainerColor = DarkContainer.copy(alpha = 0.3f),
+            unfocusedContainerColor = DarkContainer.copy(alpha = 0.3f)
         )
     )
 }

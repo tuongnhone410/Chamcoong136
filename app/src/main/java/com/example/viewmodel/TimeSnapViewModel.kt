@@ -3,6 +3,7 @@ package com.example.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.glance.appwidget.updateAll
 import com.example.auth.AuthController
 import com.example.auth.UserSession
 import com.example.data.db.AppDatabase
@@ -303,9 +304,14 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 repository.insertOrUpdate(calculated)
             }
             triggerSync()
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    com.example.widget.TimeSnapWidget().updateAll(getApplication())
+                } catch (e: Exception) {}
+            }
         }
     }
-
+    
     fun updateActiveEntryNote(note: String) {
         val session = currentUserSession.value ?: return
         viewModelScope.launch(Dispatchers.IO) {

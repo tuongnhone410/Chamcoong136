@@ -109,8 +109,21 @@ object ExportUtils {
         val isCurrentSelectedMonth = (targetYear == currentYear && targetMonth == currentMonth)
         val todayStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, todayDayOfMonth)
 
-        val expectedWorkDaysCount = 26
-        val standardWorkDaysInMonth = 26
+        val calMo = Calendar.getInstance().apply {
+            set(Calendar.YEAR, targetYear)
+            set(Calendar.MONTH, targetMonth - 1)
+        }
+        val maxDays = calMo.getActualMaximum(Calendar.DAY_OF_MONTH)
+        var nonSundays = 0
+        for (d in 1..maxDays) {
+            calMo.set(Calendar.DAY_OF_MONTH, d)
+            if (calMo.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                nonSundays++
+            }
+        }
+
+        val expectedWorkDaysCount = nonSundays
+        val standardWorkDaysInMonth = nonSundays
         val dailySalary = luongBasic / 26.0
         val hourlySalary = dailySalary / 8.0
 
@@ -194,7 +207,7 @@ object ExportUtils {
                 nightShiftsCount++
             }
 
-            val isSunday = (e.dayType == "SUNDAY" || isSundayDate(e.date))
+            val isSunday = (e.dayType == "SUNDAY" || com.example.data.SalaryCalculator.isSunday(e.date))
 
             if (e.isWorking) {
                 if (isSunday) {
@@ -211,8 +224,8 @@ object ExportUtils {
 
             if (e.checkOutTime == null) continue
 
-            val finalCheckIn = SalaryCalculator.getRoundedTime(e.checkInTime, true)
-            val finalCheckOut = SalaryCalculator.getRoundedTime(e.checkOutTime, false)
+            val finalCheckIn = e.checkInTime
+            val finalCheckOut = e.checkOutTime
 
             val durationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
             val rawHours = durationMs / 3600000.0
@@ -224,25 +237,23 @@ object ExportUtils {
             val finalStandardHours = actualHours.coerceAtMost(8.0)
             val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
 
+            // Meal OT Count: >= 10h total (including 8h shift + 2h OT) OR >= 2h OT
+            if (actualHours >= 10.0 || finalOtHours >= 2.0) {
+                comOtDaysCount++
+            }
+
             if (isSunday) {
                 actualPresenceDaysCount++
                 totalSundayHours += actualHours
                 val dayPay = actualHours * hourlySalary * config.heSoOtChuNhat
                 sundayPay += dayPay
-                if (finalOtHours >= 2.0) {
-                    comOtDaysCount++
-                }
             } else {
                 workingDaysCount++
                 actualPresenceDaysCount++
                 totalStandardHours += finalStandardHours
 
-                if (finalOtHours >= 2.0) {
-                    comOtDaysCount++
-                }
-
                 if (finalOtHours > 0.0) {
-                    if (e.dayType == "HOLIDAY") {
+                    if (e.dayType == "HOLIDAY" || com.example.data.SalaryCalculator.isHoliday(e.date)) {
                         totalOtLeHours += finalOtHours
                         otLePay += finalOtHours * (hourlySalary * config.heSoOtNgayLe)
                     } else {
@@ -593,7 +604,7 @@ object ExportUtils {
         if (summary.tienOtNgay > 0.0) drawRow("Tăng ca 1.5 (${df.format(summary.otDayHours)}h)", "+${fmt.format(summary.tienOtNgay)}đ", paintGreen)
         if (summary.tienChuNhat > 0.0) drawRow("Tăng ca chủ nhật (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
         if (summary.tienOtLe > 0.0) drawRow("Tăng ca ngày lễ (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
-        if (summary.tienOtDem > 0.0) drawRow("Tăng ca đêm (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
+        if (summary.tienOtDem > 0.0) drawRow("OTĐ 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
         
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
         if (config.pcXangXe > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(config.pcXangXe)}đ", paintGreen)

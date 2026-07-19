@@ -306,7 +306,6 @@ object SalaryCalculator {
         var otLePay = 0.0
         var otNightPay = 0.0
         var sundayPay = 0.0
-        var comOtDaysCount = 0
         var nightShiftsCount = 0
 
         val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
@@ -366,12 +365,6 @@ object SalaryCalculator {
                 val actualHours = (workedHrs - eBreakHours).coerceAtLeast(0.0)
                 totalSundayHours += actualHours
                 sundayPay += actualHours * hourlySalary * config.heSoOtChuNhat
-
-                // Com OT threshold is >= 10h real duration
-                val workedDurationHrs = (e.rawCheckOut!! - e.rawCheckIn!!) / 3600000.0
-                if (workedDurationHrs >= 10.0) {
-                    comOtDaysCount++
-                }
             } else {
                 totalWorkDays += e.workDay
                 actualPresenceDaysCount++
@@ -380,11 +373,6 @@ object SalaryCalculator {
                 val actualHours = (workedHrs - eBreakHours).coerceAtLeast(0.0)
                 val finalStandardHours = actualHours.coerceAtMost(8.0)
                 totalStandardHours += finalStandardHours
-
-                val workedDurationHrs = (e.rawCheckOut!! - e.rawCheckIn!!) / 3600000.0
-                if (workedDurationHrs >= 10.0) {
-                    comOtDaysCount++
-                }
 
                 val finalOtHours = e.otHours
                 if (finalOtHours > 0.0) {
@@ -412,10 +400,17 @@ object SalaryCalculator {
             }
             if (e.rawCheckIn == null) continue
 
+            // comCaCount: Full shift (workDay >= 1.0)
             if (e.workDay >= 1.0) {
                 comCaCount++
             }
-            if (e.otHours >= 2.0) {
+            
+            // comOtCount: Either worked >= 10h total OR has >= 2h calculated OT
+            val workedDurationHrs = if (e.rawCheckOut != null) {
+                (e.rawCheckOut - e.rawCheckIn) / 3600000.0
+            } else 0.0
+            
+            if (workedDurationHrs >= 10.0 || e.otHours >= 2.0) {
                 comOtCount++
             }
         }

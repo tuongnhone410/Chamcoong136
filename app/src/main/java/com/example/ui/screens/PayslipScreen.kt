@@ -520,8 +520,7 @@ fun PayslipScreen(
                         } else {
                             PayslipProfileRow(
                                 label = "Số ngày chấm công:", 
-                                value = "${s.workingDays} / ${if (s.isCurrentMonth) s.expectedWorkDays else s.standardWorkDays} ngày" + 
-                                        if (s.isCurrentMonth) " (tạm tính)" else ""
+                                value = "${s.workingDays} / ${if (s.isCurrentMonth) s.expectedWorkDays else s.standardWorkDays} ngày"
                             )
                         }
 
@@ -833,7 +832,7 @@ fun PayslipScreen(
 
                         // 15.1 OT đêm
                         if (s.tienOtDem > 0.0) {
-                            PayslipMoneyRow(label = "OT đêm (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
                         }
 
                         // 16. Phụ cấp đêm
@@ -1427,6 +1426,11 @@ fun savePayslipAsPngImage(
     // 15. OT 3.0
     if (summary.tienOtLe > 0.0) {
         drawRow("OT 3.0 (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", isGreenVal = true)
+    }
+
+    // 15.1 OTĐ 1.5
+    if (summary.tienOtDem > 0.0) {
+        drawRow("OTĐ 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", isGreenVal = true)
     }
 
     // 16. Phụ cấp đêm
