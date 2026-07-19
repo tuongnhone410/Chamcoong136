@@ -19,33 +19,32 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # 1. Nâng cấp lên Gradle 9.3.1 theo đúng yêu cầu của dự án
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: 9.3.1
 
-    # 2. Bơm API Key vào file môi trường
     - name: Inject API Key
       run: |
         echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
         echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > app/.env
 
-    # 3. Tạo Wrapper chuẩn bản 9.3.1
     - name: Generate Gradle Wrapper
       run: gradle wrapper --gradle-version 9.3.1
 
-    # 4. Cấp quyền chạy file gradlew
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    # 5. Tiến hành Build APK (Vừa đúng bản Gradle, vừa né được lỗi giao diện KSP)
+    # BƯỚC THẦN THÁNH: Tự tạo file debug.keystore ảo để né lỗi validate của Gradle
+    - name: Generate Dummy Debug Keystore
+      run: |
+        keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
     - name: Build Debug APK
       env:
         GRADLE_OPTS: -Djava.awt.headless=true
       run: ./gradlew assembleDebug --no-configuration-cache
 
-    # 6. Xuất file APK
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
