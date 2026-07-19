@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1004,15 +1005,26 @@ fun PayslipProfileRow(label: String, value: String, isMono: Boolean = false) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = MediumGray, fontSize = 13.sp)
+        Text(
+            text = label, 
+            color = MediumGray, 
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = value,
             color = White,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = if (isMono) FontFamily.Monospace else FontFamily.Default
+            fontFamily = if (isMono) FontFamily.Monospace else FontFamily.Default,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -1036,13 +1048,19 @@ fun PayslipMoneyRow(
             text = label,
             color = if (isAccent) NeonBlue else LightGray,
             fontSize = 13.sp,
-            fontWeight = if (isAccent) FontWeight.Bold else FontWeight.Normal
+            fontWeight = if (isAccent) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = if (isAddition) "+${fmt.format(value)}đ" else "-${fmt.format(value)}đ",
             color = if (isAddition) AccentGreen else AccentRed,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f)
         )
     }
 }

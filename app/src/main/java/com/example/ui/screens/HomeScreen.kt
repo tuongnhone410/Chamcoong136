@@ -62,6 +62,30 @@ import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
+private fun getCoeff(config: com.example.data.model.UserConfig?): Double {
+    return when {
+        Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> config?.heSoOtChuNhat ?: 2.0
+        run {
+            val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
+            val md = sdfMonthDay.format(java.util.Date())
+            md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+        } -> config?.heSoOtNgayLe ?: 3.0
+        else -> 1.0
+    }
+}
+
+private fun getCoeffLabel(config: com.example.data.model.UserConfig?): String {
+    return when {
+        Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> " (Chủ nhật x2)"
+        run {
+            val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
+            val md = sdfMonthDay.format(java.util.Date())
+            md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+        } -> " (Ngày lễ x3)"
+        else -> ""
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -196,54 +220,75 @@ fun HomeScreen(
                     Divider(color = Color(0xFF2C2C2C))
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp)
-                            Text(
-                                text = "${summaryState?.workingDays ?: 0} ngày công",
-                                color = White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
-                        }
-                        
-                        // Calculate live hourly calculation based on settings
-                        val lcb = configState?.luongCoBan ?: 6000000.0
-                        val hrRate = lcb / 26.0 / 8.0
-                        val coeff = when {
-                            Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> configState?.heSoOtChuNhat ?: 2.0
-                            run {
-                                val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
-                                val md = sdfMonthDay.format(java.util.Date())
-                                md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
-                            } -> configState?.heSoOtNgayLe ?: 3.0
-                            else -> 1.0
-                        }
-                        val coeffLabel = when {
-                            Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY -> " (Chủ nhật x2)"
-                            run {
-                                val sdfMonthDay = SimpleDateFormat("MM-dd", java.util.Locale.getDefault())
-                                val md = sdfMonthDay.format(java.util.Date())
-                                md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
-                            } -> " (Ngày lễ x3)"
-                            else -> ""
-                        }
-                        val currentHrRate = hrRate * coeff
-                        val fmtHr = DecimalFormat("#,###").format(currentHrRate)
+                    BoxWithConstraints {
+                        val isNarrow = maxWidth < 300.dp
+                        if (isNarrow) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp)
+                                    Text(
+                                        text = "${summaryState?.workingDays ?: 0} ngày công",
+                                        color = White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                val lcb = configState?.luongCoBan ?: 6000000.0
+                                val hrRate = lcb / 26.0 / 8.0
+                                val coeff = getCoeff(configState)
+                                val coeffLabel = getCoeffLabel(configState)
+                                val currentHrRate = hrRate * coeff
+                                val fmtHr = DecimalFormat("#,###").format(currentHrRate)
 
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text("Lương mỗi giờ hiện tại", color = MediumGray, fontSize = 11.sp)
-                            Text(
-                                text = "$fmtHr đ/g$coeffLabel",
-                                color = if (coeff > 1.0) AccentGreen else NeonBlue,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text("Lương mỗi giờ hiện tại", color = MediumGray, fontSize = 11.sp)
+                                    Text(
+                                        text = "$fmtHr đ/g$coeffLabel",
+                                        color = if (coeff > 1.0) AccentGreen else NeonBlue,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Tổng ngày công thực tế", color = MediumGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        text = "${summaryState?.workingDays ?: 0} ngày công",
+                                        color = White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                                
+                                val lcb = configState?.luongCoBan ?: 6000000.0
+                                val hrRate = lcb / 26.0 / 8.0
+                                val coeff = getCoeff(configState)
+                                val coeffLabel = getCoeffLabel(configState)
+                                val currentHrRate = hrRate * coeff
+                                val fmtHr = DecimalFormat("#,###").format(currentHrRate)
+
+                                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                    Text("Lương mỗi giờ hiện tại", color = MediumGray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        text = "$fmtHr đ/g$coeffLabel",
+                                        color = if (coeff > 1.0) AccentGreen else NeonBlue,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                        textAlign = TextAlign.End
+                                    )
+                                }
+                            }
                         }
                     }
                 }
