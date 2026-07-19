@@ -703,11 +703,17 @@ fun SettingsScreen(
             // CATEGORY 3: CHUYÊN CẦN & PHÉP NĂM
             CategoryLayout(title = "CHUYÊN CẦN & PHÉP NĂM", icon = Icons.Default.DateRange) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ConfigInputField(
-                        label = "Tiền chuyên cần gốc",
+                    AllowanceRowItem(
+                        name = "Tiền chuyên cần gốc",
                         value = tienChuyenCanGoc,
-                        onValueChange = { tienChuyenCanGoc = it.filter { c -> c.isDigit() }; saveChanges() },
-                        visualTransformation = ThousandSeparatorVisualTransformation()
+                        fieldName = "tienChuyenCanGoc",
+                        calcTypeMap = allowanceCalcTypesMap,
+                        onClick = {
+                            activeEditingAllowanceField = "tienChuyenCanGoc"
+                            activeEditingAllowanceName = "Chuyên cần gốc"
+                            activeEditingAllowanceValue = tienChuyenCanGoc
+                            activeEditingAllowanceType = allowanceCalcTypesMap["tienChuyenCanGoc"] ?: "MONTHLY_FLAT"
+                        }
                     )
                     ConfigInputField(
                         label = "Số ngày phép cho phép/năm",
@@ -938,6 +944,7 @@ fun SettingsScreen(
                     onSave = { newValue, newType ->
                         val cleanVal = newValue.filter { it.isDigit() }
                         when (activeEditingAllowanceField) {
+                            "tienChuyenCanGoc" -> tienChuyenCanGoc = cleanVal
                             "pcKyThuat" -> pcKyThuat = cleanVal
                             "pcTrachNhiem" -> pcTrachNhiem = cleanVal
                             "pcChucVu" -> pcChucVu = cleanVal

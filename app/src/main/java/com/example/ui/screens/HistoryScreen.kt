@@ -1242,22 +1242,14 @@ fun DayGridCell(
                                 fontWeight = FontWeight.Bold
                             )
                         } else if (entry.checkInTime != null && entry.checkOutTime != null) {
-                            val workedHrs = (entry.checkOutTime - entry.checkInTime) / 3600000.0
-                            val isBreakDeduction = config?.tinhKhauTruNghi == true
-                            val breakHours = if (isBreakDeduction) (config?.soGioNghiGiaiLao ?: 1.5) else 0.0
-                            val roundedHrs = if (isBreakDeduction) {
-                                (workedHrs - breakHours).coerceAtLeast(0.0)
-                            } else {
-                                if (workedHrs <= 8.5) {
-                                    workedHrs.coerceAtMost(8.0)
-                                } else {
-                                    workedHrs
-                                }
-                            }
+                            val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
+                            val shift = com.example.data.SalaryCalculator.getShiftForEntry(entry)
+                            val stdHrs = processed.workDay * shift.standardHours
+                            val totalHrs = stdHrs + processed.otHours
                             
                             val df = DecimalFormat("#.#")
                             Text(
-                                text = "${df.format(roundedHrs)}h ${if (isNightShift) "🌙" else "☀️"}",
+                                text = "${df.format(totalHrs)}h ${if (isNightShift) "🌙" else "☀️"}",
                                 color = if (isNightShift) NightPurple else AccentGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold

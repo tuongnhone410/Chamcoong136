@@ -282,6 +282,29 @@ fun PayslipScreen(
                 // TAB / SEGMENT CONTROL
                 var selectedTab by remember { mutableStateOf(0) }
 
+                val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+                val hasLoggedUnpaidOrAbsent = remember(entries, todayStr, isCurrentSelectedMonth) {
+                    entries.any { e ->
+                        val isPastOrToday = !isCurrentSelectedMonth || e.date <= todayStr
+                        if (isPastOrToday) {
+                            if (e.dayType == "UNPAID_LEAVE") {
+                                true
+                            } else if (e.checkInTime == null && e.dayType != "PAID_LEAVE" && e.dayType != "HOLIDAY") {
+                                try {
+                                    val cal = Calendar.getInstance()
+                                    val partsDate = e.date.split("-")
+                                    if (partsDate.size >= 3) {
+                                        cal.set(partsDate[0].toInt(), partsDate[1].toInt() - 1, partsDate[2].toInt())
+                                        val isSun = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                                        val isHol = com.example.data.SalaryCalculator.isHoliday(e.date)
+                                        !isSun && !isHol
+                                    } else false
+                                } catch (ex: Exception) { false }
+                            } else false
+                        } else false
+                    }
+                }
+
                 val pcKyThuatShow = if (selectedTab == 1) c.pcKyThuat else s.pcKyThuatVal
                 val pcTrachNhiemShow = if (selectedTab == 1) c.pcTrachNhiem else s.pcTrachNhiemVal
                 val pcChucVuShow = if (selectedTab == 1) c.pcChucVu else s.pcChucVuVal
@@ -309,16 +332,20 @@ fun PayslipScreen(
                 val pcKhac1Show = if (selectedTab == 1) c.pcKhac1 else s.pcKhac1Val
                 val pcThamNienShow = if (selectedTab == 1) c.pcThamNien else s.pcThamNienVal
 
-                val pcChuyenCanShow = if (selectedTab == 1) c.tienChuyenCanGoc else s.phuCapChuyenCan
+                val pcChuyenCanShow = if (selectedTab == 1) {
+                    if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc
+                } else {
+                    if (isCurrentSelectedMonth) 0.0 else s.phuCapChuyenCan
+                }
 
                 val currentProratedAllowancesSum = s.pcKyThuatVal + s.pcTrachNhiemVal + s.pcChucVuVal + s.pcHieuSuatVal +
                         s.pcSanPhamVal + s.pcComCaVal + s.pcComOtVal + s.pcNhaOVal + s.pcDocHaiVal + 
-                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhacVal + s.pcKhac1Val + s.pcThamNienVal + s.phuCapChuyenCan +
+                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhacVal + s.pcKhac1Val + s.pcThamNienVal + (if (isCurrentSelectedMonth) 0.0 else s.phuCapChuyenCan) +
                         s.pcCaDemVal
 
                 val fullProjectedAllowancesSum = c.pcKyThuat + c.pcTrachNhiem + c.pcChucVu + c.pcHieuSuat +
                         c.pcSanPham + pcComCaShow + pcComOtShow + c.pcNhaO + c.pcDocHai + 
-                        c.pcDtDoanhThu + c.pcXangXe + c.pcKhac + c.pcKhac1 + c.pcThamNien + c.tienChuyenCanGoc +
+                        c.pcDtDoanhThu + c.pcXangXe + c.pcKhac + c.pcKhac1 + c.pcThamNien + (if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc) +
                         s.pcCaDemVal
 
                 val allowanceAdjustment = fullProjectedAllowancesSum - currentProratedAllowancesSum
@@ -939,7 +966,8 @@ fun PayslipScreen(
                             customOt15DaysCount = customOt15DaysCount,
                             customOt15Pay = customOt15Pay,
                             selectedOt15Shift = selectedOt15Shift,
-                            customNightAllowance = customNightAllowance
+                            customNightAllowance = customNightAllowance,
+                            hasLoggedUnpaidOrAbsent = hasLoggedUnpaidOrAbsent
                         )
                         if (isSaved) {
                             Toast.makeText(context, "Đã lưu phiếu lương thành công vào Gallery ứng dụng của điện thoại!", Toast.LENGTH_LONG).show()
@@ -1039,7 +1067,8 @@ fun savePayslipAsPngImage(
     customOt15DaysCount: Double = 0.0,
     customOt15Pay: Double = 0.0,
     selectedOt15Shift: String = "Đêm",
-    customNightAllowance: Double = 0.0
+    customNightAllowance: Double = 0.0,
+    hasLoggedUnpaidOrAbsent: Boolean = false
 ): Boolean {
     val df = DecimalFormat("#.#")
     val fmt = DecimalFormat("#,###")
@@ -1079,7 +1108,11 @@ fun savePayslipAsPngImage(
     val pcKhac1ShowPNG = if (selectedTab == 1) config.pcKhac1 else summary.pcKhac1Val
     val pcThamNienShowPNG = if (selectedTab == 1) config.pcThamNien else summary.pcThamNienVal
 
-    val pcChuyenCanShowPNG = if (selectedTab == 1) config.tienChuyenCanGoc else summary.phuCapChuyenCan
+    val pcChuyenCanShowPNG = if (selectedTab == 1) {
+        if (hasLoggedUnpaidOrAbsent) 0.0 else config.tienChuyenCanGoc
+    } else {
+        if (isCurrentSelectedMonth) 0.0 else summary.phuCapChuyenCan
+    }
 
     // 1. Create offline Bitmap with Dynamic Height to prevent truncation or empty gaps
     val width = 800

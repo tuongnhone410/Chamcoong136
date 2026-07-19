@@ -88,6 +88,7 @@ data class UserConfig(
                 "pcComOt" -> "OT_MEAL_GE_2H"
                 "pcKhac" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
                 "pcThamNien" -> "MONTHLY_FLAT"
+                "tienChuyenCanGoc" -> "MONTHLY_FLAT"
                 else -> "MONTHLY_PRO_RATED"
             }
         }

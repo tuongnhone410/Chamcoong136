@@ -188,7 +188,7 @@ object ExportUtils {
                 nightShiftsCount++
             }
 
-            val isSunday = (e.dayType == "SUNDAY" || (isSundayDate(e.date) && e.dayType == "NIGHT"))
+            val isSunday = (e.dayType == "SUNDAY" || isSundayDate(e.date))
 
             if (e.isWorking) {
                 if (isSunday) {
@@ -271,22 +271,22 @@ object ExportUtils {
         }
         val allowanceDivisor = 26.0
 
-        val pcKyThuatPr = Math.round((config.pcKyThuat / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcKyThuat)
-        val pcTrachNhiemPr = Math.round((config.pcTrachNhiem / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcTrachNhiem)
-        val pcChucVuPr = Math.round((config.pcChucVu / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcChucVu)
-        val pcHieuSuatPr = Math.round((config.pcHieuSuat / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcHieuSuat)
-        val pcSanPhamPr = Math.round((config.pcSanPham / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcSanPham)
-        val pcComCaPr = (actualPresenceDaysCount * config.pcComCa)
-        val pcComOtPr = (comOtDaysCount * config.pcComOt) 
-        val pcNhaOPr = Math.round((config.pcNhaO / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcNhaO)
-        val pcDocHaiPr = Math.round((config.pcDocHai / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcDocHai)
-        val pcDtDoanhThuPr = Math.round((config.pcDtDoanhThu / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcDtDoanhThu)
-        val pcXangXePr = Math.round((config.pcXangXe / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcXangXe)
-        val pcThamNienPr = config.pcThamNien 
-        val pcKhac1Pr = Math.round((config.pcKhac1 / allowanceDivisor) * workingDaysCount).toDouble().coerceAtMost(config.pcKhac1)
-        val pcKhacPr = 0.0
+        val pcKyThuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcTrachNhiemPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcChucVuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcHieuSuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcSanPhamPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcComCaPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcComOtPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcNhaOPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcDocHaiPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcDtDoanhThuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcXangXePr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcThamNienPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcKhac1Pr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcKhacPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
 
-        val pcCaDemPr = nightShiftsCount * config.pcKhac
+        val pcCaDemPr = pcKhacPr
 
         val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
                 pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
@@ -365,7 +365,15 @@ object ExportUtils {
         val chuyenCanValue = if (hasUnpaidOrAbsent) {
             0.0
         } else {
-            Math.round((config.tienChuyenCanGoc / 26.0) * workingDaysCount.coerceAtMost(26)).toDouble()
+            com.example.data.SalaryCalculator.calculateAllowanceValue(
+                "tienChuyenCanGoc",
+                config.tienChuyenCanGoc,
+                config.getCalcTypeFor("tienChuyenCanGoc"),
+                workingDaysCount.toDouble(),
+                actualPresenceDaysCount,
+                comOtDaysCount,
+                nightShiftsCount
+            )
         }
 
         val tongCom = pcComCaPr + pcComOtPr
@@ -449,7 +457,8 @@ object ExportUtils {
         customOt15DaysCount: Double = 0.0,
         customOt15Pay: Double = 0.0,
         selectedOt15Shift: String = "Đêm",
-        customNightAllowance: Double = 0.0
+        customNightAllowance: Double = 0.0,
+        hasLoggedUnpaidOrAbsent: Boolean = false
     ): Boolean {
         val df = DecimalFormat("#.#")
         val fmt = DecimalFormat("#,###")
@@ -489,7 +498,11 @@ object ExportUtils {
         val pcKhac1ShowPNG = if (selectedTab == 1) config.pcKhac1 else summary.pcKhac1Val
         val pcThamNienShowPNG = if (selectedTab == 1) config.pcThamNien else summary.pcThamNienVal
 
-        val pcChuyenCanShowPNG = if (selectedTab == 1) config.tienChuyenCanGoc else summary.phuCapChuyenCan
+        val pcChuyenCanShowPNG = if (selectedTab == 1) {
+            if (hasLoggedUnpaidOrAbsent) 0.0 else config.tienChuyenCanGoc
+        } else {
+            if (isCurrentSelectedMonth) 0.0 else summary.phuCapChuyenCan
+        }
 
         // 1. Create offline Bitmap with Dynamic Height
         val width = 800

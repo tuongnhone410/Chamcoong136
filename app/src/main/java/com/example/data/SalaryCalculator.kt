@@ -132,21 +132,26 @@ object SalaryCalculator {
 
         // 2. Normalization
         val stdInMs = getMillisForTime(rawIn, shift.startTime, 0)
-        val winInEndMs = getMillisForTime(rawIn, shift.checkInWindowEnd, 0)
 
-        // Check-In Normalization
-        val normInMs = if (rawIn <= winInEndMs) {
+        // Check-In Normalization: Early check-in buffer is 30 minutes. 
+        // Any check-in at or before standard start time (stdInMs) is normalized to stdInMs.
+        val normInMs = if (rawIn <= stdInMs) {
             stdInMs
         } else {
             rawIn
         }
 
+        // Check-Out Normalization: Late check-out grace period is 15 minutes.
+        // If late check-out is within 15 minutes, it is normalized to standard shift end (stdOutMs) so no extra OT is counted.
+        // If late check-out exceeds 15 minutes, the raw check-out time is kept, counting the exceeded time as OT.
         val normOutMs = if (rawOut != null) {
             val dayOffset = if (shift.shiftType == "NIGHT") 1 else 0
             val stdOutMs = getMillisForTime(rawIn, shift.endTime, dayOffset)
-            val winOutStartMs = getMillisForTime(rawIn, shift.checkOutWindowStart, dayOffset)
+            val lateGraceMs = 15 * 60 * 1000L // 15 minutes grace period
 
-            if (rawOut >= winOutStartMs) {
+            if (rawOut > stdOutMs + lateGraceMs) {
+                rawOut
+            } else if (rawOut >= stdOutMs) {
                 stdOutMs
             } else {
                 rawOut
@@ -230,7 +235,11 @@ object SalaryCalculator {
                 allowanceValue
             }
             "PER_WORK_DAY" -> {
-                comCaCount * allowanceValue
+                if (fieldName == "pcComCa") {
+                    comCaCount * allowanceValue
+                } else {
+                    totalWorkDays * allowanceValue
+                }
             }
             "OT_MEAL_GE_2H" -> {
                 comOtCount * allowanceValue
@@ -318,7 +327,7 @@ object SalaryCalculator {
                 nightShiftsCount++
             }
 
-            val isSundayVal = e.dayType == "SUNDAY" || (isSunday(e.date) && e.shiftType == "NIGHT")
+            val isSundayVal = e.dayType == "SUNDAY" || isSunday(e.date)
 
             // If checked-in but currently working (no check-out yet)
             if (e.rawCheckOut == null && e.isWorking) {
@@ -426,10 +435,18 @@ object SalaryCalculator {
             it.dayType == "UNPAID_LEAVE" && (earliestDate == null || it.date >= earliestDate)
         } || (scheduledDays > 0 && totalWorkDays < scheduledDays)
 
-        val chuyenCanValue = if (hasUnpaidOrAbsent) {
+        val chuyenCanValue = if (hasUnpaidOrAbsent || isCurrentSelectedMonth) {
             0.0
         } else {
-            config.tienChuyenCanGoc
+            calculateAllowanceValue(
+                "tienChuyenCanGoc",
+                config.tienChuyenCanGoc,
+                config.getCalcTypeFor("tienChuyenCanGoc"),
+                totalWorkDays,
+                comCaCount,
+                comOtCount,
+                nightShiftsCount
+            )
         }
 
         // Deductions

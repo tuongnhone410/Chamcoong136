@@ -727,16 +727,17 @@ fun HomeScreen(
                                             fontWeight = FontWeight.Bold
                                         )
                                         
-                                        val hrs = (entry.checkOutTime - entry.checkInTime) / 3600000.0
-                                        val isBreakDeduction = configState?.tinhKhauTruNghi == true
-                                        val breakHours = if (isBreakDeduction) (configState?.soGioNghiGiaiLao ?: 1.5) else 0.0
-                                        val rounded = if (isBreakDeduction) {
-                                            (hrs - breakHours).coerceAtLeast(0.0)
-                                        } else {
-                                            if (hrs <= 8.5) hrs.coerceAtMost(8.0) else hrs
+                                        val processedEntry = remember(entry) {
+                                            com.example.data.SalaryCalculator.calculateSingleEntry(entry)
                                         }
+                                        val shift = remember(entry) {
+                                            com.example.data.SalaryCalculator.getShiftForEntry(entry)
+                                        }
+                                        val stdHrs = processedEntry.workDay * shift.standardHours
+                                        val otHrs = processedEntry.otHours
                                         Text(
-                                            text = "${DecimalFormat("#.#").format(rounded)} tiếng ${if (isNightShift) "🌙" else ""}",
+                                            text = "${processedEntry.workDay} công • Giờ: ${DecimalFormat("#.#").format(stdHrs)}h" + 
+                                                    (if (otHrs > 0) " • OT: ${DecimalFormat("#.#").format(otHrs)}h" else ""),
                                             color = if (isNightShift) NightPurple else LightGray,
                                             fontSize = 11.sp
                                         )
@@ -971,29 +972,30 @@ private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> 
 
 private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.model.UserConfig?): Double {
     if (config == null) return 0.0
+    val processed = com.example.data.SalaryCalculator.calculateSingleEntry(entry)
     val hourlySalary = config.luongCoBan / 26.0 / 8.0
     
-    if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE") {
+    if (processed.dayType == "PAID_LEAVE" || processed.dayType == "HOLIDAY_LEAVE") {
         return config.luongCoBan / 26.0
     }
-    if (entry.dayType == "UNPAID_LEAVE" || entry.checkInTime == null) {
+    if (processed.dayType == "UNPAID_LEAVE" || processed.checkInTime == null) {
         return 0.0
     }
     
     val inCal = Calendar.getInstance()
-    inCal.timeInMillis = entry.checkInTime
+    inCal.timeInMillis = processed.checkInTime!!
     val inHour = inCal.get(Calendar.HOUR_OF_DAY)
     val inMin = inCal.get(Calendar.MINUTE)
     val inTotalMin = inHour * 60 + inMin
     val isNightShift = (inTotalMin in (18 * 60)..(19 * 60 + 30)) || 
                        inHour >= 22 || inHour <= 6 || 
-                       entry.dayType == "NIGHT"
+                       processed.dayType == "NIGHT"
 
-    val isSunday = entry.dayType == "SUNDAY" || 
+    val isSunday = processed.dayType == "SUNDAY" || 
                    (run {
                        try {
                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                           val dateVal = parser.parse(entry.date)
+                           val dateVal = parser.parse(processed.date)
                            if (dateVal != null) {
                                val cal = Calendar.getInstance()
                                cal.time = dateVal
@@ -1004,19 +1006,11 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
                        } catch (e: Exception) {
                            false
                        }
-                   } && entry.dayType == "NIGHT")
+                   } && processed.dayType == "NIGHT")
 
-    val isHoliday = run {
-        val parts = entry.date.split("-")
-        if (parts.size >= 3) {
-            val md = "${parts[1]}-${parts[2]}"
-            md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
-        } else {
-            false
-        }
-    }
+    val isHoliday = com.example.data.SalaryCalculator.isHoliday(processed.date)
 
-    if (entry.checkOutTime == null) {
+    if (processed.checkOutTime == null) {
         if (isSunday) {
             return 8.0 * hourlySalary * config.heSoOtChuNhat
         } else {
@@ -1024,15 +1018,15 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
         }
     }
 
-    val finalCheckIn = roundCheckInGrace(entry.checkInTime)
-    val finalCheckOut = roundCheckOutGrace(entry.checkOutTime)
+    val finalCheckIn = processed.normalizedCheckIn ?: processed.checkInTime!!
+    val finalCheckOut = processed.normalizedCheckOut ?: processed.checkOutTime!!
     val durationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
     val rawHours = durationMs / 3600000.0
     val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
     val actualHours = (rawHours - breakHours).coerceAtLeast(0.0)
 
-    val finalStandardHours = actualHours.coerceAtMost(8.0)
-    val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
+    val finalStandardHours = processed.workDay * 8.0
+    val finalOtHours = processed.otHours
 
     var earned = 0.0
     if (isSunday) {
@@ -1059,37 +1053,4 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
     }
 
     return earned
-}
-
-private fun roundCheckInGrace(timeMs: Long): Long {
-    val cal = Calendar.getInstance()
-    cal.timeInMillis = timeMs
-    val min = cal.get(Calendar.MINUTE)
-    if (min in 45..59) {
-        cal.add(Calendar.HOUR_OF_DAY, 1)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis
-    } else if (min in 0..15) {
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis
-    }
-    return timeMs
-}
-
-private fun roundCheckOutGrace(timeMs: Long): Long {
-    val cal = Calendar.getInstance()
-    cal.timeInMillis = timeMs
-    val min = cal.get(Calendar.MINUTE)
-    if (min in 45..59) {
-        cal.add(Calendar.HOUR_OF_DAY, 1)
-        cal.set(Calendar.MINUTE, 0)
-        cal.set(Calendar.SECOND, 0)
-        cal.set(Calendar.MILLISECOND, 0)
-        return cal.timeInMillis
-    }
-    return timeMs
 }
