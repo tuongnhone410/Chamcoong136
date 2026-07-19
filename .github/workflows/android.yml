@@ -19,17 +19,17 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # Cài thẳng Gradle bản mới lên máy ảo GitHub, không phụ thuộc vào file gradlew của repo nữa
+    # Nâng cấp lên bản Gradle 9.3.1 theo đúng yêu cầu từ log lỗi của bạn
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
-        gradle-version: 8.7
+        gradle-version: 9.3.1
 
     # Bơm API Key vào file .env
     - name: Inject API Key
       run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
-    # Gọi trực tiếp lệnh gradle của hệ thống để build, không cần ./gradlew
+    # Gọi trực tiếp lệnh gradle của hệ thống để build
     - name: Build Debug APK
       run: gradle assembleDebug
 
@@ -38,4 +38,3 @@ jobs:
       with:
         name: TimeSnapPro-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
-        
