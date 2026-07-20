@@ -8,6 +8,7 @@ import com.example.auth.UserSession
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.os.Build
 import android.provider.MediaStore
 import android.widget.Toast
@@ -805,12 +806,13 @@ fun PayslipScreen(
                             PayslipMoneyRow(label = "Cơm OT", value = pcComOtShow, isAddition = true)
                         }
 
-                        // 13. OT 1.5
-                        if (s.tienOtNgay > 0.0) {
-                            PayslipMoneyRow(label = "OT 1.5 (${df.format(s.otDayHours)}h)", value = s.tienOtNgay, isAddition = true, isAccent = true)
-                        }
-                        if (selectedTab == 1 && customOt15DaysCount > 0.0) {
-                            PayslipMoneyRow(label = "OT 1.5 (${df.format(customOt15DaysCount)} ngày)", value = customOt15Pay, isAddition = true, isAccent = true)
+                        // 13. OT 1.5 (Merged)
+                        val projectedOtDayHours = if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
+                        val totalOtDayHours = s.otDayHours + projectedOtDayHours
+                        val totalOtDayPay = s.tienOtNgay + (if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15Pay else 0.0)
+                        
+                        if (totalOtDayHours > 0.0) {
+                            PayslipMoneyRow(label = "OT 1.5 (${df.format(totalOtDayHours)}h)", value = totalOtDayPay, isAddition = true, isAccent = true)
                         }
 
                         // 14. OT 2.0
@@ -826,9 +828,13 @@ fun PayslipScreen(
                             PayslipMoneyRow(label = "OT 3.0 (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
                         }
 
-                        // 15.1 OT đêm
-                        if (s.tienOtDem > 0.0) {
-                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
+                        // 15.1 OT đêm (Merged)
+                        val projectedOtNightHours = if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
+                        val totalOtNightHours = s.otNightHours + projectedOtNightHours
+                        val totalOtNightPay = s.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
+
+                        if (totalOtNightHours > 0.0) {
+                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
                         }
 
                         // 16. Phụ cấp đêm
@@ -963,7 +969,8 @@ fun PayslipScreen(
                             customOt15Pay = customOt15Pay,
                             selectedOt15Shift = selectedOt15Shift,
                             customNightAllowance = customNightAllowance,
-                            hasLoggedUnpaidOrAbsent = hasLoggedUnpaidOrAbsent
+                            hasLoggedUnpaidOrAbsent = hasLoggedUnpaidOrAbsent,
+                            breakHours = breakHours
                         )
                         if (isSaved) {
                             Toast.makeText(context, "Đã lưu phiếu lương thành công vào Gallery ứng dụng của điện thoại!", Toast.LENGTH_LONG).show()
@@ -1081,7 +1088,8 @@ fun savePayslipAsPngImage(
     customOt15Pay: Double = 0.0,
     selectedOt15Shift: String = "Đêm",
     customNightAllowance: Double = 0.0,
-    hasLoggedUnpaidOrAbsent: Boolean = false
+    hasLoggedUnpaidOrAbsent: Boolean = false,
+    breakHours: Double = 0.0
 ): Boolean {
     val df = DecimalFormat("#.#")
     val fmt = DecimalFormat("#,###")
@@ -1127,20 +1135,18 @@ fun savePayslipAsPngImage(
         summary.phuCapChuyenCan
     }
 
-    // 1. Create offline Bitmap with Dynamic Height to prevent truncation or empty gaps
+    // 1. Create offline Bitmap with Dynamic Height
     val width = 800
-    var estimatedHeight = 550 // Header and margins
-    estimatedHeight += 180 // Profile rows
+    var estimatedHeight = 500 // Header
     
-    // Additions: LCB
-    estimatedHeight += 45
-    if (selectedTab == 1 && remainingSundays > 0 && includeSundayInProjection) {
-        estimatedHeight += 45 // Extra lines for sundays projection additions
-    }
-    if (selectedTab == 1 && customOt15DaysCount > 0.0) {
-        estimatedHeight += 45 // Extra line for custom OT 1.5 projection additions
-    }
-    // Allowances
+    // Profile section
+    estimatedHeight += 200
+    
+    // Additions section
+    estimatedHeight += 60 // Section title
+    estimatedHeight += 45 // Base Salary
+    if (selectedTab == 1 && remainingSundays > 0 && includeSundayInProjection) estimatedHeight += 45
+    if (selectedTab == 1 && customOt15DaysCount > 0.0) estimatedHeight += 45
     if (config.pcKyThuat > 0.0) estimatedHeight += 45
     if (config.pcTrachNhiem > 0.0) estimatedHeight += 45
     if (config.pcChucVu > 0.0) estimatedHeight += 45
@@ -1157,63 +1163,68 @@ fun savePayslipAsPngImage(
     if (config.pcThamNien > 0.0) estimatedHeight += 45
     if (pcChuyenCanShowPNG > 0.0) estimatedHeight += 45
     if (summary.caDemCount > 0) estimatedHeight += 45
-    
-    if (summary.tongTienCom > 0.0) estimatedHeight += 45 // Total meal
-    
     if (summary.tienOtNgay > 0.0) estimatedHeight += 45
     if (summary.tienChuNhat > 0.0) estimatedHeight += 45
+    if (summary.tienOtLe > 0.0) estimatedHeight += 45
+    if (summary.tienOtDem > 0.0) estimatedHeight += 45
     
-    // Deductions header & lines
-    estimatedHeight += 60 // Deductions Header
-    if (summary.tienBh > 0.0) estimatedHeight += 45 // BHXH
-    if (summary.doanPhi > 0.0) estimatedHeight += 45 // Union Fee
+    // Deductions section
+    estimatedHeight += 60 // Section title
+    if (summary.tienBh > 0.0) estimatedHeight += 45
+    if (summary.doanPhi > 0.0) estimatedHeight += 45
     if (selectedTab == 0 && summary.tienKhauTruNghi > 0.0) estimatedHeight += 45
     
-    // Total receipt
-    estimatedHeight += 120
-    
-    // Footer credits
+    // Total section
     estimatedHeight += 150
+    
+    // Footer
+    estimatedHeight += 200
     
     val height = estimatedHeight.coerceAtLeast(1400)
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
     // Setup Paints
-    val paintBg = Paint().apply { color = android.graphics.Color.parseColor("#0F111A") }
-    val paintCard = Paint().apply { color = android.graphics.Color.parseColor("#1A1D2E") }
-    val paintNeon = Paint().apply {
-        color = android.graphics.Color.parseColor("#4C84FF")
-        style = Paint.Style.STROKE
-        strokeWidth = 3f
-    }
-    val paintDivider = Paint().apply {
-        color = android.graphics.Color.parseColor("#2C3149")
-        strokeWidth = 2f
-    }
+    val colorBg = android.graphics.Color.parseColor("#0B0E14")
+    val colorCard = android.graphics.Color.parseColor("#1A1D2E")
+    val colorPrimary = android.graphics.Color.parseColor("#4C84FF")
+    val colorTextMuted = android.graphics.Color.parseColor("#8F9BB3")
+    val colorSuccess = android.graphics.Color.parseColor("#00E676")
+    val colorError = android.graphics.Color.parseColor("#EB5757")
+
+    val paintBg = Paint().apply { color = colorBg }
+    val paintCard = Paint().apply { color = colorCard }
     
-    val paintTextTitle = Paint().apply {
-        color = android.graphics.Color.parseColor("#4C84FF")
-        textSize = 34f
+    val paintAppName = Paint().apply {
+        color = colorPrimary
+        textSize = 38f
         isFakeBoldText = true
-        textAlign = Paint.Align.CENTER
     }
     
-    val paintTextSubTitle = Paint().apply {
+    val paintDocTitle = Paint().apply {
         color = android.graphics.Color.WHITE
-        textSize = 20f
+        textSize = 28f
         isFakeBoldText = true
-        textAlign = Paint.Align.CENTER
+    }
+    
+    val paintDocInfo = Paint().apply {
+        color = colorTextMuted
+        textSize = 20f
     }
 
-    val paintTextMonth = Paint().apply {
-        color = android.graphics.Color.parseColor("#8F9BB3")
-        textSize = 24f
-        textAlign = Paint.Align.CENTER
+    val paintSectionTitle = Paint().apply {
+        color = colorPrimary
+        textSize = 22f
+        isFakeBoldText = true
+    }
+
+    val paintDivider = Paint().apply {
+        color = android.graphics.Color.parseColor("#1C212B")
+        strokeWidth = 2f
     }
 
     val paintLabel = Paint().apply {
-        color = android.graphics.Color.parseColor("#8F9BB3")
+        color = colorTextMuted
         textSize = 22f
     }
 
@@ -1224,304 +1235,173 @@ fun savePayslipAsPngImage(
     }
 
     val paintGreen = Paint().apply {
-        color = android.graphics.Color.parseColor("#27AE60")
+        color = colorSuccess
         textSize = 22f
         isFakeBoldText = true
     }
 
     val paintRed = Paint().apply {
-        color = android.graphics.Color.parseColor("#EB5757")
+        color = colorError
         textSize = 22f
         isFakeBoldText = true
     }
 
-    // Draw solid full-bleed background
-    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintCard)
+    // Draw background
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paintBg)
 
-    var currentY = 100f
+    var currentY = 80f
+    val paddingX = 60f
 
-    // Draw logo circle to the left of TIMESNAP PRO
-    val titleText = "TIMESNAP PRO"
-    val textWidth = paintTextTitle.measureText(titleText)
-    val cX = (width / 2f) - (textWidth / 2f) - 30f
-    val cY = currentY - 10f
-
-    val paintCircleBg = Paint().apply {
-        color = android.graphics.Color.parseColor("#154C84FF") // 15% opacity neon blue
-        style = Paint.Style.FILL
-    }
-    canvas.drawCircle(cX, cY, 18f, paintCircleBg)
-
-    val paintCircleBorder = Paint().apply {
-        color = android.graphics.Color.parseColor("#4C84FF")
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f
-    }
-    canvas.drawCircle(cX, cY, 18f, paintCircleBorder)
-
-    val paintCircleSymbol = Paint().apply {
-        color = android.graphics.Color.parseColor("#4C84FF")
-        textSize = 20f
-        isFakeBoldText = true
-        textAlign = Paint.Align.CENTER
-    }
-    canvas.drawText("$", cX, cY + 7f, paintCircleSymbol)
-
-    // Draw header content with slight shift for logo alignment
-    canvas.drawText(titleText, (width / 2f) + 15f, currentY, paintTextTitle)
-    currentY += 45f
-    val docTypeTitle = if (selectedTab == 1) "PHIẾU LƯƠNG DỰ KIẾN CUỐI THÁNG" else "PHIẾU LƯƠNG ĐIỆN TỬ CHI TIẾT"
-    canvas.drawText(docTypeTitle, (width / 2).toFloat(), currentY, paintTextSubTitle)
+    // Header
+    canvas.drawText("TIMESNAP PRO", paddingX, currentY, paintAppName)
+    currentY += 50f
+    canvas.drawText("PHIẾU LƯƠNG ĐIỆN TỬ CHI TIẾT", paddingX, currentY, paintDocTitle)
     currentY += 40f
-    canvas.drawText("Kỳ lương: $monthLabel", (width / 2).toFloat(), currentY, paintTextMonth)
-    currentY += 45f
-    if (selectedTab == 1) {
-        val paintWarning = Paint().apply {
-            color = android.graphics.Color.parseColor("#4C84FF")
-            textSize = 21f
-            isFakeBoldText = true
-            textAlign = Paint.Align.CENTER
-        }
-        canvas.drawText("🔮 ĐÃ BÙ TOÀN BỘ CÁC NGÀY CÒN LẠI", (width / 2).toFloat(), currentY, paintWarning)
-        currentY += 45f
-    } else if (summary.isCurrentMonth) {
-        val currentDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        val paintWarning = Paint().apply {
-            color = android.graphics.Color.parseColor("#F2994A") // AccentOrange orange
-            textSize = 21f
-            isFakeBoldText = true
-            textAlign = Paint.Align.CENTER
-        }
-        canvas.drawText("⚠️ TẠM TÍNH ĐẾN NGÀY $currentDay", (width / 2).toFloat(), currentY, paintWarning)
-        currentY += 45f
+    val statusText = if (selectedTab == 1) "Trạng thái: Dự kiến" else "Trạng thái: Đã phê duyệt"
+    canvas.drawText("Tháng $monthLabel | $statusText", paddingX, currentY, paintDocInfo)
+    currentY += 80f
+
+    // Helper functions
+    fun drawSectionHeader(title: String) {
+        canvas.drawText(title, paddingX, currentY, paintSectionTitle)
+        currentY += 20f
+        canvas.drawLine(paddingX, currentY, width - paddingX, currentY, paintDivider)
+        currentY += 50f
     }
 
-    canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
-    currentY += 45f
-
-    // Profile parameters
-    fun drawRow(label: String, value: String, isGreenVal: Boolean = false, isRedVal: Boolean = false) {
-        canvas.drawText(label, 80f, currentY, paintLabel)
-        val rectValue = paintValue.measureText(value)
-        val paintToUse = when {
-            isGreenVal -> paintGreen
-            isRedVal -> paintRed
-            else -> paintValue
-        }
-        canvas.drawText(value, (width - 80) - rectValue, currentY, paintToUse)
-        currentY += 45f
+    fun drawRow(label: String, value: String, valuePaint: Paint = paintValue) {
+        canvas.drawText(label, paddingX, currentY, paintLabel)
+        val measure = valuePaint.measureText(value)
+        canvas.drawText(value, width - paddingX - measure, currentY, valuePaint)
+        currentY += 50f
     }
 
+    // 1. THÔNG TIN NHÂN SỰ
+    drawSectionHeader("THÔNG TIN NHÂN SỰ")
     val employeeName = if (!config.hoVaTen.isNullOrBlank()) config.hoVaTen else (userSession?.displayName ?: "N/A")
     val employeeCode = if (!config.maNhanVien.isNullOrBlank()) config.maNhanVien else (userSession?.uid?.take(10) ?: "N/A")
-
-    drawRow("Nhân viên:", employeeName)
-    drawRow("Mã nhân viên (UID):", employeeCode)
+    
+    drawRow("Họ và tên:", employeeName)
+    drawRow("Mã nhân viên:", employeeCode)
     drawRow("Mức lương cơ bản:", "${fmt.format(config.luongCoBan)}đ")
     
     if (selectedTab == 1) {
-        drawRow("Số ngày công dự kiến:", "$soNgayCongDuKien / ${summary.standardWorkDays} ngày")
+        drawRow("Công làm việc:", "$soNgayCongDuKien / ${summary.standardWorkDays} ngày")
     } else {
-        drawRow("Số ngày chấm công:", "${summary.workingDays} / ${if (summary.isCurrentMonth) summary.expectedWorkDays else summary.standardWorkDays} ngày")
+        drawRow("Công làm việc:", "${summary.workingDays} / ${if (summary.isCurrentMonth) summary.expectedWorkDays else summary.standardWorkDays} ngày")
     }
+    currentY += 30f
 
-    currentY += 10f
-    canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
-    currentY += 45f
-
-    // Additions Section
-    val additionsHeaderPNG = if (selectedTab == 1) "KHOẢN CỘNG LƯƠNG DỰ KIẾN (+)" else "KHOẢN CỘNG LƯƠNG (+)"
-    canvas.drawText(additionsHeaderPNG, 80f, currentY, paintGreen)
-    currentY += 45f
-
-    // 1. Lương cơ bản
-    if (selectedTab == 1) {
-        drawRow("Lương Cơ Bản Thỏa Thuận", "+${fmt.format(config.luongCoBan)}đ", isGreenVal = true)
-        if (summary.standardWorkDays == 27) {
-            drawRow("Bù công dôi dư tháng 31 ngày (1 ngày LCB)", "+${fmt.format(dailySalary)}đ", isGreenVal = true)
-        }
-    } else {
-        val label = if (summary.isCurrentMonth) "Lương Cơ Bản Tạm Tính" else "Thực Nhận"
-        drawRow(label, "+${fmt.format(summary.baseBasicSalary)}đ", isGreenVal = true)
-        if (summary.standardWorkDays == 27) {
-            drawRow("Bù công dôi dư tháng 31 ngày (1 ngày LCB)", "+${fmt.format(dailySalary)}đ", isGreenVal = true)
-        }
-    }
+    // 2. THU NHẬP CHI TIẾT
+    drawSectionHeader("THU NHẬP CHI TIẾT (+)")
     
-    // 2. Chuyên cần
-    if (pcChuyenCanShowPNG > 0.0) {
-        drawRow("Chuyên cần", "+${fmt.format(pcChuyenCanShowPNG)}đ", isGreenVal = true)
+    if (selectedTab == 1) {
+        drawRow("Lương theo công thực tế", "+${fmt.format(config.luongCoBan)}đ", paintGreen)
+        if (summary.standardWorkDays == 27) {
+            drawRow("Bù công tháng 31 ngày", "+${fmt.format(dailySalary)}đ", paintGreen)
+        }
+    } else {
+        drawRow("Lương theo công thực tế", "+${fmt.format(summary.baseBasicSalary)}đ", paintGreen)
+        if (summary.standardWorkDays == 27) {
+            drawRow("Bù công tháng 31 ngày", "+${fmt.format(dailySalary)}đ", paintGreen)
+        }
     }
 
-    // 3. Trách nhiệm
-    if (config.pcTrachNhiem > 0.0) {
-        drawRow("Trách nhiệm", "+${fmt.format(pcTrachNhiemShowPNG)}đ", isGreenVal = true)
-    }
+    if (pcChuyenCanShowPNG > 0.0) drawRow("Phụ cấp chuyên cần", "+${fmt.format(pcChuyenCanShowPNG)}đ", paintGreen)
+    if (pcTrachNhiemShowPNG > 0.0) drawRow("Phụ cấp trách nhiệm", "+${fmt.format(pcTrachNhiemShowPNG)}đ", paintGreen)
+    if (pcKyThuatShowPNG > 0.0) drawRow("Phụ cấp kỹ thuật", "+${fmt.format(pcKyThuatShowPNG)}đ", paintGreen)
+    if (pcHieuSuatShowPNG > 0.0) drawRow("Phụ cấp hiệu suất", "+${fmt.format(pcHieuSuatShowPNG)}đ", paintGreen)
+    if (pcSanPhamShowPNG > 0.0) drawRow("Phụ cấp sản phẩm", "+${fmt.format(pcSanPhamShowPNG)}đ", paintGreen)
+    if (pcChucVuShowPNG > 0.0) drawRow("Phụ cấp chức vụ", "+${fmt.format(pcChucVuShowPNG)}đ", paintGreen)
+    if (pcDocHaiShowPNG > 0.0) drawRow("Phụ cấp độc hại", "+${fmt.format(pcDocHaiShowPNG)}đ", paintGreen)
+    if (pcDtDoanhThuShowPNG > 0.0) drawRow("Phụ cấp doanh thu", "+${fmt.format(pcDtDoanhThuShowPNG)}đ", paintGreen)
+    if (pcThamNienShowPNG > 0.0) drawRow("Phụ cấp thâm niên", "+${fmt.format(pcThamNienShowPNG)}đ", paintGreen)
+    if (pcComCaShowPNG > 0.0) drawRow("Phụ cấp cơm/ ca", "+${fmt.format(pcComCaShowPNG)}đ", paintGreen)
+    if (pcComOtShowPNG > 0.0) drawRow("Phụ cấp cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", paintGreen)
 
-    // 4. Kỹ thuật
-    if (config.pcKyThuat > 0.0) {
-        drawRow("Kỹ thuật", "+${fmt.format(pcKyThuatShowPNG)}đ", isGreenVal = true)
-    }
+    // OT 1.5 Merged
+    val projOtDayPNG = if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
+    val totalOtDayPNG = summary.otDayHours + projOtDayPNG
+    val totalPayDayPNG = summary.tienOtNgay + (if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15Pay else 0.0)
+    if (totalOtDayPNG > 0.0) drawRow("Làm thêm 1.5 (${df.format(totalOtDayPNG)}h)", "+${fmt.format(totalPayDayPNG)}đ", paintGreen)
 
-    // 5. Hiệu suất
-    if (config.pcHieuSuat > 0.0) {
-        drawRow("Hiệu suất", "+${fmt.format(pcHieuSuatShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 6. Sản phẩm
-    if (config.pcSanPham > 0.0) {
-        drawRow("Sản phẩm", "+${fmt.format(pcSanPhamShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 7. Chức vụ
-    if (config.pcChucVu > 0.0) {
-        drawRow("Chức vụ", "+${fmt.format(pcChucVuShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 8. Độc hại
-    if (config.pcDocHai > 0.0) {
-        drawRow("Độc hại", "+${fmt.format(pcDocHaiShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 9. Doanh thu
-    if (config.pcDtDoanhThu > 0.0) {
-        drawRow("Doanh thu", "+${fmt.format(pcDtDoanhThuShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 10. Thâm niên
-    if (config.pcThamNien > 0.0) {
-        drawRow("Thâm niên", "+${fmt.format(pcThamNienShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 11. Cơm/ca
-    if (pcComCaShowPNG > 0.0) {
-        drawRow("Cơm/ ca", "+${fmt.format(pcComCaShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 12. Cơm OT
-    if (pcComOtShowPNG > 0.0) {
-        drawRow("Cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 13. OT 1.5
-    if (summary.tienOtNgay > 0.0) {
-        drawRow("OT 1.5 (${df.format(summary.otDayHours)}h)", "+${fmt.format(summary.tienOtNgay)}đ", isGreenVal = true)
-    }
-    if (selectedTab == 1 && customOt15DaysCount > 0.0) {
-        drawRow("OT 1.5 (${df.format(customOt15DaysCount)} ngày)", "+${fmt.format(customOt15Pay)}đ", isGreenVal = true)
-    }
-
-    // 14. OT 2.0
-    if (summary.tienChuNhat > 0.0) {
-        drawRow("OT 2.0 (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", isGreenVal = true)
-    }
+    if (summary.tienChuNhat > 0.0) drawRow("Làm thêm 2.0 (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
     if (selectedTab == 1 && includeSundayInProjection && remainingSundays > 0) {
-        drawRow("OT 2.0 ($remainingSundays)", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", isGreenVal = true)
+        drawRow("Dự kiến CN ($remainingSundays ngày)", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", paintGreen)
     }
 
-    // 15. OT 3.0
-    if (summary.tienOtLe > 0.0) {
-        drawRow("OT 3.0 (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", isGreenVal = true)
-    }
+    if (summary.tienOtLe > 0.0) drawRow("Làm thêm 3.0 (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
 
-    // 15.1 OTĐ 1.5
-    if (summary.tienOtDem > 0.0) {
-        drawRow("OTĐ 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", isGreenVal = true)
-    }
+    // OTĐ 1.5 Merged
+    val projOtNightPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
+    val totalOtNightPNG = summary.otNightHours + projOtNightPNG
+    val totalPayNightPNG = summary.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
+    if (totalOtNightPNG > 0.0) drawRow("Làm thêm đêm 1.5 (${df.format(totalOtNightPNG)}h)", "+${fmt.format(totalPayNightPNG)}đ", paintGreen)
 
-    // 16. Phụ cấp đêm
     val finalPcCaDemCountPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") summary.caDemCount + customOt15DaysCount.toInt() else summary.caDemCount
     val finalPcCaDemPNG = if (selectedTab == 1) (summary.pcCaDemVal + customNightAllowance) else summary.pcCaDemVal
-    if (finalPcCaDemPNG > 0.0) {
-        drawRow("Phụ cấp đêm ($finalPcCaDemCountPNG)", "+${fmt.format(finalPcCaDemPNG)}đ", isGreenVal = true)
-    }
+    if (finalPcCaDemPNG > 0.0) drawRow("Phụ cấp ca đêm ($finalPcCaDemCountPNG)", "+${fmt.format(finalPcCaDemPNG)}đ", paintGreen)
 
-    // 17. Xăng xe
-    if (config.pcXangXe > 0.0) {
-        drawRow("Xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", isGreenVal = true)
-    }
+    if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
+    if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
+    if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
+    
+    currentY += 30f
 
-    // 18. Nhà ở
-    if (config.pcNhaO > 0.0) {
-        drawRow("Nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", isGreenVal = true)
-    }
-
-    // 19. Khác (Merged into Night Allowance)
-    // if (config.pcKhac > 0.0) {
-    //     drawRow("Khác", "+${fmt.format(pcKhacShowPNG)}đ", isGreenVal = true)
-    // }
-
-    // 20. Khác 1
-    if (config.pcKhac1 > 0.0) {
-        drawRow("Khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", isGreenVal = true)
-    }
-    currentY += 10f
-    canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
-    currentY += 45f
-
-    // Deductions Section
-    canvas.drawText("KHOẢN TRỪ LƯƠNG (-)", 80f, currentY, paintRed)
-    currentY += 45f
-
-    if (summary.tienBh > 0.0) {
-        drawRow("BHXH/BHYT Khấu trừ (10.5%)", "-${fmt.format(summary.tienBh)}đ", isRedVal = true)
-    }
-    if (summary.doanPhi > 0.0) {
-        drawRow("Phí Công Đoàn Bắt Buộc", "-${fmt.format(summary.doanPhi)}đ", isRedVal = true)
-    }
-
+    // 3. KHẤU TRỪ
+    drawSectionHeader("KHẤU TRỪ & NGHĨA VỤ (-)")
+    if (summary.tienBh > 0.0) drawRow("BHXH/BHYT (10.5%)", "-${fmt.format(summary.tienBh)}đ", paintRed)
+    if (summary.doanPhi > 0.0) drawRow("Phí công đoàn", "-${fmt.format(summary.doanPhi)}đ", paintRed)
     if (selectedTab == 0 && summary.tienKhauTruNghi > 0.0) {
         val missed = ((if (summary.isCurrentMonth) summary.expectedWorkDays else summary.standardWorkDays) - summary.workingDays).coerceAtLeast(0)
-        drawRow("Khấu trừ vắng làm ($missed ngày)", "-${fmt.format(summary.tienKhauTruNghi)}đ", isRedVal = true)
+        drawRow("Khấu trừ vắng ($missed ngày)", "-${fmt.format(summary.tienKhauTruNghi)}đ", paintRed)
     }
+    currentY += 50f
 
-    currentY += 10f
-    canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
-    currentY += 55f
-
-    // Total actual salary pay
-    val paintNetText = Paint().apply {
+    // Total Card
+    val cardHeight = 100f
+    val cardRect = RectF(paddingX, currentY, width - paddingX, currentY + cardHeight)
+    canvas.drawRoundRect(cardRect, 8f, 8f, paintCard)
+    
+    val paintTotalLabel = Paint().apply {
         color = android.graphics.Color.WHITE
+        textSize = 26f
+        isFakeBoldText = true
+    }
+    val paintTotalValue = Paint().apply {
+        color = colorSuccess
         textSize = 30f
         isFakeBoldText = true
     }
+    
+    val totalLabel = if (selectedTab == 1) "DỰ KIẾN THỰC NHẬN" else "TỔNG LƯƠNG THỰC NHẬN"
+    val totalValue = if (selectedTab == 1) luongDuKienVal else summary.luongThucNhan
+    val totalValueStr = "${fmt.format(totalValue)} VNĐ"
+    
+    canvas.drawText(totalLabel, paddingX + 30f, currentY + (cardHeight / 2) + 10f, paintTotalLabel)
+    val measureTotal = paintTotalValue.measureText(totalValueStr)
+    canvas.drawText(totalValueStr, width - paddingX - 30f - measureTotal, currentY + (cardHeight / 2) + 12f, paintTotalValue)
+    
+    currentY += cardHeight + 150f
 
-    val paintNetVal = Paint().apply {
-        color = android.graphics.Color.parseColor("#27AE60")
-        textSize = 40f
-        isFakeBoldText = true
-    }
-
-    val netLabelPNG = if (selectedTab == 1) "DỰ KIẾN THỰC NHẬN:" else "THỰC NHẬN:"
-    val netValuePNG = if (selectedTab == 1) luongDuKienVal else summary.luongThucNhan
-
-    canvas.drawText(netLabelPNG, 80f, currentY, paintNetText)
-    val textVal = "${fmt.format(netValuePNG)}đ"
-    val measureNetVal = paintNetVal.measureText(textVal)
-    canvas.drawText(textVal, (width - 80) - measureNetVal, currentY, paintNetVal)
-
-    // Append Approval & Founder Info to PNG (Without the barcode box)
-    currentY += 60f
-    canvas.drawLine(80f, currentY, (width - 80).toFloat(), currentY, paintDivider)
-    currentY += 50f
-
-    val paintApproval = Paint().apply {
-        color = android.graphics.Color.parseColor("#828282")
-        textSize = 15f
-        textAlign = Paint.Align.CENTER
-    }
-    canvas.drawText("* ĐÃ ĐƯỢC PHÊ DUYỆT BỞI HỆ THỐNG TIMESNAP PRO *", (width / 2f), currentY, paintApproval)
-    currentY += 35f
-
-    val paintFounder = Paint().apply {
-        color = android.graphics.Color.parseColor("#35A3FF") // Neon blue
-        textSize = 17f
+    // Footer
+    val paintFooter = Paint().apply {
+        color = colorPrimary
+        textSize = 18f
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
     }
-    canvas.drawText("SÁNG LẬP & PHÁT TRIỂN BỞI TRUONGVANKHOA", (width / 2f), currentY, paintFounder)
+    val paintDev = Paint().apply {
+        color = colorTextMuted
+        textSize = 14f
+        textAlign = Paint.Align.CENTER
+    }
+    
+    canvas.drawText("XUẤT TỪ HỆ THỐNG QUẢN LÝ TIMESNAP PRO", width / 2f, currentY, paintFooter)
+    currentY += 30f
+    canvas.drawText("DEVELOPED BY TRUONGVANKHOA", width / 2f, currentY, paintDev)
 
-    // Save Bitmap to MediaStore Gallery output
+    // Save Bitmap to MediaStore
     try {
         val filename = "TimeSnap_Pro_Payslip_${selectedMonth}_${System.currentTimeMillis()}.png"
         var fos: OutputStream? = null
@@ -1541,7 +1421,6 @@ fun savePayslipAsPngImage(
                 false
             }
         } else {
-            // Under Android 9 legacy file writer
             val imagesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_PICTURES).toString()
             val file = java.io.File(imagesDir, filename)
             fos = java.io.FileOutputStream(file)
