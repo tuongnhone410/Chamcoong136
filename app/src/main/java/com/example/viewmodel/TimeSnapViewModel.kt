@@ -1000,7 +1000,21 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             null
         }
 
-        var expectedWorkDaysCount = 0
+        var expectedWorkDaysSoFar = 0
+        var totalWorkDaysInMonth = 0
+
+        // Calculate total work days in month first
+        for (day in 1..maxDaysInMo) {
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            val cal = Calendar.getInstance()
+            cal.set(targetYear, targetMonth - 1, day)
+            val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+            val isHoliday = isHolidayDate(dateStr)
+            if (!isSunday && !isHoliday) {
+                totalWorkDaysInMonth++
+            }
+        }
+
         if (isCurrentSelectedMonth) {
             for (day in 1 until todayDayOfMonth) {
                 val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
@@ -1012,7 +1026,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
                 val isHoliday = isHolidayDate(dateStr)
                 if (!isSunday && !isHoliday) {
-                    expectedWorkDaysCount++
+                    expectedWorkDaysSoFar++
                 }
             }
         } else {
@@ -1027,27 +1041,19 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
                     val isHoliday = isHolidayDate(dateStr)
                     if (!isSunday && !isHoliday) {
-                        expectedWorkDaysCount++
+                        expectedWorkDaysSoFar++
                     }
                 }
             } else {
-                for (day in 1..maxDaysInMo) {
-                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                    val cal = Calendar.getInstance()
-                    cal.set(targetYear, targetMonth - 1, day)
-                    val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-                    val isHoliday = isHolidayDate(dateStr)
-                    if (!isSunday && !isHoliday) {
-                        expectedWorkDaysCount++
-                    }
-                }
+                expectedWorkDaysSoFar = totalWorkDaysInMonth
             }
         }
 
         return com.example.data.SalaryCalculator.calculateMonthlySalary(
             entries = entries,
             config = config,
-            scheduledDays = expectedWorkDaysCount,
+            scheduledDaysSoFar = expectedWorkDaysSoFar,
+            totalScheduledDaysInMonth = totalWorkDaysInMonth,
             earliestDate = effectiveJoinDate,
             selectedMonth = selectedMonth,
             todayStr = todayStr,
@@ -1080,6 +1086,7 @@ data class SalarySummary(
     val baseBasicSalary: Double = 0.0,
     val expectedWorkDays: Int = 26,
     val standardWorkDays: Int = 26,
+    val scheduledDaysSoFar: Int = 0,
     val isCurrentMonth: Boolean = false,
     
     val pcKyThuatVal: Double = 0.0,

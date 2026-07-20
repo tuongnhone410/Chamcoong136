@@ -114,16 +114,24 @@ object ExportUtils {
             set(Calendar.MONTH, targetMonth - 1)
         }
         val maxDays = calMo.getActualMaximum(Calendar.DAY_OF_MONTH)
-        var nonSundays = 0
+        
+        var totalScheduledDaysInMonth = 0
+        var scheduledDaysSoFar = 0
         for (d in 1..maxDays) {
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, d)
             calMo.set(Calendar.DAY_OF_MONTH, d)
-            if (calMo.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
-                nonSundays++
+            val isSunday = calMo.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            val isHoliday = isHolidayDate(dateStr)
+            if (!isSunday && !isHoliday) {
+                totalScheduledDaysInMonth++
+                if (!isCurrentSelectedMonth || dateStr < todayStr) {
+                    scheduledDaysSoFar++
+                }
             }
         }
 
-        val expectedWorkDaysCount = nonSundays
-        val standardWorkDaysInMonth = nonSundays
+        val expectedWorkDaysCount = totalScheduledDaysInMonth
+        val standardWorkDaysInMonth = totalScheduledDaysInMonth
         val dailySalary = luongBasic / 26.0
         val hourlySalary = dailySalary / 8.0
 
@@ -289,20 +297,20 @@ object ExportUtils {
         }
         val allowanceDivisor = 26.0
 
-        val pcKyThuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcTrachNhiemPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcChucVuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcHieuSuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcSanPhamPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcComCaPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcComOtPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcNhaOPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcDocHaiPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcDtDoanhThuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcXangXePr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcThamNienPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcKhac1Pr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
-        val pcKhacPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount)
+        val pcKyThuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcTrachNhiemPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcChucVuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcHieuSuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcSanPhamPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcComCaPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcComOtPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcNhaOPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcDocHaiPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcDtDoanhThuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcXangXePr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcThamNienPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcKhac1Pr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcKhacPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
 
         val pcCaDemPr = pcKhacPr
 
@@ -390,7 +398,9 @@ object ExportUtils {
                 workingDaysCount.toDouble(),
                 actualPresenceDaysCount,
                 comOtDaysCount,
-                nightShiftsCount
+                nightShiftsCount,
+                scheduledDaysSoFar,
+                totalScheduledDaysInMonth
             )
         }
 

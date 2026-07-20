@@ -264,12 +264,8 @@ fun PayslipScreen(
                     includeSundayInProjection = hasWorkedSunday
                 }
 
-                val dailySalary = remember(c.luongCoBan, s.standardWorkDays) {
-                    if (s.standardWorkDays == 27) {
-                        c.luongCoBan / 26.0
-                    } else {
-                        c.luongCoBan / s.standardWorkDays.coerceAtLeast(1)
-                    }
+                val dailySalary = remember(c.luongCoBan) {
+                    c.luongCoBan / 26.0
                 }
                 val hourlySalary = dailySalary / 8.0
 
@@ -509,7 +505,7 @@ fun PayslipScreen(
                         if (selectedTab == 1) {
                             PayslipProfileRow(
                                 label = "Số ngày công dự kiến:", 
-                                value = "$soNgayCongDuKien / ${s.standardWorkDays} ngày"
+                                value = "${soNgayCongDuKien.toInt()} / ${s.expectedWorkDays} ngày"
                             )
                             if (isCurrentSelectedMonth) {
                                 PayslipProfileRow(
@@ -1184,20 +1180,20 @@ fun savePayslipAsPngImage(
     val canvas = Canvas(bitmap)
 
     // Setup Paints
-    val paintBg = Paint().apply { color = android.graphics.Color.parseColor("#121212") }
-    val paintCard = Paint().apply { color = android.graphics.Color.parseColor("#1C1C1C") }
+    val paintBg = Paint().apply { color = android.graphics.Color.parseColor("#0F111A") }
+    val paintCard = Paint().apply { color = android.graphics.Color.parseColor("#1A1D2E") }
     val paintNeon = Paint().apply {
-        color = android.graphics.Color.parseColor("#2F80ED")
+        color = android.graphics.Color.parseColor("#4C84FF")
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }
     val paintDivider = Paint().apply {
-        color = android.graphics.Color.parseColor("#2C2C2C")
+        color = android.graphics.Color.parseColor("#2C3149")
         strokeWidth = 2f
     }
     
     val paintTextTitle = Paint().apply {
-        color = android.graphics.Color.parseColor("#2F80ED")
+        color = android.graphics.Color.parseColor("#4C84FF")
         textSize = 34f
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
@@ -1211,13 +1207,13 @@ fun savePayslipAsPngImage(
     }
 
     val paintTextMonth = Paint().apply {
-        color = android.graphics.Color.parseColor("#E0E0E0")
+        color = android.graphics.Color.parseColor("#8F9BB3")
         textSize = 24f
         textAlign = Paint.Align.CENTER
     }
 
     val paintLabel = Paint().apply {
-        color = android.graphics.Color.parseColor("#828282")
+        color = android.graphics.Color.parseColor("#8F9BB3")
         textSize = 22f
     }
 
@@ -1251,20 +1247,20 @@ fun savePayslipAsPngImage(
     val cY = currentY - 10f
 
     val paintCircleBg = Paint().apply {
-        color = android.graphics.Color.parseColor("#1535A3FF") // 15% opacity neon blue
+        color = android.graphics.Color.parseColor("#154C84FF") // 15% opacity neon blue
         style = Paint.Style.FILL
     }
     canvas.drawCircle(cX, cY, 18f, paintCircleBg)
 
     val paintCircleBorder = Paint().apply {
-        color = android.graphics.Color.parseColor("#35A3FF")
+        color = android.graphics.Color.parseColor("#4C84FF")
         style = Paint.Style.STROKE
         strokeWidth = 2.5f
     }
     canvas.drawCircle(cX, cY, 18f, paintCircleBorder)
 
     val paintCircleSymbol = Paint().apply {
-        color = android.graphics.Color.parseColor("#35A3FF")
+        color = android.graphics.Color.parseColor("#4C84FF")
         textSize = 20f
         isFakeBoldText = true
         textAlign = Paint.Align.CENTER
@@ -1281,7 +1277,7 @@ fun savePayslipAsPngImage(
     currentY += 45f
     if (selectedTab == 1) {
         val paintWarning = Paint().apply {
-            color = android.graphics.Color.parseColor("#35A3FF")
+            color = android.graphics.Color.parseColor("#4C84FF")
             textSize = 21f
             isFakeBoldText = true
             textAlign = Paint.Align.CENTER

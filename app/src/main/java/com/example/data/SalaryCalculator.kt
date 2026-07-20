@@ -234,12 +234,16 @@ object SalaryCalculator {
         totalWorkDays: Double,
         comCaCount: Int,
         comOtCount: Int,
-        nightShiftsCount: Int
+        nightShiftsCount: Int,
+        scheduledDaysSoFar: Int,
+        totalScheduledDaysInMonth: Int
     ): Double {
         return when (calcType) {
             "MONTHLY_PRO_RATED" -> {
-                val allowanceDivisor = 26.0
-                Math.round((allowanceValue / allowanceDivisor) * totalWorkDays).toDouble().coerceAtMost(allowanceValue)
+                // User logic: Deduction is 1/26 per missed day relative to expected progress
+                val daysMissed = (scheduledDaysSoFar - totalWorkDays).coerceAtLeast(0.0)
+                val deduction = daysMissed * (allowanceValue / 26.0)
+                (allowanceValue - deduction).coerceAtLeast(0.0)
             }
             "MONTHLY_FLAT" -> {
                 allowanceValue
@@ -258,9 +262,10 @@ object SalaryCalculator {
                 nightShiftsCount * allowanceValue
             }
             else -> {
-                // Default to MONTHLY_PRO_RATED if unknown
-                val allowanceDivisor = 26.0
-                Math.round((allowanceValue / allowanceDivisor) * totalWorkDays).toDouble().coerceAtMost(allowanceValue)
+                // Default to pro-rated logic if unknown
+                val daysMissed = (scheduledDaysSoFar - totalWorkDays).coerceAtLeast(0.0)
+                val deduction = daysMissed * (allowanceValue / 26.0)
+                (allowanceValue - deduction).coerceAtLeast(0.0)
             }
         }
     }
@@ -271,7 +276,8 @@ object SalaryCalculator {
     fun calculateMonthlySalary(
         entries: List<TimeEntry>,
         config: UserConfig,
-        scheduledDays: Int,
+        scheduledDaysSoFar: Int,
+        totalScheduledDaysInMonth: Int,
         earliestDate: String?,
         selectedMonth: String,
         todayStr: String,
@@ -416,22 +422,22 @@ object SalaryCalculator {
         }
 
         // Dynamic Allowance Calculation Engine based on Calculation Types
-        val pcKyThuatPr = calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcTrachNhiemPr = calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcChucVuPr = calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcHieuSuatPr = calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcSanPhamPr = calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcComCaPr = calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcComOtPr = calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcNhaOPr = calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcDocHaiPr = calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcDtDoanhThuPr = calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcXangXePr = calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcThamNienPr = calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
-        val pcKhac1Pr = calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcKyThuatPr = calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcTrachNhiemPr = calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcChucVuPr = calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcHieuSuatPr = calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcSanPhamPr = calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcComCaPr = calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcComOtPr = calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcNhaOPr = calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcDocHaiPr = calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcDtDoanhThuPr = calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcXangXePr = calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcThamNienPr = calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
+        val pcKhac1Pr = calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
         
         // pcKhac is Phụ cấp ca đêm (mỗi ca)
-        val pcKhacPr = calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount)
+        val pcKhacPr = calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
         val pcCaDemPr = pcKhacPr
 
         val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
@@ -442,7 +448,7 @@ object SalaryCalculator {
         // 7. Calculate Chuyên cần (Diligence)
         val hasUnpaidOrAbsent = processedEntries.any { 
             it.dayType == "UNPAID_LEAVE" && (earliestDate == null || it.date >= earliestDate)
-        } || (scheduledDays > 0 && totalWorkDays < scheduledDays)
+        } || (scheduledDaysSoFar > 0 && totalWorkDays < scheduledDaysSoFar)
 
         val chuyenCanValue = if (hasUnpaidOrAbsent) {
             0.0
@@ -454,7 +460,9 @@ object SalaryCalculator {
                 totalWorkDays,
                 comCaCount,
                 comOtCount,
-                nightShiftsCount
+                nightShiftsCount,
+                scheduledDaysSoFar,
+                totalScheduledDaysInMonth
             )
         }
 
@@ -494,8 +502,9 @@ object SalaryCalculator {
             tienKhauTruNghi = tienKhauTruNghi,
             luongThucNhan = luongThucNhan,
             baseBasicSalary = baseBasicSalary,
-            expectedWorkDays = scheduledDays,
+            expectedWorkDays = totalScheduledDaysInMonth,
             standardWorkDays = 26,
+            scheduledDaysSoFar = scheduledDaysSoFar,
             isCurrentMonth = isCurrentSelectedMonth,
             
             pcKyThuatVal = pcKyThuatPr,

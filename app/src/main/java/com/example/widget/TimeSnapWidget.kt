@@ -52,17 +52,21 @@ class TimeSnapWidget : GlanceAppWidget() {
         val authController = AuthController(context, repository)
         
         val session = authController.currentUserFlow.first()
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val activeEntry = session?.let { repository.getActiveEntry(it.uid) }
+        val todayEntry = session?.let { repository.getEntryByDate(it.uid, todayStr) }
         
         provideContent {
-            WidgetContent(context, session?.displayName ?: "Cá nhân", activeEntry)
+            WidgetContent(context, session?.displayName ?: "Cá nhân", activeEntry, todayEntry)
         }
     }
+
     @Composable
-    private fun WidgetContent(context: Context, name: String, activeEntry: TimeEntry?) {
+    private fun WidgetContent(context: Context, name: String, activeEntry: TimeEntry?, todayEntry: TimeEntry?) {
         val isWorking = activeEntry != null
-        val accentColor = if (isWorking) Color(0xFFFF5252) else Color(0xFF00E676)
         val neonBlue = Color(0xFF00B0FF)
+        val statusColor = if (isWorking) Color(0xFF00E676) else Color(0xFFFF5252)
+        val statusText = if (isWorking) "ĐANG TRONG CA" else "CHƯA VÀO CA"
 
         Box(modifier = GlanceModifier.fillMaxSize()) {
             Image(
@@ -75,61 +79,120 @@ class TimeSnapWidget : GlanceAppWidget() {
             Column(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .padding(12.dp),
+                    .padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = "TimeSnap Pro",
-                    style = TextStyle(
-                        color = ColorProvider(neonBlue),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                // Header row
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "TimeSnap Pro",
+                        style = TextStyle(
+                            color = ColorProvider(neonBlue),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     )
-                )
-                
-                Spacer(modifier = GlanceModifier.height(4.dp))
-                
-                Text(
-                    text = name,
-                    style = TextStyle(
-                        color = ColorProvider(Color.White),
-                        fontSize = 12.sp
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    Text(
+                        text = name,
+                        style = TextStyle(
+                            color = ColorProvider(Color.White.copy(alpha = 0.7f)),
+                            fontSize = 11.sp
+                        )
                     )
-                )
+                }
 
                 Spacer(modifier = GlanceModifier.height(8.dp))
 
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalAlignment = Alignment.CenterVertically
+                // Main Status Card-like area
+                Column(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Status indicator
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = GlanceModifier
+                                .width(8.dp)
+                                .height(8.dp)
+                                .background(ColorProvider(statusColor))
+                        ) {}
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        Text(
+                            text = statusText,
+                            style = TextStyle(
+                                color = ColorProvider(statusColor),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(12.dp))
+
+                    // Big Action Button
                     FilledButton(
-                        text = if (isWorking) "RA CA" else "VÀO CA",
+                        text = if (isWorking) " KẾT THÚC CA " else " BẮT ĐẦU CA ",
                         onClick = actionRunCallback<ToggleActionCallback>(),
-                        modifier = GlanceModifier.width(120.dp).height(48.dp)
+                        modifier = GlanceModifier.fillMaxWidth().height(44.dp)
                     )
                 }
-                
-                if (isWorking && activeEntry?.checkInTime != null) {
-                    val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
-                    val timeStr = sdf.format(Date(activeEntry.checkInTime))
-                    Spacer(modifier = GlanceModifier.height(4.dp))
-                    Text(
-                        text = "Vào lúc: $timeStr",
-                        style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 10.sp)
-                    )
-                } else {
-                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                    val dateStr = sdf.format(Date())
-                    Spacer(modifier = GlanceModifier.height(4.dp))
-                    Text(
-                        text = dateStr,
-                        style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 10.sp)
-                    )
+
+                Spacer(modifier = GlanceModifier.height(10.dp))
+
+                // Today's details footer
+                Column(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .background(ColorProvider(Color.Black.copy(alpha = 0.3f)))
+                        .padding(6.dp)
+                ) {
+                    val entryToShow = activeEntry ?: todayEntry
+                    if (entryToShow != null) {
+                        val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+                        val checkIn = entryToShow.checkInTime?.let { sdf.format(Date(it)) } ?: "--:--"
+                        val checkOut = entryToShow.checkOutTime?.let { sdf.format(Date(it)) } ?: "..."
+                        
+                        Row(modifier = GlanceModifier.fillMaxWidth()) {
+                            DetailItem("Vào", checkIn)
+                            Spacer(modifier = GlanceModifier.width(8.dp))
+                            DetailItem("Ra", checkOut)
+                            Spacer(modifier = GlanceModifier.defaultWeight())
+                            DetailItem("Ca", entryToShow.shiftId?.uppercase() ?: "KĐ")
+                        }
+                    } else {
+                        Text(
+                            text = "Hôm nay chưa có dữ liệu chấm công",
+                            style = TextStyle(
+                                color = ColorProvider(Color.LightGray),
+                                fontSize = 10.sp,
+                                textAlign = androidx.glance.text.TextAlign.Center
+                            ),
+                            modifier = GlanceModifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    @Composable
+    private fun DetailItem(label: String, value: String) {
+        Column {
+            Text(
+                text = label,
+                style = TextStyle(color = ColorProvider(Color.Gray), fontSize = 9.sp)
+            )
+            Text(
+                text = value,
+                style = TextStyle(color = ColorProvider(Color.White), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            )
         }
     }
 }
