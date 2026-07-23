@@ -181,25 +181,30 @@ object SalaryCalculator {
             0
         }
 
+        val resolvedBreakDeduction = entry.customBreakDeduction ?: config?.tinhKhauTruNghi ?: (shift.breakHours > 0.0)
+        val breakHrsToUse = if (resolvedBreakDeduction) {
+            entry.customBreakHours ?: config?.soGioNghiGiaiLao ?: shift.breakHours
+        } else {
+            0.0
+        }
+
         // 5. Calculate WorkDay according to company rules
         val maxLateOrEarly = Math.max(lateMin, earlyLeaveMin)
         val workD = if (rawOut == null) {
             // Checked in but still working
             if (lateMin < 15) 1.0 else if (lateMin < 120) 0.5 else 0.0
         } else {
-            // Completed check-out
+            // Completed check-out: Calculate actual hours worked
+            val outMs = normOutMs ?: rawOut
+            val workedHrs = (outMs - normInMs) / 3600000.0
+            val actualWorkedHrs = (workedHrs - breakHrsToUse).coerceAtLeast(0.0)
             when {
+                actualWorkedHrs >= 8.0 -> 1.0
+                actualWorkedHrs >= 4.0 -> 0.5
                 maxLateOrEarly < 15 -> 1.0
                 maxLateOrEarly < 120 -> 0.5
                 else -> 0.0
             }
-        }
-
-        val resolvedBreakDeduction = entry.customBreakDeduction ?: config?.tinhKhauTruNghi ?: (shift.breakHours > 0.0)
-        val breakHrsToUse = if (resolvedBreakDeduction) {
-            entry.customBreakHours ?: config?.soGioNghiGiaiLao ?: shift.breakHours
-        } else {
-            0.0
         }
 
         // 6. Calculate OT Hours according to shift
@@ -240,10 +245,9 @@ object SalaryCalculator {
     ): Double {
         return when (calcType) {
             "MONTHLY_PRO_RATED" -> {
-                // User logic: Deduction is 1/26 per missed day relative to expected progress
-                val daysMissed = (scheduledDaysSoFar - totalWorkDays).coerceAtLeast(0.0)
-                val deduction = daysMissed * (allowanceValue / 26.0)
-                (allowanceValue - deduction).coerceAtLeast(0.0)
+                // Pro-rata based on actual work days out of 26 standard days, capped at 100% (1.0)
+                val ratio = (totalWorkDays / 26.0).coerceAtMost(1.0)
+                allowanceValue * ratio
             }
             "MONTHLY_FLAT" -> {
                 allowanceValue
@@ -262,10 +266,8 @@ object SalaryCalculator {
                 nightShiftsCount * allowanceValue
             }
             else -> {
-                // Default to pro-rated logic if unknown
-                val daysMissed = (scheduledDaysSoFar - totalWorkDays).coerceAtLeast(0.0)
-                val deduction = daysMissed * (allowanceValue / 26.0)
-                (allowanceValue - deduction).coerceAtLeast(0.0)
+                val ratio = (totalWorkDays / 26.0).coerceAtMost(1.0)
+                allowanceValue * ratio
             }
         }
     }

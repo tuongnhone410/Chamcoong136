@@ -54,11 +54,18 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var attendanceJob: kotlinx.coroutines.Job? = null
+
     fun selectEmployee(employee: UserConfig?) {
         _selectedEmployee.value = employee
+        attendanceJob?.cancel()
         if (employee != null) {
             _selectedEmployeeIds.value = emptySet() // Clear multi-selection when viewing details
-            loadAttendanceForEmployee(employee.userId)
+            attendanceJob = viewModelScope.launch {
+                FirestoreService.getAttendanceLogsFlow(employee.userId).collect { logs ->
+                    _attendanceRecords.value = logs
+                }
+            }
         } else {
             _attendanceRecords.value = emptyList()
         }
@@ -126,13 +133,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun loadAttendanceForEmployee(uid: String) {
-        viewModelScope.launch {
-            val logs = FirestoreService.getAttendanceLogsForUser(uid)
-            _attendanceRecords.value = logs
-        }
-    }
-
     fun saveEmployeeConfig(config: UserConfig) {
         viewModelScope.launch {
             FirestoreService.saveUserSalaryConfigToFirestore(config)
@@ -143,14 +143,12 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun saveAttendanceRecord(record: AttendanceRecord) {
         viewModelScope.launch {
             FirestoreService.saveAttendanceRecord(record)
-            _selectedEmployee.value?.let { loadAttendanceForEmployee(it.userId) }
         }
     }
 
     fun deleteAttendanceRecord(uid: String, dateString: String) {
         viewModelScope.launch {
             FirestoreService.deleteAttendanceRecord(uid, dateString)
-            _selectedEmployee.value?.let { loadAttendanceForEmployee(it.userId) }
         }
     }
 

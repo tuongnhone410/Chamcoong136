@@ -245,6 +245,37 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         _currentSelectedMonth.value = yearMonth
     }
 
+    private fun syncTimeEntryToLegacyLog(entry: TimeEntry) {
+        if (entry.userId.startsWith("demo")) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val log = com.example.data.AttendanceRecord(
+                    id = entry.id.toLong(),
+                    uid = entry.userId,
+                    dateString = entry.date,
+                    clockInTime = entry.checkInTime ?: 0L,
+                    clockOutTime = entry.checkOutTime,
+                    status = entry.dayType,
+                    notes = entry.note ?: ""
+                )
+                com.example.data.FirestoreService.saveAttendanceRecord(log)
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Failed to sync legacy log: ${e.message}")
+            }
+        }
+    }
+
+    private fun deleteTimeEntryFromLegacyLog(entry: TimeEntry) {
+        if (entry.userId.startsWith("demo")) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                com.example.data.FirestoreService.deleteAttendanceRecord(entry.userId, entry.date)
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Failed to delete legacy log: ${e.message}")
+            }
+        }
+    }
+
     // Toggle Check-In / Check-Out
     fun toggleCheckIn(note: String = "") {
         val session = currentUserSession.value ?: return
@@ -285,6 +316,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 )
                 val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
                 repository.insertOrUpdate(calculated)
+                syncTimeEntryToLegacyLog(calculated)
             } else {
                 // Perform check-out
                 val cal = Calendar.getInstance()
@@ -302,6 +334,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 )
                 val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
                 repository.insertOrUpdate(calculated)
+                syncTimeEntryToLegacyLog(calculated)
             }
             triggerSync()
             viewModelScope.launch(Dispatchers.IO) {
@@ -318,6 +351,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val active = repository.getActiveEntry(session.uid) ?: return@launch
             val updated = active.copy(note = note.takeIf { it.isNotBlank() })
             repository.insertOrUpdate(updated)
+            syncTimeEntryToLegacyLog(updated)
             triggerSyncDebounced()
         }
     }
@@ -766,6 +800,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
             val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
             repository.insertOrUpdate(calculated)
+            syncTimeEntryToLegacyLog(calculated)
             triggerSync()
         }
     }
@@ -859,6 +894,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 )
                 val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value)
                 repository.insertOrUpdate(calculated)
+                syncTimeEntryToLegacyLog(calculated)
             }
             triggerSync()
         }
@@ -867,6 +903,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     fun deleteEntry(entry: TimeEntry) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.delete(entry)
+            deleteTimeEntryFromLegacyLog(entry)
             
             // Revert leave quota if deleted entry was PAID_LEAVE
             if (entry.dayType == "PAID_LEAVE") {
@@ -893,6 +930,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         restoredLeaves++
                     }
                     repository.delete(existing)
+                    deleteTimeEntryFromLegacyLog(existing)
                 }
             }
             if (restoredLeaves > 0) {

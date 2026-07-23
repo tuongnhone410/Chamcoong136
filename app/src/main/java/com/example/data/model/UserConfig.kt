@@ -45,6 +45,9 @@ data class UserConfig(
     val hoVaTen: String = "User Demo",
     val maNhanVien: String = "demo_9bcad9a7",
     val emailDangKy: String = "",
+    val soDienThoai: String = "",
+    val boPhan: String = "",
+    val lichTrinh: String = "08:00 - 17:00",
     val ngayVaoLam: String = "", // Ngày vào làm/bắt đầu tính công (yyyy-MM-dd)
     
     // Retrocompatibility keys (to prevent DB compilation errors)
@@ -88,7 +91,7 @@ data class UserConfig(
                 "pcComOt" -> "OT_MEAL_GE_2H"
                 "pcKhac" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
                 "pcThamNien" -> "MONTHLY_FLAT"
-                "tienChuyenCanGoc" -> "MONTHLY_FLAT"
+                "tienChuyenCanGoc" -> "MONTHLY_PRO_RATED"
                 else -> "MONTHLY_PRO_RATED"
             }
         }
