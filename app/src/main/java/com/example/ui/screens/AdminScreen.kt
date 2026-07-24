@@ -753,12 +753,20 @@ fun EmployeeDetailView(
         }
     }
 
-    val monthStats = remember(filteredRecords) {
+    val monthStats = remember(filteredRecords, employee) {
         val workDays = filteredRecords.count { it.clockOutTime != null }
-        val lateCount = filteredRecords.count { 
-            val cal = Calendar.getInstance().apply { timeInMillis = it.clockInTime }
-            // Threshold 08:05 for late
-            cal.get(Calendar.HOUR_OF_DAY) > 8 || (cal.get(Calendar.HOUR_OF_DAY) == 8 && cal.get(Calendar.MINUTE) > 5)
+        val lateCount = filteredRecords.count { r ->
+            if (r.clockInTime > 0) {
+                val tempEntry = com.example.data.model.TimeEntry(
+                    userId = employee.userId,
+                    date = r.dateString,
+                    checkInTime = r.clockInTime,
+                    checkOutTime = r.clockOutTime
+                )
+                com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee).lateMinutes > 0
+            } else {
+                false
+            }
         }
         val totalHrs = filteredRecords.sumOf { r ->
             if (r.clockOutTime != null) (r.clockOutTime - r.clockInTime) / 3600000.0 else 0.0
@@ -1086,7 +1094,7 @@ fun EmployeeDetailView(
                     } else {
                         items(filteredRecords.sortedByDescending { it.dateString }) { record ->
                             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                AttendanceRecordItem(record = record, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
+                                AttendanceRecordItem(record = record, employee = employee, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
                             }
                         }
                     }
@@ -1652,23 +1660,28 @@ fun EmployeeAttendanceEdit(
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
             items(records.sortedByDescending { it.dateString }) { record ->
-                AttendanceRecordItem(record = record, onDelete = { onDeleteRecord(record.dateString) })
+                AttendanceRecordItem(record = record, employee = employee, onDelete = { onDeleteRecord(record.dateString) })
             }
         }
     }
 }
 
 @Composable
-fun AttendanceRecordItem(record: AttendanceRecord, onDelete: () -> Unit) {
+fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelete: () -> Unit) {
     val timeSdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     val inTime = if (record.clockInTime != 0L) timeSdf.format(Date(record.clockInTime)) else "--:--"
     val outTime = record.clockOutTime?.let { timeSdf.format(Date(it)) } ?: "--:--"
     
-    val isLate = remember(record.clockInTime) {
+    val isLate = remember(record.clockInTime, employee) {
         if (record.clockInTime == 0L) false
         else {
-            val cal = Calendar.getInstance().apply { timeInMillis = record.clockInTime }
-            cal.get(Calendar.HOUR_OF_DAY) > 8 || (cal.get(Calendar.HOUR_OF_DAY) == 8 && cal.get(Calendar.MINUTE) > 5)
+            val tempEntry = com.example.data.model.TimeEntry(
+                userId = employee.userId,
+                date = record.dateString,
+                checkInTime = record.clockInTime,
+                checkOutTime = record.clockOutTime
+            )
+            com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee).lateMinutes > 0
         }
     }
 
