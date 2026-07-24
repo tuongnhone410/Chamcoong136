@@ -977,81 +977,121 @@ fun EmployeeDetailView(
                 )
             } else {
                 var showAddAttendanceDialog by remember { mutableStateOf(false) }
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Month Selection Filter Bar
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilterChip(
-                            selected = selectedMonthFilter == "CURRENT",
-                            onClick = { selectedMonthFilter = "CURRENT" },
-                            label = { Text(currentMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonBlue,
-                                selectedLabelColor = White,
-                                containerColor = DarkContainer,
-                                labelColor = Color.LightGray
-                            )
-                        )
-                        FilterChip(
-                            selected = selectedMonthFilter == "PREVIOUS",
-                            onClick = { selectedMonthFilter = "PREVIOUS" },
-                            label = { Text(prevMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonBlue,
-                                selectedLabelColor = White,
-                                containerColor = DarkContainer,
-                                labelColor = Color.LightGray
-                            )
-                        )
-                        FilterChip(
-                            selected = selectedMonthFilter == "ALL",
-                            onClick = { selectedMonthFilter = "ALL" },
-                            label = { Text("Tất cả", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonBlue,
-                                selectedLabelColor = White,
-                                containerColor = DarkContainer,
-                                labelColor = Color.LightGray
-                            )
-                        )
-                    }
-
-                    // Attendance Summary Board
-                    AttendanceSummaryBoard(stats = monthStats, totalRecordCount = filteredRecords.size)
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Dữ liệu chấm công", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        TextButton(
-                            onClick = { showAddAttendanceDialog = true },
-                            colors = ButtonDefaults.textButtonColors(contentColor = NeonBlue)
+                @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp)
+                ) {
+                    stickyHeader {
+                        Surface(
+                            color = DarkBackground,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Thêm công", fontSize = 14.sp)
+                            // Month Selection Filter Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FilterChip(
+                                    selected = selectedMonthFilter == "CURRENT",
+                                    onClick = { selectedMonthFilter = "CURRENT" },
+                                    label = { Text(currentMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonBlue,
+                                        selectedLabelColor = White,
+                                        containerColor = DarkContainer,
+                                        labelColor = Color.LightGray
+                                    )
+                                )
+                                FilterChip(
+                                    selected = selectedMonthFilter == "PREVIOUS",
+                                    onClick = { selectedMonthFilter = "PREVIOUS" },
+                                    label = { Text(prevMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonBlue,
+                                        selectedLabelColor = White,
+                                        containerColor = DarkContainer,
+                                        labelColor = Color.LightGray
+                                    )
+                                )
+                                FilterChip(
+                                    selected = selectedMonthFilter == "ALL",
+                                    onClick = { selectedMonthFilter = "ALL" },
+                                    label = { Text("Tất cả", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NeonBlue,
+                                        selectedLabelColor = White,
+                                        containerColor = DarkContainer,
+                                        labelColor = Color.LightGray
+                                    )
+                                )
+                            }
                         }
                     }
-
-                    EmployeeAttendanceEdit(
-                        employee = employee,
-                        records = filteredRecords,
-                        onSaveRecord = { adminViewModel.saveAttendanceRecord(it) },
-                        onDeleteRecord = { date -> adminViewModel.deleteAttendanceRecord(employee.userId, date) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    
+                    item {
+                        // Attendance Summary Board
+                        AttendanceSummaryBoard(stats = monthStats, totalRecordCount = filteredRecords.size)
+                    }
+                    
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Dữ liệu chấm công", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            TextButton(
+                                onClick = { showAddAttendanceDialog = true },
+                                colors = ButtonDefaults.textButtonColors(contentColor = NeonBlue)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Thêm công", fontSize = 14.sp)
+                            }
+                        }
+                    }
+                    
+                    if (filteredRecords.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp, horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.EventBusy,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Không có dữ liệu chấm công cho khoảng thời gian này",
+                                        color = Color.Gray,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(filteredRecords.sortedByDescending { it.dateString }) { record ->
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                AttendanceRecordItem(record = record, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
+                            }
+                        }
+                    }
                 }
-
+                
                 if (showAddAttendanceDialog) {
                     var dateStr by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
                     var checkIn by remember { mutableStateOf("08:00") }
