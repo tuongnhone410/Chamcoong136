@@ -425,7 +425,7 @@ fun getEmployeeShiftStatus(rec: AttendanceRecord?): ShiftStatusInfo {
 
     return if (rec.clockInTime != 0L) {
         if (outStr == null) {
-            ShiftStatusInfo(inStr, Color(0xFF00E676), "")
+            ShiftStatusInfo("Đang trong ca", Color(0xFF00E676), "Vào: $inStr")
         } else {
             ShiftStatusInfo("Đã ra ca", Color(0xFF4C84FF), "Vào: $inStr - Ra: $outStr")
         }
@@ -500,7 +500,7 @@ fun EmployeeListView(
                 item {
                     val inShiftCount = employees.count { 
                         val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
-                        status.color == Color(0xFF00E676)
+                        status.label == "Đang trong ca"
                     }
                     val outShiftCount = employees.count { 
                         val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
@@ -1013,7 +1013,8 @@ fun EmployeeDetailView(
                         employee = employee,
                         records = filteredRecords,
                         onSaveRecord = { adminViewModel.saveAttendanceRecord(it) },
-                        onDeleteRecord = { date -> adminViewModel.deleteAttendanceRecord(employee.userId, date) }
+                        onDeleteRecord = { date -> adminViewModel.deleteAttendanceRecord(employee.userId, date) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -1545,11 +1546,12 @@ fun EmployeeAttendanceEdit(
     employee: UserConfig,
     records: List<AttendanceRecord>,
     onSaveRecord: (AttendanceRecord) -> Unit,
-    onDeleteRecord: (String) -> Unit
+    onDeleteRecord: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (records.isEmpty()) {
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .padding(vertical = 32.dp, horizontal = 16.dp),
             contentAlignment = Alignment.Center
@@ -1571,7 +1573,7 @@ fun EmployeeAttendanceEdit(
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), 
+            modifier = modifier.fillMaxSize().padding(horizontal = 16.dp), 
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
