@@ -72,6 +72,7 @@ fun HistoryScreen(
     val selectedMonth by viewModel.currentSelectedMonth.collectAsStateWithLifecycle()
     val entries by viewModel.monthTimeEntries.collectAsStateWithLifecycle()
     val configState by viewModel.userConfig.collectAsStateWithLifecycle()
+    val activeEntry by viewModel.activeWorkingEntry.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
 
@@ -436,6 +437,40 @@ fun HistoryScreen(
                             .padding(vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        val active = activeEntry
+                        if (active != null && active.date != day.dateString) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .border(1.dp, AccentRed, RoundedCornerShape(10.dp))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(Icons.Default.Info, contentDescription = null, tint = AccentRed, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "BẠN ĐANG TRONG CA LÀM VIỆC!",
+                                            color = AccentRed,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Bạn đã bấm vào ca ngày ${active.date} và chưa bấm 'Ra ca'. Bạn không thể chấm công thêm ngày ${day.dateString} trừ khi bấm ra ca ca làm hiện tại trước.",
+                                            color = White,
+                                            fontSize = 11.sp,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         fun createTimeField(
                             value: TextFieldValue,
                             onValueChange: (TextFieldValue) -> Unit,
@@ -758,6 +793,16 @@ fun HistoryScreen(
                             }
                             Button(
                                 onClick = {
+                                    val active = activeEntry
+                                    if (active != null && active.date != day.dateString) {
+                                        Toast.makeText(
+                                            context,
+                                            "⚠️ Bạn đang trong ca làm việc ngày ${active.date}. Vui lòng bấm 'Ra ca' trước khi chấm công ngày mới!",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        return@Button
+                                    }
+
                                     if (isFutureDate) {
                                         // Force save as Leave types for Future dates
                                         viewModel.addSingleEntry(
@@ -1130,6 +1175,16 @@ fun HistoryScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Button(
                             onClick = {
+                                val active = activeEntry
+                                if (active != null) {
+                                    Toast.makeText(
+                                        context,
+                                        "⚠️ Bạn đang trong ca làm việc ngày ${active.date}. Vui lòng bấm 'Ra ca' trước khi chấm công hàng loạt!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    return@Button
+                                }
+
                                 val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                                 val hasFuture = selectedDates.any { it > todayStr }
                                 if (hasFuture) {

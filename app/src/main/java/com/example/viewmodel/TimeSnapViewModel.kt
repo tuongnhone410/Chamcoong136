@@ -751,6 +751,17 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
             val isWorking = (checkOutMs == null && dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "HOLIDAY_LEAVE")
 
+            // Ensure no duplicate active shifts across dates
+            val priorActive = repository.getActiveEntry(session.uid)
+            if (priorActive != null && priorActive.date != dateStr && isWorking) {
+                val closedPrior = priorActive.copy(
+                    checkOutTime = priorActive.checkOutTime ?: System.currentTimeMillis(),
+                    isWorking = false
+                )
+                val calculatedPrior = com.example.data.SalaryCalculator.calculateSingleEntry(closedPrior, userConfig.value)
+                repository.insertOrUpdate(calculatedPrior)
+            }
+
             val existing = repository.getEntryByDate(session.uid, dateStr)
             
             // Re-evaluate annual leave delta

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -36,11 +37,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -121,6 +125,7 @@ fun HomeScreen(
     // Load active note dynamically so they can type inside Home
     var quickNoteText by remember { mutableStateOf("") }
     var isExpanded by remember { mutableStateOf(false) }
+    var showRetroactiveDialog by remember { mutableStateOf(false) }
     LaunchedEffect(activeEntry) {
         quickNoteText = activeEntry?.note ?: ""
     }
@@ -443,6 +448,32 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Black
                             )
                         }
+                    }
+
+                    // Button for Retroactive / Backdated Check-in (Vào ca bù)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showRetroactiveDialog = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonBlue),
+                        border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .testTag("retroactive_checkin_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = NeonBlue
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "⏱️ VÀO CA BÙ / BÙ CHẤM CÔNG",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonBlue
+                        )
                     }
 
                     // Dinamic Running/Ticker Text inside ca
@@ -901,6 +932,26 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(80.dp))
         }
     }
+
+    if (showRetroactiveDialog) {
+        val context = LocalContext.current
+        RetroactiveCheckInDialog(
+            onDismiss = { showRetroactiveDialog = false },
+            onSubmit = { dateStr, inH, inM, outH, outM, noteStr ->
+                viewModel.addSingleEntry(
+                    dateStr = dateStr,
+                    checkInHour = inH,
+                    checkInMin = inM,
+                    checkOutHour = outH,
+                    checkOutMin = outM,
+                    dayTypeOverride = null,
+                    noteStr = noteStr
+                )
+                Toast.makeText(context, "Đã bù chấm công ngày $dateStr thành công!", Toast.LENGTH_SHORT).show()
+                showRetroactiveDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -1236,4 +1287,339 @@ fun QuickSummaryItem(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RetroactiveCheckInDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (
+        dateStr: String,
+        inH: Int,
+        inM: Int,
+        outH: Int?,
+        outM: Int?,
+        note: String?
+    ) -> Unit
+) {
+    val context = LocalContext.current
+    val todaySdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val todayStr = remember { todaySdf.format(Date()) }
+    val calYesterday = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) } }
+    val yesterdayStr = remember { todaySdf.format(calYesterday.time) }
+
+    var selectedDateStr by remember { mutableStateOf(todayStr) }
+    var isFullShift by remember { mutableStateOf(false) } // false = Bấm Vào Ca Bù (đang trong ca), true = Bù Cả Ca (đã ra ca)
+
+    var inHourText by remember { mutableStateOf(TextFieldValue("07")) }
+    var inMinText by remember { mutableStateOf(TextFieldValue("30")) }
+
+    var outHourText by remember { mutableStateOf(TextFieldValue("16")) }
+    var outMinText by remember { mutableStateOf(TextFieldValue("30")) }
+
+    var noteText by remember { mutableStateOf(TextFieldValue("Vào ca bù do quên bấm chấm công")) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkContainer,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = NeonBlue,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "VÀO CA BÙ (BÙ CHẤM CÔNG)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = White
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Dành cho trường hợp quên bấm vào ca. Bạn có thể chọn ngày và thời gian bắt đầu ca làm để bù vào hệ thống.",
+                    fontSize = 12.sp,
+                    color = LightGray
+                )
+
+                // 1. CHỌN NGÀY
+                Text("1. Ngày chấm công bù:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = NeonBlue)
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = selectedDateStr == todayStr,
+                        onClick = { selectedDateStr = todayStr },
+                        label = { Text("Hôm nay", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = NeonBlue,
+                            selectedLabelColor = White,
+                            containerColor = DarkBackground,
+                            labelColor = LightGray
+                        )
+                    )
+                    FilterChip(
+                        selected = selectedDateStr == yesterdayStr,
+                        onClick = { selectedDateStr = yesterdayStr },
+                        label = { Text("Hôm qua", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = NeonBlue,
+                            selectedLabelColor = White,
+                            containerColor = DarkBackground,
+                            labelColor = LightGray
+                        )
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Ngày đã chọn: ",
+                        fontSize = 12.sp,
+                        color = White
+                    )
+                    Text(
+                        text = selectedDateStr,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentOrange
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = {
+                            val curCal = Calendar.getInstance()
+                            try {
+                                val p = todaySdf.parse(selectedDateStr)
+                                if (p != null) curCal.time = p
+                            } catch (e: Exception) {}
+                            android.app.DatePickerDialog(
+                                context,
+                                { _, yr, mo, dy ->
+                                    val c = Calendar.getInstance()
+                                    c.set(yr, mo, dy)
+                                    selectedDateStr = todaySdf.format(c.time)
+                                },
+                                curCal.get(Calendar.YEAR),
+                                curCal.get(Calendar.MONTH),
+                                curCal.get(Calendar.DAY_OF_MONTH)
+                            ).show()
+                        },
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("📅 Chọn ngày khác", fontSize = 11.sp, color = White)
+                    }
+                }
+
+                HorizontalDivider(color = MediumGray.copy(alpha = 0.3f))
+
+                // 2. LOẠI HÌNH CHẤM BÙ
+                Text("2. Trạng thái ca:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = NeonBlue)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (!isFullShift) NeonBlue.copy(alpha = 0.25f) else DarkBackground
+                        ),
+                        border = BorderStroke(1.dp, if (!isFullShift) NeonBlue else MediumGray),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { isFullShift = false }
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("🔵 VÀO CA BÙ", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (!isFullShift) NeonBlue else White)
+                            Text("Bắt đầu ca, đang trong ca", fontSize = 10.sp, color = LightGray)
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isFullShift) AccentGreen.copy(alpha = 0.25f) else DarkBackground
+                        ),
+                        border = BorderStroke(1.dp, if (isFullShift) AccentGreen else MediumGray),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { isFullShift = true }
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("🟢 BÙ CẢ CA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isFullShift) AccentGreen else White)
+                            Text("Nhập giờ vào & giờ ra", fontSize = 10.sp, color = LightGray)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MediumGray.copy(alpha = 0.3f))
+
+                // 3. GIỜ VÀO CA BÙ
+                Text("3. Giờ vào ca bù (Giờ bắt đầu):", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = NeonBlue)
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val presets = listOf("07:30", "08:00", "19:30", "20:00")
+                    presets.forEach { time ->
+                        AssistChip(
+                            onClick = {
+                                val p = time.split(":")
+                                inHourText = TextFieldValue(p[0])
+                                inMinText = TextFieldValue(p[1])
+                            },
+                            label = { Text(time, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = inHourText,
+                        onValueChange = { if (it.text.length <= 2) inHourText = it },
+                        label = { Text("Giờ (0-23)", fontSize = 10.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White
+                        )
+                    )
+                    Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = White)
+                    OutlinedTextField(
+                        value = inMinText,
+                        onValueChange = { if (it.text.length <= 2) inMinText = it },
+                        label = { Text("Phút (0-59)", fontSize = 10.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White
+                        )
+                    )
+                }
+
+                // 4. GIỜ RA CA (Only if isFullShift = true)
+                if (isFullShift) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("4. Giờ ra ca bù (Giờ kết thúc):", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AccentGreen)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val outPresets = listOf("16:30", "17:30", "05:30", "06:00")
+                        outPresets.forEach { time ->
+                            AssistChip(
+                                onClick = {
+                                    val p = time.split(":")
+                                    outHourText = TextFieldValue(p[0])
+                                    outMinText = TextFieldValue(p[1])
+                                },
+                                label = { Text(time, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = outHourText,
+                            onValueChange = { if (it.text.length <= 2) outHourText = it },
+                            label = { Text("Giờ (0-23)", fontSize = 10.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = White,
+                                unfocusedTextColor = White
+                            )
+                        )
+                        Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = White)
+                        OutlinedTextField(
+                            value = outMinText,
+                            onValueChange = { if (it.text.length <= 2) outMinText = it },
+                            label = { Text("Phút (0-59)", fontSize = 10.sp) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = White,
+                                unfocusedTextColor = White
+                            )
+                        )
+                    }
+                }
+
+                // 5. GHI CHÚ
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    label = { Text("Ghi chú", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = White,
+                        unfocusedTextColor = White
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val inH = inHourText.text.toIntOrNull()
+                    val inM = inMinText.text.toIntOrNull()
+                    if (inH == null || inH !in 0..23 || inM == null || inM !in 0..59) {
+                        Toast.makeText(context, "Giờ vào không hợp lệ (0-23h, 0-59p)", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
+                    var outH: Int? = null
+                    var outM: Int? = null
+                    if (isFullShift) {
+                        outH = outHourText.text.toIntOrNull()
+                        outM = outMinText.text.toIntOrNull()
+                        if (outH == null || outH !in 0..23 || outM == null || outM !in 0..59) {
+                            Toast.makeText(context, "Giờ ra không hợp lệ (0-23h, 0-59p)", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                    }
+
+                    onSubmit(
+                        selectedDateStr,
+                        inH,
+                        inM,
+                        outH,
+                        outM,
+                        noteText.text.ifBlank { null }
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+            ) {
+                Text("Xác nhận Vào Ca Bù", color = White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy", color = LightGray)
+            }
+        }
+    )
 }
