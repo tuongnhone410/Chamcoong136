@@ -298,6 +298,8 @@ object FirestoreService {
 
                     val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
                     val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", day, month, year)
+                    val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", day, month, year)
+                    val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", year, month, day)
                     val todayDocId = formatDateForDocId(todayDmy)
 
                     val map = mutableMapOf<String, AttendanceRecord>()
@@ -310,7 +312,7 @@ object FirestoreService {
                         val clockInDate = if (rec.clockInTime > 0) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(rec.clockInTime)) else ""
                         val clockInDmy = if (rec.clockInTime > 0) SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(rec.clockInTime)) else ""
 
-                        val isToday = ds == todayYmd || ds == todayDmy || docId == todayDocId || 
+                        val isToday = ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || docId == todayDocId || 
                                       clockInDate == todayYmd || clockInDmy == todayDmy || ds.endsWith(todayYmd)
                         
                         if (isToday) {

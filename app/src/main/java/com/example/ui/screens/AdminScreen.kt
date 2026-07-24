@@ -862,8 +862,11 @@ fun EmployeeDetailView(
                 val cal = Calendar.getInstance()
                 val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
                 val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+                val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+                val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
                 val todayRec = records.find { r ->
-                    r.dateString == todayYmd || r.dateString == todayDmy || r.dateString.endsWith(todayYmd)
+                    val ds = r.dateString.trim()
+                    ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
                 }
                 val shiftStatus = remember(todayRec) { getEmployeeShiftStatus(todayRec) }
 
@@ -875,21 +878,61 @@ fun EmployeeDetailView(
                     border = androidx.compose.foundation.BorderStroke(1.dp, shiftStatus.color.copy(alpha = 0.25f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .background(shiftStatus.color, shape = androidx.compose.foundation.shape.CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Hôm nay: ${shiftStatus.label} ${if (shiftStatus.timeDetail.isNotEmpty()) "(${shiftStatus.timeDetail})" else ""}",
-                            color = shiftStatus.color,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .background(shiftStatus.color, shape = androidx.compose.foundation.shape.CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Hôm nay: ${shiftStatus.label} ${if (shiftStatus.timeDetail.isNotEmpty()) "(${shiftStatus.timeDetail})" else ""}",
+                                color = shiftStatus.color,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Admin manual clock-in / clock-out actions
+                        if (todayRec == null || todayRec.clockInTime == 0L) {
+                            TextButton(
+                                onClick = {
+                                    val now = System.currentTimeMillis()
+                                    adminViewModel.saveAttendanceRecord(
+                                        AttendanceRecord(
+                                            uid = employee.userId,
+                                            dateString = todayYmd,
+                                            clockInTime = now
+                                        )
+                                    )
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(26.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.textButtonColors(containerColor = Color(0xFF00E676).copy(alpha = 0.15f))
+                            ) {
+                                Text("Vào ca", color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (todayRec.clockOutTime == null || todayRec.clockOutTime == 0L) {
+                            TextButton(
+                                onClick = {
+                                    val now = System.currentTimeMillis()
+                                    adminViewModel.saveAttendanceRecord(
+                                        todayRec.copy(clockOutTime = now)
+                                    )
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(26.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                colors = ButtonDefaults.textButtonColors(containerColor = Color(0xFF4C84FF).copy(alpha = 0.15f))
+                            ) {
+                                Text("Ra ca", color = Color(0xFF4C84FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -946,14 +989,11 @@ fun EmployeeDetailView(
                         FilterChip(
                             selected = selectedMonthFilter == "CURRENT",
                             onClick = { selectedMonthFilter = "CURRENT" },
-                            label = { Text("Tháng này ($currentMonthDisplay)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = if (selectedMonthFilter == "CURRENT") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null,
+                            label = { Text(currentMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NeonBlue,
                                 selectedLabelColor = White,
-                                selectedLeadingIconColor = White,
                                 containerColor = DarkContainer,
                                 labelColor = Color.LightGray
                             )
@@ -961,14 +1001,11 @@ fun EmployeeDetailView(
                         FilterChip(
                             selected = selectedMonthFilter == "PREVIOUS",
                             onClick = { selectedMonthFilter = "PREVIOUS" },
-                            label = { Text("Tháng trước ($prevMonthDisplay)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = if (selectedMonthFilter == "PREVIOUS") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null,
+                            label = { Text(prevMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NeonBlue,
                                 selectedLabelColor = White,
-                                selectedLeadingIconColor = White,
                                 containerColor = DarkContainer,
                                 labelColor = Color.LightGray
                             )
@@ -976,14 +1013,11 @@ fun EmployeeDetailView(
                         FilterChip(
                             selected = selectedMonthFilter == "ALL",
                             onClick = { selectedMonthFilter = "ALL" },
-                            label = { Text("Tất cả", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = if (selectedMonthFilter == "ALL") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                            } else null,
+                            label = { Text("Tất cả", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                            modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = NeonBlue,
                                 selectedLabelColor = White,
-                                selectedLeadingIconColor = White,
                                 containerColor = DarkContainer,
                                 labelColor = Color.LightGray
                             )
