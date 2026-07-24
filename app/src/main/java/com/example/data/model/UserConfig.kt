@@ -57,7 +57,7 @@ data class UserConfig(
     val phuCapDienThoai: Double = 300000.0,
     val phuCapNhaO: Double = 1000000.0,
     val phuCapChuyenCan: Double = 500000.0,
-    val thuong: Double = 800000.0,
+    val thuong: Double = 0.0,
     val heSoOtDem: Double = 1.75,
     val caDemStart: String = "22:00",
     val caDemEnd: String = "06:00",

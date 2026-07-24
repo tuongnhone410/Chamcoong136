@@ -8,6 +8,10 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -251,20 +255,75 @@ object FirestoreService {
     suspend fun getAllAttendanceLogsInMonth(monthStr: String): List<AttendanceRecord> {
         val firestore = getDb() ?: return emptyList()
         return try {
-            // monthStr format: yyyy-MM
             val snapshot = firestore.collectionGroup("attendance_logs")
-                .whereGreaterThanOrEqualTo("dateString", "$monthStr-01")
-                .whereLessThanOrEqualTo("dateString", "$monthStr-31")
                 .get()
                 .awaitTaskFirestore()
             snapshot?.documents?.mapNotNull { doc ->
                 val uid = doc.reference.parent.parent?.id ?: return@mapNotNull null
-                doc.toAttendanceRecord(uid)
+                val record = doc.toAttendanceRecord(uid)
+                val formattedDocDate = formatDateForDocId(record.dateString)
+                val clockInMonth = if (record.clockInTime > 0) SimpleDateFormat("yyyy-MM", Locale.US).format(Date(record.clockInTime)) else ""
+                
+                if (record.dateString.contains(monthStr) || 
+                    formattedDocDate.contains(monthStr) || 
+                    doc.id.contains(monthStr) || 
+                    clockInMonth == monthStr) {
+                    record
+                } else null
             } ?: emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching all attendance logs in month $monthStr: ${e.message}")
             emptyList()
         }
+    }
+
+    fun getTodayAttendanceLogsFlow(): Flow<Map<String, AttendanceRecord>> = callbackFlow {
+        val firestore = getDb()
+        if (firestore == null) {
+            trySend(emptyMap())
+            close()
+            return@callbackFlow
+        }
+        val listener = firestore.collectionGroup("attendance_logs")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error listening to collectionGroup attendance_logs", error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val cal = Calendar.getInstance()
+                    val year = cal.get(Calendar.YEAR)
+                    val month = cal.get(Calendar.MONTH) + 1
+                    val day = cal.get(Calendar.DAY_OF_MONTH)
+
+                    val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
+                    val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", day, month, year)
+                    val todayDocId = formatDateForDocId(todayDmy)
+
+                    val map = mutableMapOf<String, AttendanceRecord>()
+                    for (doc in snapshot.documents) {
+                        val uid = doc.reference.parent.parent?.id ?: continue
+                        val rec = doc.toAttendanceRecord(uid)
+                        
+                        val ds = rec.dateString.trim()
+                        val docId = doc.id
+                        val clockInDate = if (rec.clockInTime > 0) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(rec.clockInTime)) else ""
+                        val clockInDmy = if (rec.clockInTime > 0) SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(rec.clockInTime)) else ""
+
+                        val isToday = ds == todayYmd || ds == todayDmy || docId == todayDocId || 
+                                      clockInDate == todayYmd || clockInDmy == todayDmy || ds.endsWith(todayYmd)
+                        
+                        if (isToday) {
+                            val existing = map[uid]
+                            if (existing == null || (existing.clockOutTime != null && rec.clockOutTime == null) || rec.clockInTime > existing.clockInTime) {
+                                map[uid] = rec
+                            }
+                        }
+                    }
+                    trySend(map)
+                }
+            }
+        awaitClose { listener.remove() }
     }
 
     fun parseVersionToCode(versionStr: String): Long {
@@ -694,7 +753,7 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         phuCapDienThoai = getDouble("phuCapDienThoai") ?: 300000.0,
         phuCapNhaO = getDouble("phuCapNhaO") ?: 1000000.0,
         phuCapChuyenCan = getDouble("phuCapChuyenCan") ?: 500000.0,
-        thuong = getDouble("thuong") ?: 800000.0,
+        thuong = getDouble("thuong") ?: 0.0,
         heSoOtDem = getDouble("heSoOtDem") ?: getDouble("he_so_ot_dem") ?: 1.75,
         caDemStart = getString("caDemStart") ?: getString("thoi_gian_ca_dem") ?: "22:00",
         caDemEnd = getString("caDemEnd") ?: "06:00",
@@ -755,7 +814,7 @@ fun DocumentSnapshot.toUserConfig(uid: String): UserConfig {
         phu_cap_khac = getDouble("phu_cap_khac") ?: getDouble("pcKhac") ?: 0.0,
         
         phu_cap = getDouble("phu_cap") ?: 500000.0,
-        thuong = getDouble("thuong") ?: 200000.0,
+        thuong = getDouble("thuong") ?: 0.0,
         tien_khau_tru_nghi = getDouble("tien_khau_tru_nghi") ?: getBoolean("tinhKhauTruNghi")?.let { if (it) 1.0 else 0.0 } ?: 0.0,
         tong_tien_com = getDouble("tong_tien_com") ?: 600000.0,
         last_accumulated_month = getLong("last_accumulated_month")?.toInt() ?: getString("lastAccumulatedMonth")?.hashCode() ?: -1

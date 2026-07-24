@@ -491,10 +491,9 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
             composable("admin") {
                 AdminScreen(onBack = {
                     currentTab = "settings"
-                    tabNavController.navigate("settings") {
-                        popUpTo(tabNavController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+                    val popped = tabNavController.popBackStack("settings", false)
+                    if (!popped) {
+                        tabNavController.popBackStack()
                     }
                 })
             }

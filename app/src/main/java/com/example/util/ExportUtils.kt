@@ -535,7 +535,7 @@ object ExportUtils {
 
         // 1. Create offline Bitmap with Dynamic Height
         val width = 1000
-        var estimatedHeight = 1600
+        var estimatedHeight = 1850
         
         val bitmap = Bitmap.createBitmap(width, estimatedHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -592,6 +592,12 @@ object ExportUtils {
         val employeeCode = config.maNhanVien.ifBlank { userSession?.uid?.take(8) ?: "N/A" }
         drawRow("Họ và tên:", employeeName)
         drawRow("Mã nhân viên:", employeeCode)
+        if (config.boPhan.isNotBlank()) {
+            drawRow("Bộ phận:", config.boPhan)
+        }
+        if (config.emailDangKy.isNotBlank()) {
+            drawRow("Email:", config.emailDangKy)
+        }
         drawRow("Mức lương cơ bản:", "${fmt.format(config.luongCoBan)}đ")
         
         val attendanceInfo = if (selectedTab == 1) "$soNgayCongDuKien / ${summary.standardWorkDays} ngày" 

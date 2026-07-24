@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -212,15 +214,31 @@ fun PayslipScreen(
                     tempCal.getActualMaximum(Calendar.DAY_OF_MONTH)
                 }
 
-                val defaultRemainingSundays = remember(targetYear, targetMonth, todayDayOfMonth, isCurrentSelectedMonth) {
+                val lastLoggedDayOfMonth = remember(entries, isCurrentSelectedMonth) {
+                    if (!isCurrentSelectedMonth) 0 else {
+                        entries.filter { e ->
+                            e.checkInTime != null || e.isWorking || e.dayType == "PAID_LEAVE" || e.dayType == "UNPAID_LEAVE" || e.dayType == "HOLIDAY_LEAVE"
+                        }.mapNotNull { e ->
+                            try { e.date.split("-").getOrNull(2)?.toIntOrNull() } catch (ex: Exception) { null }
+                        }.maxOrNull() ?: 0
+                    }
+                }
+
+                val startProjectionDay = remember(lastLoggedDayOfMonth, isCurrentSelectedMonth) {
+                    if (!isCurrentSelectedMonth) 1 else (lastLoggedDayOfMonth + 1).coerceAtLeast(1)
+                }
+
+                val defaultRemainingSundays = remember(targetYear, targetMonth, startProjectionDay, isCurrentSelectedMonth) {
                     if (!isCurrentSelectedMonth) 0 else {
                         val cal = Calendar.getInstance()
                         var count = 0
-                        for (day in (todayDayOfMonth + 1)..maxDaysInMonth) {
+                        for (day in startProjectionDay..maxDaysInMonth) {
                             cal.set(Calendar.YEAR, targetYear)
                             cal.set(Calendar.MONTH, targetMonth - 1)
                             cal.set(Calendar.DAY_OF_MONTH, day)
-                            if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+                            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+                            if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && !isHoliday) {
                                 count++
                             }
                         }
@@ -229,15 +247,17 @@ fun PayslipScreen(
                 }
                 var remainingSundays by remember(defaultRemainingSundays) { mutableStateOf(defaultRemainingSundays) }
 
-                val remainingWeekdays = remember(targetYear, targetMonth, todayDayOfMonth, isCurrentSelectedMonth) {
+                val remainingWeekdays = remember(targetYear, targetMonth, startProjectionDay, isCurrentSelectedMonth) {
                     if (!isCurrentSelectedMonth) 0 else {
                         val cal = Calendar.getInstance()
                         var count = 0
-                        for (day in (todayDayOfMonth + 1)..maxDaysInMonth) {
+                        for (day in startProjectionDay..maxDaysInMonth) {
                             cal.set(Calendar.YEAR, targetYear)
                             cal.set(Calendar.MONTH, targetMonth - 1)
                             cal.set(Calendar.DAY_OF_MONTH, day)
-                            if (cal.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+                            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+                            if (cal.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY && !isHoliday) {
                                 count++
                             }
                         }
@@ -367,7 +387,17 @@ fun PayslipScreen(
                         .fillMaxWidth()
                         .padding(bottom = 16.dp)
                         .background(Color(0xFF161618), RoundedCornerShape(12.dp))
-                        .padding(4.dp),
+                        .padding(4.dp)
+                        .pointerInput(Unit) {
+                            detectHorizontalDragGestures { change, dragAmount ->
+                                change.consume()
+                                if (dragAmount < -30f) {
+                                    selectedTab = 1
+                                } else if (dragAmount > 30f) {
+                                    selectedTab = 0
+                                }
+                            }
+                        },
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     Box(

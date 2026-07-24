@@ -41,8 +41,23 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _exportSuccessCount = MutableStateFlow(0)
     val exportSuccessCount: StateFlow<Int> = _exportSuccessCount
 
+    private val _todayAttendanceMap = MutableStateFlow<Map<String, AttendanceRecord>>(emptyMap())
+    val todayAttendanceMap: StateFlow<Map<String, AttendanceRecord>> = _todayAttendanceMap
+
+    private val _isExportingSingle = MutableStateFlow(false)
+    val isExportingSingle: StateFlow<Boolean> = _isExportingSingle
+
     init {
         loadEmployees()
+        observeTodayAttendanceRealtime()
+    }
+
+    private fun observeTodayAttendanceRealtime() {
+        viewModelScope.launch {
+            FirestoreService.getTodayAttendanceLogsFlow().collect { map ->
+                _todayAttendanceMap.value = map
+            }
+        }
     }
 
     fun loadEmployees() {
@@ -51,6 +66,34 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             val list = FirestoreService.getAllUserConfigs()
             _employees.value = list.sortedBy { it.hoVaTen }
             _isLoading.value = false
+            loadTodayAttendance()
+        }
+    }
+
+    fun loadTodayAttendance() {
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                val year = cal.get(Calendar.YEAR)
+                val month = cal.get(Calendar.MONTH) + 1
+                val day = cal.get(Calendar.DAY_OF_MONTH)
+
+                val monthStr = String.format(Locale.US, "%04d-%02d", year, month)
+                val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
+                val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", day, month, year)
+                val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", day, month, year)
+                val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", year, month, day)
+
+                val monthRecords = FirestoreService.getAllAttendanceLogsInMonth(monthStr)
+                val todayMap = monthRecords.filter { r ->
+                    val ds = r.dateString.trim()
+                    ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
+                }.associateBy { it.uid }
+
+                _todayAttendanceMap.value = todayMap
+            } catch (e: Exception) {
+                android.util.Log.e("AdminViewModel", "Error loading today attendance: ${e.message}")
+            }
         }
     }
 
@@ -218,6 +261,61 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             _exportSuccessCount.value = successCount
             _isExporting.value = false
             _exportProgress.value = 0f
+        }
+    }
+
+    fun exportSingleEmployeePayslip(context: Context, employee: UserConfig, targetMonthStr: String? = null) {
+        viewModelScope.launch {
+            _isExportingSingle.value = true
+            try {
+                val cal = Calendar.getInstance()
+                val finalMonthStr = targetMonthStr ?: String.format(Locale.US, "%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+                
+                val monthLabel = if (finalMonthStr.contains("-")) {
+                    val parts = finalMonthStr.split("-")
+                    "${parts[1]}/${parts[0]}"
+                } else finalMonthStr
+
+                val records = FirestoreService.getAttendanceLogsForUser(employee.userId)
+                val monthEntries = records.filter { record ->
+                    val ds = record.dateString
+                    val matchYmd = ds.startsWith(finalMonthStr)
+                    val matchDmy = if (finalMonthStr.contains("-")) {
+                        val parts = finalMonthStr.split("-")
+                        ds.contains("/${parts[1]}/${parts[0]}")
+                    } else false
+                    matchYmd || matchDmy
+                }.map { it.toTimeEntry() }
+
+                val summary = ExportUtils.calculateSalarySummary(monthEntries, employee, finalMonthStr)
+                val saved = ExportUtils.savePayslipAsPngImage(
+                    context = context,
+                    summary = summary,
+                    config = employee,
+                    userSession = null,
+                    monthLabel = monthLabel,
+                    selectedMonth = finalMonthStr
+                )
+
+                if (saved) {
+                    android.widget.Toast.makeText(
+                        context, 
+                        "Đã xuất phiếu lương cho ${employee.hoVaTen} (Mã NV: ${employee.maNhanVien}) vào thư mục Download/TimeSnapPro", 
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    android.widget.Toast.makeText(
+                        context, 
+                        "Không thể xuất phiếu lương cho ${employee.hoVaTen}", 
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AdminViewModel", "Export single failed: ${e.message}")
+                android.widget.Toast.makeText(context, "Lỗi khi xuất phiếu lương: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            } finally {
+                _isExportingSingle.value = false
+            }
         }
     }
 }

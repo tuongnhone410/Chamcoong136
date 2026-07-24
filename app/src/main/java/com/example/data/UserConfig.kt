@@ -46,7 +46,7 @@ data class UserConfig(
 
     // Backward compatibility helpers
     val phu_cap: Double = 500000.0,
-    val thuong: Double = 200000.0,
+    val thuong: Double = 0.0,
     val tien_khau_tru_nghi: Double = 0.0,
     val tong_tien_com: Double = 600000.0,
     
