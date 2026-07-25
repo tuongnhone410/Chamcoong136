@@ -24,6 +24,12 @@ import com.example.data.AttendanceRecord
 import com.example.ui.theme.*
 import com.example.viewmodel.AdminViewModel
 import com.example.util.ThousandSeparatorVisualTransformation
+import com.example.util.ExportUtils
+import com.example.util.toTimeEntry
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.activity.compose.BackHandler
@@ -725,7 +731,7 @@ fun EmployeeDetailView(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
     var selectedMonthFilter by remember { mutableStateOf("CURRENT") } // "CURRENT", "PREVIOUS", "ALL"
 
     val calCurrent = remember { Calendar.getInstance() }
@@ -983,6 +989,11 @@ fun EmployeeDetailView(
                 onClick = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
                 text = { Text("Chấm Công", fontWeight = if (pagerState.currentPage == 1) FontWeight.Bold else FontWeight.Normal) }
             )
+            Tab(
+                selected = pagerState.currentPage == 2,
+                onClick = { coroutineScope.launch { pagerState.animateScrollToPage(2) } },
+                text = { Text("Phiếu Lương", fontWeight = if (pagerState.currentPage == 2) FontWeight.Bold else FontWeight.Normal) }
+            )
         }
 
         HorizontalPager(
@@ -995,7 +1006,7 @@ fun EmployeeDetailView(
                     onSave = { adminViewModel.saveEmployeeConfig(it) },
                     onDelete = onDeleteRequest
                 )
-            } else {
+            } else if (page == 1) {
                 var showAddAttendanceDialog by remember { mutableStateOf(false) }
                 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
                 LazyColumn(
@@ -1322,6 +1333,16 @@ fun EmployeeDetailView(
                         containerColor = DarkContainer
                     )
                 }
+            } else {
+                EmployeePayslipView(
+                    employee = employee,
+                    records = records,
+                    selectedMonthFilter = selectedMonthFilter,
+                    currentMonthYm = currentMonthYm,
+                    prevMonthYm = prevMonthYm,
+                    currentMonthDisplay = currentMonthDisplay,
+                    prevMonthDisplay = prevMonthDisplay
+                )
             }
         }
     }
@@ -2069,6 +2090,256 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                     tint = Color.Gray.copy(alpha = 0.7f),
                     modifier = Modifier.size(18.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmployeePayslipView(
+    employee: UserConfig,
+    records: List<AttendanceRecord>,
+    selectedMonthFilter: String,
+    currentMonthYm: String,
+    prevMonthYm: String,
+    currentMonthDisplay: String,
+    prevMonthDisplay: String
+) {
+    val targetMonthYm = when (selectedMonthFilter) {
+        "PREVIOUS" -> prevMonthYm
+        "ALL" -> currentMonthYm
+        else -> currentMonthYm
+    }
+
+    val monthLabel = when (selectedMonthFilter) {
+        "PREVIOUS" -> prevMonthDisplay
+        "ALL" -> currentMonthDisplay
+        else -> currentMonthDisplay
+    }
+
+    val monthEntries = remember(records, targetMonthYm) {
+        records.filter { record ->
+            val ds = record.dateString
+            val matchYmd = ds.startsWith(targetMonthYm)
+            val matchDmy = if (targetMonthYm.contains("-")) {
+                val parts = targetMonthYm.split("-")
+                ds.contains("/${parts[1]}/${parts[0]}")
+            } else false
+            matchYmd || matchDmy
+        }.map { it.toTimeEntry() }
+    }
+
+    val s = remember(monthEntries, employee, targetMonthYm) {
+        ExportUtils.calculateSalarySummary(monthEntries, employee, targetMonthYm)
+    }
+
+    val fmt = remember { DecimalFormat("#,###") }
+    val df = remember { DecimalFormat("#.#") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkContainer),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.15f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header (Receipt Style)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "TIMESNAP PRO",
+                        color = NeonBlue,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "PHIẾU LƯƠNG ĐIỆN TỬ CHI TIẾT",
+                        color = White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Kỳ lương: $monthLabel",
+                        color = LightGray,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    if (s.isCurrentMonth) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "⚠️ TẠM TÍNH (THÁNG HIỆN TẠI)",
+                            color = AccentOrange,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = Color(0xFF2C2C2C),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
+                }
+
+                // Profile Information
+                PayslipProfileRow(label = "Nhân viên:", value = employee.hoVaTen)
+                PayslipProfileRow(label = "Mã nhân viên (UID):", value = employee.maNhanVien, isMono = true)
+                PayslipProfileRow(label = "Mức lương cơ bản:", value = "${fmt.format(employee.luongCoBan)}đ")
+                PayslipProfileRow(
+                    label = "Số ngày công:", 
+                    value = "${s.workingDays} / ${if (s.isCurrentMonth) s.expectedWorkDays else s.standardWorkDays} ngày"
+                )
+
+                HorizontalDivider(
+                    color = Color(0xFF2C2C2C),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+
+                // Additions Header
+                Text(
+                    text = "KHOẢN CỘNG LƯƠNG (+)",
+                    color = AccentGreen,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                PayslipMoneyRow(label = "Lương cơ bản thực tế", value = s.baseBasicSalary, isAddition = true)
+                
+                if (employee.tienChuyenCanGoc > 0.0 && s.phuCapChuyenCan > 0.0) {
+                    PayslipMoneyRow(label = "Chuyên cần", value = s.phuCapChuyenCan, isAddition = true)
+                }
+                if (employee.pcTrachNhiem > 0.0 && s.pcTrachNhiemVal > 0.0) {
+                    PayslipMoneyRow(label = "Trách nhiệm", value = s.pcTrachNhiemVal, isAddition = true)
+                }
+                if (employee.pcKyThuat > 0.0 && s.pcKyThuatVal > 0.0) {
+                    PayslipMoneyRow(label = "Kỹ thuật", value = s.pcKyThuatVal, isAddition = true)
+                }
+                if (employee.pcHieuSuat > 0.0 && s.pcHieuSuatVal > 0.0) {
+                    PayslipMoneyRow(label = "Hiệu suất", value = s.pcHieuSuatVal, isAddition = true)
+                }
+                if (employee.pcSanPham > 0.0 && s.pcSanPhamVal > 0.0) {
+                    PayslipMoneyRow(label = "Sản phẩm", value = s.pcSanPhamVal, isAddition = true)
+                }
+                if (employee.pcChucVu > 0.0 && s.pcChucVuVal > 0.0) {
+                    PayslipMoneyRow(label = "Chức vụ", value = s.pcChucVuVal, isAddition = true)
+                }
+                if (employee.pcDocHai > 0.0 && s.pcDocHaiVal > 0.0) {
+                    PayslipMoneyRow(label = "Độc hại", value = s.pcDocHaiVal, isAddition = true)
+                }
+                if (employee.pcDtDoanhThu > 0.0 && s.pcDtDoanhThuVal > 0.0) {
+                    PayslipMoneyRow(label = "Doanh thu", value = s.pcDtDoanhThuVal, isAddition = true)
+                }
+                if (employee.pcThamNien > 0.0 && s.pcThamNienVal > 0.0) {
+                    PayslipMoneyRow(label = "Thâm niên", value = s.pcThamNienVal, isAddition = true)
+                }
+                if (s.pcComCaVal > 0.0) {
+                    PayslipMoneyRow(label = "Cơm/ ca", value = s.pcComCaVal, isAddition = true)
+                }
+                if (s.pcComOtVal > 0.0) {
+                    PayslipMoneyRow(label = "Cơm OT", value = s.pcComOtVal, isAddition = true)
+                }
+                if (s.tienOtNgay > 0.0) {
+                    PayslipMoneyRow(label = "OT 1.5 (${df.format(s.otDayHours)}h)", value = s.tienOtNgay, isAddition = true, isAccent = true)
+                }
+                if (s.tienChuNhat > 0.0) {
+                    PayslipMoneyRow(label = "OT 2.0 (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
+                }
+                if (s.tienOtLe > 0.0) {
+                    PayslipMoneyRow(label = "OT 3.0 (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
+                }
+                if (s.tienOtDem > 0.0) {
+                    PayslipMoneyRow(label = "OT 1.5 (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
+                }
+                if (s.pcCaDemVal > 0.0) {
+                    PayslipMoneyRow(label = "Phụ cấp ca đêm (${s.caDemCount} ca)", value = s.pcCaDemVal, isAddition = true)
+                }
+                if (employee.pcXangXe > 0.0 && s.pcXangXeVal > 0.0) {
+                    PayslipMoneyRow(label = "Xăng xe", value = s.pcXangXeVal, isAddition = true)
+                }
+                if (employee.pcNhaO > 0.0 && s.pcNhaOVal > 0.0) {
+                    PayslipMoneyRow(label = "Nhà ở", value = s.pcNhaOVal, isAddition = true)
+                }
+                if (employee.pcKhac1 > 0.0 && s.pcKhac1Val > 0.0) {
+                    PayslipMoneyRow(label = "Khác 1", value = s.pcKhac1Val, isAddition = true)
+                }
+                if (employee.pcKhac > 0.0 && s.pcKhacVal > 0.0) {
+                    PayslipMoneyRow(label = "Khác", value = s.pcKhacVal, isAddition = true)
+                }
+
+                HorizontalDivider(
+                    color = Color(0xFF2C2C2C),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+
+                // Deductions Header
+                Text(
+                    text = "KHOẢN KHẤU TRỪ (-)",
+                    color = AccentOrange,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                if (s.tienBh > 0.0) {
+                    PayslipMoneyRow(label = "BHXH/BHYT Khấu trừ (10.5%)", value = s.tienBh, isAddition = false)
+                }
+                if (s.doanPhi > 0.0) {
+                    PayslipMoneyRow(label = "Phí Công Đoàn Bắt Buộc", value = s.doanPhi, isAddition = false)
+                }
+                if (s.tienKhauTruNghi > 0.0) {
+                    PayslipMoneyRow(label = "Khấu trừ vắng mặt", value = s.tienKhauTruNghi, isAddition = false)
+                }
+
+                HorizontalDivider(
+                    color = Color(0xFF2C2C2C),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+
+                // Total
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "THỰC NHẬN:",
+                        color = White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "${fmt.format(s.luongThucNhan)}đ",
+                        color = NeonBlue,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
         }
     }
