@@ -300,19 +300,32 @@ fun PayslipScreen(
                 // TAB / SEGMENT CONTROL
                 var selectedTab by remember { mutableStateOf(0) }
 
-                val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+                val todayStr = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) }
                 val hasLoggedUnpaidOrAbsent = remember(entries, todayStr, isCurrentSelectedMonth) {
+                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                    val todayTime = try { sdf.parse(todayStr)?.time ?: Long.MAX_VALUE } catch(e: Exception) { Long.MAX_VALUE }
                     entries.any { e ->
-                        val isPastOrToday = !isCurrentSelectedMonth || e.date <= todayStr
+                        val isPastOrToday = !isCurrentSelectedMonth || (run {
+                            try {
+                                val t = (if (e.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(e.date)?.time ?: 0L
+                                t <= todayTime
+                            } catch (ex: Exception) {
+                                true
+                            }
+                        })
                         if (isPastOrToday) {
                             if (e.dayType == "UNPAID_LEAVE") {
                                 true
                             } else if (e.checkInTime == null && e.dayType != "PAID_LEAVE" && e.dayType != "HOLIDAY") {
                                 try {
                                     val cal = Calendar.getInstance()
-                                    val partsDate = e.date.split("-")
+                                    val partsDate = e.date.split("-", "/")
                                     if (partsDate.size >= 3) {
-                                        cal.set(partsDate[0].toInt(), partsDate[1].toInt() - 1, partsDate[2].toInt())
+                                        if (e.date.contains("/")) {
+                                            cal.set(partsDate[2].toInt(), partsDate[1].toInt() - 1, partsDate[0].toInt())
+                                        } else {
+                                            cal.set(partsDate[0].toInt(), partsDate[1].toInt() - 1, partsDate[2].toInt())
+                                        }
                                         val isSun = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
                                         val isHol = com.example.data.SalaryCalculator.isHoliday(e.date)
                                         !isSun && !isHol
@@ -358,12 +371,12 @@ fun PayslipScreen(
 
                 val currentProratedAllowancesSum = s.pcKyThuatVal + s.pcTrachNhiemVal + s.pcChucVuVal + s.pcHieuSuatVal +
                         s.pcSanPhamVal + s.pcComCaVal + s.pcComOtVal + s.pcNhaOVal + s.pcDocHaiVal + 
-                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhacVal + s.pcKhac1Val + s.pcThamNienVal + s.phuCapChuyenCan +
+                        s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhac1Val + s.pcThamNienVal + s.phuCapChuyenCan +
                         s.pcCaDemVal
 
                 val fullProjectedAllowancesSum = c.pcKyThuat + c.pcTrachNhiem + c.pcChucVu + c.pcHieuSuat +
                         c.pcSanPham + pcComCaShow + pcComOtShow + c.pcNhaO + c.pcDocHai + 
-                        c.pcDtDoanhThu + c.pcXangXe + c.pcKhac + c.pcKhac1 + c.pcThamNien + (if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc) +
+                        c.pcDtDoanhThu + c.pcXangXe + c.pcKhac1 + c.pcThamNien + (if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc) +
                         s.pcCaDemVal
 
                 val allowanceAdjustment = fullProjectedAllowancesSum - currentProratedAllowancesSum

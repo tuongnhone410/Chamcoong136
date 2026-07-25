@@ -143,7 +143,8 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun batchAddAttendance(dateString: String, clockIn: String, clockOut: String) {
         viewModelScope.launch {
             val ids = _selectedEmployeeIds.value
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            val formatPattern = if (dateString.contains("/")) "dd/MM/yyyy HH:mm" else "yyyy-MM-dd HH:mm"
+            val sdf = SimpleDateFormat(formatPattern, Locale.getDefault())
             ids.forEach { uid ->
                 try {
                     val fullIn = sdf.parse("$dateString $clockIn")?.time ?: 0L
@@ -227,12 +228,12 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     // Filter records for the target month (handles yyyy-MM-dd and dd/MM/yyyy)
                     val monthEntries = records.filter { record ->
                         val ds = record.dateString
-                        // Match yyyy-MM (e.g. 2026-07-19 starts with 2026-07)
                         val matchYmd = ds.startsWith(finalMonthStr)
-                        // Match dd/MM/yyyy (e.g. 19/07/2026 matches /07/2026)
                         val matchDmy = if (finalMonthStr.contains("-")) {
                             val parts = finalMonthStr.split("-")
-                            ds.contains("/${parts[1]}/${parts[0]}")
+                            if (parts.size >= 2) {
+                                ds.contains("/${parts[1]}/${parts[0]}") || ds.endsWith("/${parts[1]}/${parts[0]}")
+                            } else false
                         } else false
                         
                         matchYmd || matchDmy

@@ -69,7 +69,6 @@ class CloudSyncManager(private val context: Context) {
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             // Filter entries to keep only the last 6 months (from 6 months ago and into the future)
-            val sdfStr = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             val cal = Calendar.getInstance()
             cal.add(Calendar.MONTH, -6)
             cal.set(Calendar.HOUR_OF_DAY, 0)
@@ -80,7 +79,12 @@ class CloudSyncManager(private val context: Context) {
 
             val filteredEntries = entries.filter { entry ->
                 try {
-                    val d = sdfStr.parse(entry.date)
+                    val parser = if (entry.date.contains("/")) {
+                        SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                    } else {
+                        SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    }
+                    val d = parser.parse(entry.date)
                     d != null && d.time >= sixMonthsAgoMs
                 } catch (e: java.lang.Exception) {
                     true

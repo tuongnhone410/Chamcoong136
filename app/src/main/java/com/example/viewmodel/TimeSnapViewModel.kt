@@ -37,7 +37,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     val cloudSyncStatus: StateFlow<String> = _cloudSyncStatus
 
     // Date formatter
-    private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     private val monthFormatter = SimpleDateFormat("yyyy-MM", Locale.getDefault())
     
     // UI Selected month (For Calendar View: "yyyy-MM")
@@ -80,7 +80,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         Pair(session, month)
     }.flatMapLatest { (session, month) ->
         if (session != null) {
-            repository.getEntriesInMonth(session.uid, "$month-%")
+            val parts = month.split("-")
+            val monthPattern = if (parts.size == 2) "%/${parts[1]}/${parts[0]}" else "%"
+            repository.getEntriesInMonth(session.uid, monthPattern)
         } else {
             flowOf(emptyList())
         }
@@ -441,11 +443,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val entries = repository.getEntries(userId).first()
             var updatedCount = 0
             for (entry in entries) {
-                if (entry.date.contains("/")) {
+                if (entry.date.contains("-")) {
                     val dateStr = entry.date
                     try {
-                        val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
-                        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
                         val date = parser.parse(dateStr)
                         if (date != null) {
                             val formattedDate = formatter.format(date)
@@ -462,7 +464,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             if (updatedCount > 0) {
-                android.util.Log.d("TimeSnapViewModel", "Successfully normalized $updatedCount TimeEntry records to yyyy-MM-dd")
+                android.util.Log.d("TimeSnapViewModel", "Successfully normalized $updatedCount TimeEntry records to dd/MM/yyyy")
             }
         } catch (e: Exception) {
             android.util.Log.e("TimeSnapViewModel", "Error normalizing TimeEntry dates", e)
@@ -516,13 +518,13 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 android.util.Log.d("TimeSnapViewModel", "Total unique legacy records to migrate: ${legacyRecordsToMigrate.size}")
                 var migratedCount = 0
                 for (log in legacyRecordsToMigrate) {
-                    // Convert dateString to yyyy-MM-dd
+                    // Convert dateString to dd/MM/yyyy
                     val dateStr = log.dateString
                     var formattedDate = dateStr
                     try {
-                        if (dateStr.contains("/")) {
-                            val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
-                            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        if (dateStr.contains("-")) {
+                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
                             val date = parser.parse(dateStr)
                             if (date != null) {
                                 formattedDate = formatter.format(date)
@@ -537,7 +539,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         val cal = Calendar.getInstance()
                         var isSunday = false
                         try {
-                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
                             val date = parser.parse(formattedDate)
                             if (date != null) {
                                 cal.time = date
@@ -687,11 +689,21 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     ) {
         val session = currentUserSession.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            val isFuture = dateStr > todayStr
+            val todayDate = Date()
+            val parser = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            val todayStr = parser.format(todayDate)
+            
+            var isFuture = false
+            try {
+                val parsedDate = parser.parse(dateStr)
+                if (parsedDate != null) {
+                    val cal1 = Calendar.getInstance().apply { time = todayDate; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+                    val cal2 = Calendar.getInstance().apply { time = parsedDate; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+                    isFuture = cal2.after(cal1)
+                }
+            } catch (e: Exception) {}
 
             // Check if day is Sunday or Holiday
-            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             var dayType = "NORMAL"
             try {
                 val dateVal = parser.parse(dateStr)
@@ -830,13 +842,23 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     ) {
         val session = currentUserSession.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val todayDate = Date()
+            val parser = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            val todayStr = parser.format(todayDate)
+            
             for (dateStr in selectedDates) {
-                // Rule check: Block future date work entries in bulk creation
-                val isFuture = dateStr > todayStr
+                var isFuture = false
+                try {
+                    val parsedDate = parser.parse(dateStr)
+                    if (parsedDate != null) {
+                        val cal1 = Calendar.getInstance().apply { time = todayDate; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+                        val cal2 = Calendar.getInstance().apply { time = parsedDate; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+                        isFuture = cal2.after(cal1)
+                    }
+                } catch (e: Exception) {}
+                
                 if (isFuture) continue
 
-                val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 var dateVal: Date? = null
                 var isSunday = false
                 var isHoliday = false
@@ -958,11 +980,12 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         val session = currentUserSession.value ?: return
         val month = currentSelectedMonth.value
         viewModelScope.launch(Dispatchers.IO) {
-            // Restore any paid leaves being cleared in this month
-            val allEntries = repository.getEntriesInMonthDirect(session.uid, "$month-%")
+            val parts = month.split("-")
+            val monthPattern = if (parts.size == 2) "%/${parts[1]}/${parts[0]}" else "%"
+            val allEntries = repository.getEntriesInMonthDirect(session.uid, monthPattern)
             val phepToRestore = allEntries.count { it.dayType == "PAID_LEAVE" }
             
-            repository.deleteEntriesInMonth(session.uid, "$month-%")
+            repository.deleteEntriesInMonth(session.uid, monthPattern)
             
             if (phepToRestore > 0) {
                 val config = repository.getConfigDirect(session.uid)
@@ -975,12 +998,25 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun isHolidayDate(dateStr: String): Boolean {
-        val parts = dateStr.split("-")
-        if (parts.size >= 3) {
-            val md = "${parts[1]}-${parts[2]}"
-            return md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+        return try {
+            val parser = if (dateStr.contains("/")) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            } else {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            }
+            val date = parser.parse(dateStr)
+            if (date != null) {
+                val cal = Calendar.getInstance().apply { time = date }
+                val d = cal.get(Calendar.DAY_OF_MONTH)
+                val m = cal.get(Calendar.MONTH) + 1
+                val mdStr = String.format(Locale.US, "%02d-%02d", d, m)
+                mdStr == "01-01" || mdStr == "30-04" || mdStr == "01-05" || mdStr == "02-09"
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
         }
-        return false
     }
 
     private fun roundCheckInGrace(timeMs: Long): Long {
@@ -993,7 +1029,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
     private fun isSundayDate(dateStr: String): Boolean {
         return try {
-            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val parser = if (dateStr.contains("/")) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            } else {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            }
             val dateVal = parser.parse(dateStr)
             if (dateVal != null) {
                 val cal = Calendar.getInstance()

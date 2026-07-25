@@ -65,12 +65,25 @@ data class SalarySummary(
 object ExportUtils {
 
     fun isHolidayDate(dateStr: String): Boolean {
-        val parts = dateStr.split("-")
-        if (parts.size >= 3) {
-            val md = "${parts[1]}-${parts[2]}"
-            return md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02"
+        return try {
+            val parser = if (dateStr.contains("/")) {
+                SimpleDateFormat("dd/MM/yyyy", Locale.US)
+            } else {
+                SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            }
+            val date = parser.parse(dateStr)
+            if (date != null) {
+                val cal = Calendar.getInstance().apply { time = date }
+                val d = cal.get(Calendar.DAY_OF_MONTH)
+                val m = cal.get(Calendar.MONTH) + 1
+                val mdStr = String.format(Locale.US, "%02d-%02d", d, m)
+                mdStr == "01-01" || mdStr == "30-04" || mdStr == "01-05" || mdStr == "02-09"
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
         }
-        return false
     }
 
     fun isSundayDate(dateStr: String): Boolean {
@@ -143,10 +156,12 @@ object ExportUtils {
                 set(Calendar.MONTH, targetMonth - 1)
             }.getActualMaximum(Calendar.DAY_OF_MONTH)
             for (day in 1..maxDaysInMo) {
-                val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                if (isHolidayDate(dateStr)) {
-                    if (!isCurrentSelectedMonth || dateStr <= todayStr) {
-                        holidayDatesInMonth.add(dateStr)
+                val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                val dateStrDmy = String.format(Locale.US, "%02d/%02d/%04d", day, targetMonth, targetYear)
+                if (isHolidayDate(dateStrDmy)) {
+                    if (!isCurrentSelectedMonth || dateStrYmd <= todayStr) {
+                        holidayDatesInMonth.add(dateStrDmy)
+                        holidayDatesInMonth.add(dateStrYmd)
                     }
                 }
             }
@@ -177,12 +192,29 @@ object ExportUtils {
 
         for (e in entries) {
             // Ensure entry belongs to selected month (handles yyyy-MM-dd and dd/MM/yyyy)
-            val isSameMonth = e.date.startsWith(selectedMonth) || 
-                             (selectedMonth.contains("-") && e.date.contains("/${selectedMonth.split("-")[1]}/${selectedMonth.split("-")[0]}"))
+            val parts = selectedMonth.split("-")
+            val isSameMonth = if (parts.size == 2) {
+                e.date.endsWith("/${parts[1]}/${parts[0]}") || e.date.contains("/${parts[1]}/${parts[0]}") || e.date.startsWith(selectedMonth)
+            } else {
+                e.date.contains(selectedMonth)
+            }
             
             if (!isSameMonth) continue
 
-            if (isCurrentSelectedMonth && e.date > todayStr) {
+            val entryTime = try {
+                val parser = if (e.date.contains("/")) {
+                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                } else {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                }
+                parser.parse(e.date)?.time ?: 0L
+            } catch (ex: Exception) { 0L }
+
+            val todayTime = try {
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(todayStr)?.time ?: 0L
+            } catch (ex: Exception) { 0L }
+
+            if (isCurrentSelectedMonth && entryTime > todayTime) {
                 continue
             }
 

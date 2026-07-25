@@ -52,7 +52,7 @@ class TimeSnapWidget : GlanceAppWidget() {
         val authController = AuthController(context, repository)
         
         val session = authController.currentUserFlow.first()
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val todayStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
         val activeEntry = session?.let { repository.getActiveEntry(it.uid) }
         val todayEntry = session?.let { repository.getEntryByDate(it.uid, todayStr) }
         
@@ -209,7 +209,7 @@ class ToggleActionCallback : ActionCallback {
         val cloudSyncManager = CloudSyncManager(context)
         
         val session = authController.currentUserFlow.first() ?: return
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val todayStr = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
         
         val active = repository.getActiveEntry(session.uid)
         val config = repository.getConfigDirect(session.uid)

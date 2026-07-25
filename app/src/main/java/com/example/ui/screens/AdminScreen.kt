@@ -41,6 +41,15 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.LocalTextStyle
+import kotlinx.coroutines.delay
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -730,13 +739,16 @@ fun EmployeeDetailView(
     fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
         if (monthYmd.isEmpty()) return true
         val parts = monthYmd.split("-")
-        if (parts.size < 2) return dateStr.startsWith(monthYmd)
+        if (parts.size < 2) return dateStr.contains(monthYmd)
         val year = parts[0]
         val month = parts[1]
-        return dateStr.startsWith(monthYmd) || 
-               dateStr.endsWith("$month/$year") || 
-               dateStr.contains("/$month/$year") || 
-               dateStr.contains("-$month-$year")
+        val slashPattern = "/$month/$year"
+        val dashPattern = "-$month-$year"
+        val altDashPattern = "$year-$month"
+        return dateStr.startsWith(altDashPattern) || 
+               dateStr.contains(slashPattern) || 
+               dateStr.contains(dashPattern) ||
+               dateStr.endsWith(slashPattern)
     }
 
     val targetMonthYm = when (selectedMonthFilter) {
@@ -1101,22 +1113,178 @@ fun EmployeeDetailView(
                 }
                 
                 if (showAddAttendanceDialog) {
-                    var dateStr by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
-                    var checkIn by remember { mutableStateOf("08:00") }
-                    var checkOut by remember { mutableStateOf("17:00") }
+                    val todayCal = remember { Calendar.getInstance() }
+                    var dayStr by remember { mutableStateOf(TextFieldValue(String.format("%02d", todayCal.get(Calendar.DAY_OF_MONTH)))) }
+                    var monthStr by remember { mutableStateOf(TextFieldValue(String.format("%02d", todayCal.get(Calendar.MONTH) + 1))) }
+                    var yearStr by remember { mutableStateOf(TextFieldValue(String.format("%04d", todayCal.get(Calendar.YEAR)))) }
+
+                    var checkInHour by remember { mutableStateOf(TextFieldValue("08")) }
+                    var checkInMin by remember { mutableStateOf(TextFieldValue("00")) }
+                    var checkOutHour by remember { mutableStateOf(TextFieldValue("17")) }
+                    var checkOutMin by remember { mutableStateOf(TextFieldValue("00")) }
+                    
+                    val focusRequesters = remember { List(7) { FocusRequester() } }
 
                     AlertDialog(
                         onDismissRequest = { showAddAttendanceDialog = false },
                         title = { Text("Thêm công thủ công", color = White) },
                         text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                AdminInputField("Ngày (yyyy-MM-dd)", dateStr, onValueChange = { dateStr = it }, keyboardType = KeyboardType.Phone)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        AdminInputField("Giờ vào (HH:mm)", checkIn, onValueChange = { checkIn = it }, keyboardType = KeyboardType.Phone)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                @Composable
+                                fun AutoJumpField(
+                                    value: TextFieldValue,
+                                    onValueChange: (TextFieldValue) -> Unit,
+                                    focusRequester: FocusRequester,
+                                    nextFocusRequester: FocusRequester? = null,
+                                    maxLength: Int = 2,
+                                    modifier: Modifier = Modifier
+                                ) {
+                                    val interactionSource = remember { MutableInteractionSource() }
+                                    val isFocused by interactionSource.collectIsFocusedAsState()
+                                    
+                                    LaunchedEffect(isFocused) {
+                                        if (isFocused) {
+                                            delay(50)
+                                            onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+                                        }
                                     }
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        AdminInputField("Giờ ra (HH:mm)", checkOut, onValueChange = { checkOut = it }, keyboardType = KeyboardType.Phone)
+                                    
+                                    OutlinedTextField(
+                                        value = value,
+                                        onValueChange = { 
+                                            val filtered = it.text.filter { char -> char.isDigit() }
+                                            if (filtered.length <= maxLength) {
+                                                val newVal = it.copy(text = filtered)
+                                                val textChanged = newVal.text != value.text
+                                                onValueChange(newVal)
+                                                if (textChanged && newVal.text.length == maxLength && nextFocusRequester != null) {
+                                                    nextFocusRequester.requestFocus()
+                                                }
+                                            }
+                                        },
+                                        modifier = modifier.focusRequester(focusRequester),
+                                        interactionSource = interactionSource,
+                                        shape = RoundedCornerShape(8.dp),
+                                        textStyle = LocalTextStyle.current.copy(
+                                            textAlign = TextAlign.Center, 
+                                            fontSize = 15.sp,
+                                            color = White
+                                        ),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.Gray,
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White
+                                        ),
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Number, 
+                                            imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done
+                                        )
+                                    )
+                                }
+
+                                // Date input: Ngày (dd/MM/yyyy)
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Ngày (dd/MM/yyyy):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        AutoJumpField(
+                                            value = dayStr,
+                                            onValueChange = { dayStr = it },
+                                            focusRequester = focusRequesters[0],
+                                            nextFocusRequester = focusRequesters[1],
+                                            maxLength = 2,
+                                            modifier = Modifier.width(55.dp)
+                                        )
+                                        Text("/", color = White, fontWeight = FontWeight.Bold)
+                                        AutoJumpField(
+                                            value = monthStr,
+                                            onValueChange = { monthStr = it },
+                                            focusRequester = focusRequesters[1],
+                                            nextFocusRequester = focusRequesters[2],
+                                            maxLength = 2,
+                                            modifier = Modifier.width(55.dp)
+                                        )
+                                        Text("/", color = White, fontWeight = FontWeight.Bold)
+                                        AutoJumpField(
+                                            value = yearStr,
+                                            onValueChange = { yearStr = it },
+                                            focusRequester = focusRequesters[2],
+                                            nextFocusRequester = focusRequesters[3],
+                                            maxLength = 4,
+                                            modifier = Modifier.width(75.dp)
+                                        )
+                                    }
+                                }
+
+                                // Hour input: Giờ vào & Giờ ra
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    // Giờ vào (HH:mm)
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("Giờ vào (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            AutoJumpField(
+                                                value = checkInHour,
+                                                onValueChange = { checkInHour = it },
+                                                focusRequester = focusRequesters[3],
+                                                nextFocusRequester = focusRequesters[4],
+                                                maxLength = 2,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(":", color = White, fontWeight = FontWeight.Bold)
+                                            AutoJumpField(
+                                                value = checkInMin,
+                                                onValueChange = { checkInMin = it },
+                                                focusRequester = focusRequesters[4],
+                                                nextFocusRequester = focusRequesters[5],
+                                                maxLength = 2,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+
+                                    // Giờ ra (HH:mm)
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("Giờ ra (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            AutoJumpField(
+                                                value = checkOutHour,
+                                                onValueChange = { checkOutHour = it },
+                                                focusRequester = focusRequesters[5],
+                                                nextFocusRequester = focusRequesters[6],
+                                                maxLength = 2,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Text(":", color = White, fontWeight = FontWeight.Bold)
+                                            AutoJumpField(
+                                                value = checkOutMin,
+                                                onValueChange = { checkOutMin = it },
+                                                focusRequester = focusRequesters[6],
+                                                nextFocusRequester = null,
+                                                maxLength = 2,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1124,9 +1292,28 @@ fun EmployeeDetailView(
                         confirmButton = {
                             Button(onClick = {
                                 try {
-                                    val fullIn = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dateStr $checkIn")?.time ?: 0L
-                                    val fullOut = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dateStr $checkOut")?.time
-                                    adminViewModel.saveAttendanceRecord(AttendanceRecord(uid = employee.userId, dateString = dateStr, clockInTime = fullIn, clockOutTime = fullOut))
+                                    val d = dayStr.text.padStart(2, '0')
+                                    val m = monthStr.text.padStart(2, '0')
+                                    val y = yearStr.text.padStart(4, '0')
+                                    
+                                    val inH = checkInHour.text.padStart(2, '0')
+                                    val inM = checkInMin.text.padStart(2, '0')
+                                    val outH = checkOutHour.text.padStart(2, '0')
+                                    val outM = checkOutMin.text.padStart(2, '0')
+
+                                    // Target stored format is yyyy-MM-dd
+                                    val dbDateStr = "$y-$m-$d"
+                                    
+                                    val fullIn = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
+                                    val fullOut = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
+                                    adminViewModel.saveAttendanceRecord(
+                                        AttendanceRecord(
+                                            uid = employee.userId, 
+                                            dateString = dbDateStr, 
+                                            clockInTime = fullIn, 
+                                            clockOutTime = fullOut
+                                        )
+                                    )
                                 } catch (e: Exception) {}
                                 showAddAttendanceDialog = false
                             }) { Text("Lưu") }

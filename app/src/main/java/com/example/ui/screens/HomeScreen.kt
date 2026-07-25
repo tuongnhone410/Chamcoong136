@@ -536,7 +536,11 @@ fun HomeScreen(
                         val elapsedMs = remember(liveTimeString) { System.currentTimeMillis() - checkInVal }
                         val elapsedHours = (elapsedMs.coerceAtLeast(0L)) / 3600000.0
                         
-                        val dateParser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val dateParser = if (active.date.contains("/")) {
+                            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                        } else {
+                            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        }
                         var dt = "NORMAL"
                         try {
                             val parsedDate = dateParser.parse(active.date)
@@ -546,12 +550,11 @@ fun HomeScreen(
                                 if (c.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
                                     dt = "SUNDAY"
                                 } else {
-                                    val parts = active.date.split("-")
-                                    if (parts.size >= 3) {
-                                        val md = "${parts[1]}-${parts[2]}"
-                                        if (md == "01-01" || md == "04-30" || md == "05-01" || md == "09-02") {
-                                            dt = "HOLIDAY"
-                                        }
+                                    val d = c.get(Calendar.DAY_OF_MONTH)
+                                    val m = c.get(Calendar.MONTH) + 1
+                                    val md = String.format(Locale.US, "%02d-%02d", d, m)
+                                    if (md == "01-01" || md == "30-04" || md == "01-05" || md == "02-09") {
+                                        dt = "HOLIDAY"
                                     }
                                 }
                             }
@@ -735,17 +738,42 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-                    val currentYearMonth = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) }
+                    val todayStr = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) }
+                    val currentYearMonth = remember { SimpleDateFormat("/MM/yyyy", Locale.getDefault()).format(Date()) }
                     val sortedLogs = remember(recentEntries, todayStr, isExpanded, currentYearMonth) {
-                        val filtered = recentEntries.filter { it.date <= todayStr }
+                        val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                        val todayTime = try { sdf.parse(todayStr)?.time ?: Long.MAX_VALUE } catch(e: Exception) { Long.MAX_VALUE }
+                        val filtered = recentEntries.filter { 
+                            try {
+                                val t = (if (it.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(it.date)?.time ?: 0L
+                                t <= todayTime
+                            } catch(e: Exception) {
+                                true
+                            }
+                        }
                         if (isExpanded) {
                             filtered
-                                .filter { it.date.startsWith(currentYearMonth) }
-                                .sortedByDescending { it.date }
+                                .filter { it.date.endsWith(currentYearMonth) || it.date.contains(currentYearMonth) }
+                                .sortedWith { a, b ->
+                                    try {
+                                        val ta = (if (a.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(a.date)?.time ?: 0L
+                                        val tb = (if (b.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(b.date)?.time ?: 0L
+                                        tb.compareTo(ta)
+                                    } catch(e: Exception) {
+                                        b.date.compareTo(a.date)
+                                    }
+                                }
                         } else {
                             filtered
-                                .sortedByDescending { it.date }
+                                .sortedWith { a, b ->
+                                    try {
+                                        val ta = (if (a.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(a.date)?.time ?: 0L
+                                        val tb = (if (b.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(b.date)?.time ?: 0L
+                                        tb.compareTo(ta)
+                                    } catch(e: Exception) {
+                                        b.date.compareTo(a.date)
+                                    }
+                                }
                                 .take(3)
                         }
                     }
@@ -769,7 +797,11 @@ fun HomeScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     val formattedDate = remember(entry.date) {
                                         try {
-                                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            val parser = if (entry.date.contains("/")) {
+                                                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                            } else {
+                                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            }
                                             val dateVal = parser.parse(entry.date)
                                             if (dateVal != null) {
                                                 val formatter = SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN"))
@@ -814,7 +846,11 @@ fun HomeScreen(
                                     val formattedEarnings = DecimalFormat("#,###").format(earnings)
                                     val displayDateStr = remember(entry.date) {
                                         try {
-                                            val p = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            val p = if (entry.date.contains("/")) {
+                                                SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                            } else {
+                                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                            }
                                             val d = p.parse(entry.date)
                                             if (d != null) {
                                                 SimpleDateFormat("dd/M", Locale.getDefault()).format(d)
@@ -1122,7 +1158,7 @@ fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
 
 private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> {
     val cal = Calendar.getInstance()
-    val sdfValue = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val sdfValue = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val sdfDay = SimpleDateFormat("EEE", Locale("vi", "VN"))
 
     val dates = ArrayList<Pair<String, String>>()
@@ -1179,7 +1215,11 @@ private fun calculateDayEarnings(entry: TimeEntry, config: com.example.data.mode
     val isSunday = processed.dayType == "SUNDAY" || 
                    (run {
                        try {
-                           val parser = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                           val parser = if (processed.date.contains("/")) {
+                               SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                           } else {
+                               SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                           }
                            val dateVal = parser.parse(processed.date)
                            if (dateVal != null) {
                                val cal = Calendar.getInstance()
@@ -1303,7 +1343,7 @@ fun RetroactiveCheckInDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    val todaySdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val todaySdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(Date()) }
     val calYesterday = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) } }
     val yesterdayStr = remember { todaySdf.format(calYesterday.time) }
