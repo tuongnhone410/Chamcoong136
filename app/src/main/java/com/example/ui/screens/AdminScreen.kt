@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -732,15 +733,12 @@ fun EmployeeDetailView(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
-    var selectedMonthFilter by remember { mutableStateOf("CURRENT") } // "CURRENT", "PREVIOUS", "ALL"
-
+    val sdfYm = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()) }
     val calCurrent = remember { Calendar.getInstance() }
-    val currentMonthYm = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(calCurrent.time) }
-    val currentMonthDisplay = remember { SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(calCurrent.time) }
+    val currentMonthYm = remember { sdfYm.format(calCurrent.time) }
 
-    val calPrev = remember { Calendar.getInstance().apply { add(Calendar.MONTH, -1) } }
-    val prevMonthYm = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(calPrev.time) }
-    val prevMonthDisplay = remember { SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(calPrev.time) }
+    var selectedMonthYm by remember { mutableStateOf(currentMonthYm) }
+    var isAllMonths by remember { mutableStateOf(false) }
 
     fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
         if (monthYmd.isEmpty()) return true
@@ -757,17 +755,11 @@ fun EmployeeDetailView(
                dateStr.endsWith(slashPattern)
     }
 
-    val targetMonthYm = when (selectedMonthFilter) {
-        "PREVIOUS" -> prevMonthYm
-        "ALL" -> ""
-        else -> currentMonthYm
-    }
-
-    val filteredRecords = remember(records, selectedMonthFilter, currentMonthYm, prevMonthYm) {
-        if (selectedMonthFilter == "ALL") {
+    val filteredRecords = remember(records, selectedMonthYm, isAllMonths) {
+        if (isAllMonths) {
             records
         } else {
-            records.filter { isRecordInMonth(it.dateString, targetMonthYm) }
+            records.filter { isRecordInMonth(it.dateString, selectedMonthYm) }
         }
     }
 
@@ -794,170 +786,171 @@ fun EmployeeDetailView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Profile Summary Header (Compact & Professional)
-        Box(
+        val cal = Calendar.getInstance()
+        val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+        val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+        val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+        val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+        val todayRec = records.find { r ->
+            val ds = r.dateString.trim()
+            ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
+        }
+        val shiftStatus = remember(todayRec) { getEmployeeShiftStatus(todayRec) }
+
+        // Employee Info Card (Large, High-End Card)
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(DarkBackground)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            colors = CardDefaults.cardColors(containerColor = DarkContainer),
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.25f))
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Square rounded avatar
                     Surface(
-                        modifier = Modifier.size(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = NeonBlue.copy(alpha = 0.12f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonBlue.copy(alpha = 0.3f))
+                        modifier = Modifier.size(52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = PrimaryBlue.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.35f))
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = employee.hoVaTen.take(1).uppercase(),
-                                color = NeonBlue,
+                                color = PrimaryBlue,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.width(12.dp))
-                    
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = employee.hoVaTen,
-                                color = White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                            Surface(
-                                color = if (employee.isAdmin) AccentOrange.copy(alpha = 0.15f) else NeonBlue.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    if (employee.isAdmin) "ADMIN" else "NV",
-                                    color = if (employee.isAdmin) AccentOrange else NeonBlue,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
+                        Text(
+                            text = employee.hoVaTen.uppercase(),
+                            color = White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
                                 text = "ID: ${employee.maNhanVien}",
-                                color = Color.Gray,
+                                color = TextSecondary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
-                            if (employee.boPhan.isNotEmpty()) {
-                                Text("•", color = Color.DarkGray, fontSize = 10.sp)
-                                Text(
-                                    text = employee.boPhan,
-                                    color = NeonBlue.copy(alpha = 0.8f),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+
                             if (employee.emailDangKy.isNotEmpty()) {
-                                Text("•", color = Color.DarkGray, fontSize = 10.sp)
+                                Text("•", color = Color.Gray, fontSize = 10.sp)
                                 Text(
-                                    text = employee.emailDangKy, 
-                                    color = Color.Gray, 
+                                    text = employee.emailDangKy,
+                                    color = TextSecondary,
                                     fontSize = 12.sp,
                                     maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                            }
+
+                            Surface(
+                                color = if (employee.isAdmin) Color(0xFFF59E0B).copy(alpha = 0.18f) else PrimaryBlue.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, if (employee.isAdmin) Color(0xFFF59E0B).copy(alpha = 0.4f) else PrimaryBlue.copy(alpha = 0.3f))
+                            ) {
+                                Text(
+                                    if (employee.isAdmin) "ADMIN" else "NV",
+                                    color = if (employee.isAdmin) Color(0xFFF59E0B) else PrimaryBlue,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
                         }
                     }
-                }
 
-                // Shift Status Banner (Compact & Clean - Removed redundant export button)
-                val cal = Calendar.getInstance()
-                val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
-                val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
-                val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
-                val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
-                val todayRec = records.find { r ->
-                    val ds = r.dateString.trim()
-                    ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
-                }
-                val shiftStatus = remember(todayRec) { getEmployeeShiftStatus(todayRec) }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = shiftStatus.color.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, shiftStatus.color.copy(alpha = 0.25f))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    IconButton(
+                        onClick = { /* Detail action */ },
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .background(shiftStatus.color, shape = androidx.compose.foundation.shape.CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Hôm nay: ${shiftStatus.label} ${if (shiftStatus.timeDetail.isNotEmpty()) "(${shiftStatus.timeDetail})" else ""}",
-                                color = shiftStatus.color,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Chi tiết",
+                            tint = TextSecondary
+                        )
+                    }
+                }
 
-                        // Admin manual clock-in / clock-out actions
-                        if (todayRec == null || todayRec.clockInTime == 0L) {
-                            TextButton(
-                                onClick = {
-                                    val now = System.currentTimeMillis()
-                                    adminViewModel.saveAttendanceRecord(
-                                        AttendanceRecord(
-                                            uid = employee.userId,
-                                            dateString = todayYmd,
-                                            clockInTime = now
-                                        )
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom Shift Status Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .background(shiftStatus.color, androidx.compose.foundation.shape.CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Hôm nay: ${shiftStatus.label} ${if (shiftStatus.timeDetail.isNotEmpty()) "(${shiftStatus.timeDetail})" else ""}",
+                            color = shiftStatus.color,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (todayRec == null || todayRec.clockInTime == 0L) {
+                        Button(
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                adminViewModel.saveAttendanceRecord(
+                                    AttendanceRecord(
+                                        uid = employee.userId,
+                                        dateString = todayYmd,
+                                        clockInTime = now
                                     )
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(26.dp),
-                                shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.textButtonColors(containerColor = Color(0xFF00E676).copy(alpha = 0.15f))
-                            ) {
-                                Text("Vào ca", color = Color(0xFF00E676), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        } else if (todayRec.clockOutTime == null || todayRec.clockOutTime == 0L) {
-                            TextButton(
-                                onClick = {
-                                    val now = System.currentTimeMillis()
-                                    adminViewModel.saveAttendanceRecord(
-                                        todayRec.copy(clockOutTime = now)
-                                    )
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(26.dp),
-                                shape = RoundedCornerShape(6.dp),
-                                colors = ButtonDefaults.textButtonColors(containerColor = Color(0xFF4C84FF).copy(alpha = 0.15f))
-                            ) {
-                                Text("Ra ca", color = Color(0xFF4C84FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
+                                )
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                        ) {
+                            Text("Vào ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else if (todayRec.clockOutTime == null || todayRec.clockOutTime == 0L) {
+                        Button(
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                adminViewModel.saveAttendanceRecord(
+                                    todayRec.copy(clockOutTime = now)
+                                )
+                            },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        ) {
+                            Text("Ra ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -996,6 +989,128 @@ fun EmployeeDetailView(
             )
         }
 
+        // MONTH NAVIGATION BAR FOR CHẤM CÔNG AND PHIẾU LƯƠNG
+        if (pagerState.currentPage == 1 || pagerState.currentPage == 2) {
+            Surface(
+                color = DarkBackground,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DarkContainer, RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.dp, NeonBlue.copy(alpha = 0.35f)), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            isAllMonths = false
+                            try {
+                                val d = sdfYm.parse(selectedMonthYm) ?: Date()
+                                val c = Calendar.getInstance().apply { time = d }
+                                c.add(Calendar.MONTH, -1)
+                                selectedMonthYm = sdfYm.format(c.time)
+                            } catch (e: Exception) {
+                                selectedMonthYm = currentMonthYm
+                            }
+                        },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChevronLeft,
+                            contentDescription = "Tháng trước",
+                            tint = NeonBlue,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    val displayMonthStr = remember(selectedMonthYm, isAllMonths) {
+                        if (isAllMonths) "Tất cả các tháng"
+                        else {
+                            try {
+                                val d = sdfYm.parse(selectedMonthYm) ?: Date()
+                                val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale("vi", "VN"))
+                                fmt.format(d)
+                            } catch (e: Exception) {
+                                "Tháng $selectedMonthYm"
+                            }
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.clickable {
+                            if (isAllMonths) {
+                                isAllMonths = false
+                                selectedMonthYm = currentMonthYm
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = NeonBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = displayMonthStr,
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilterChip(
+                            selected = isAllMonths,
+                            onClick = { isAllMonths = !isAllMonths },
+                            label = { Text("Tất cả", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonBlue,
+                                selectedLabelColor = White,
+                                containerColor = Color.Transparent,
+                                labelColor = Color.Gray
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isAllMonths,
+                                borderColor = if (isAllMonths) NeonBlue else Color.Gray.copy(alpha = 0.3f),
+                                selectedBorderColor = NeonBlue
+                            ),
+                            modifier = Modifier.height(28.dp)
+                        )
+
+                        IconButton(
+                            onClick = {
+                                isAllMonths = false
+                                try {
+                                    val d = sdfYm.parse(selectedMonthYm) ?: Date()
+                                    val c = Calendar.getInstance().apply { time = d }
+                                    c.add(Calendar.MONTH, 1)
+                                    selectedMonthYm = sdfYm.format(c.time)
+                                } catch (e: Exception) {
+                                    selectedMonthYm = currentMonthYm
+                                }
+                            },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Tháng sau",
+                                tint = NeonBlue,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f)
@@ -1014,59 +1129,6 @@ fun EmployeeDetailView(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
-                    stickyHeader {
-                        Surface(
-                            color = DarkBackground,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            // Month Selection Filter Bar
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                FilterChip(
-                                    selected = selectedMonthFilter == "CURRENT",
-                                    onClick = { selectedMonthFilter = "CURRENT" },
-                                    label = { Text(currentMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonBlue,
-                                        selectedLabelColor = White,
-                                        containerColor = DarkContainer,
-                                        labelColor = Color.LightGray
-                                    )
-                                )
-                                FilterChip(
-                                    selected = selectedMonthFilter == "PREVIOUS",
-                                    onClick = { selectedMonthFilter = "PREVIOUS" },
-                                    label = { Text(prevMonthDisplay, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonBlue,
-                                        selectedLabelColor = White,
-                                        containerColor = DarkContainer,
-                                        labelColor = Color.LightGray
-                                    )
-                                )
-                                FilterChip(
-                                    selected = selectedMonthFilter == "ALL",
-                                    onClick = { selectedMonthFilter = "ALL" },
-                                    label = { Text("Tất cả", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = NeonBlue,
-                                        selectedLabelColor = White,
-                                        containerColor = DarkContainer,
-                                        labelColor = Color.LightGray
-                                    )
-                                )
-                            }
-                        }
-                    }
-                    
                     item {
                         // Attendance Summary Board
                         AttendanceSummaryBoard(stats = monthStats, totalRecordCount = filteredRecords.size)
@@ -1337,11 +1399,8 @@ fun EmployeeDetailView(
                 EmployeePayslipView(
                     employee = employee,
                     records = records,
-                    selectedMonthFilter = selectedMonthFilter,
-                    currentMonthYm = currentMonthYm,
-                    prevMonthYm = prevMonthYm,
-                    currentMonthDisplay = currentMonthDisplay,
-                    prevMonthDisplay = prevMonthDisplay
+                    selectedMonthYm = selectedMonthYm,
+                    isAllMonths = isAllMonths
                 )
             }
         }
@@ -1353,14 +1412,14 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 20.dp, vertical = 6.dp),
         colors = CardDefaults.cardColors(containerColor = DarkContainer),
         shape = RoundedCornerShape(20.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, NeonBlue.copy(alpha = 0.2f))
+        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.2f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Header
             Row(
@@ -1372,29 +1431,29 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
-                            .background(NeonBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
+                            .background(PrimaryBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Analytics, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Analytics, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "TỔNG QUAN THÁNG",
                         color = White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         letterSpacing = 0.5.sp
                     )
                 }
 
                 Surface(
-                    color = NeonBlue.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonBlue.copy(alpha = 0.25f))
+                    color = PrimaryBlue.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.25f))
                 ) {
                     Text(
                         text = "$totalRecordCount ngày ghi nhận",
-                        color = NeonBlue,
+                        color = PrimaryBlue,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -1412,15 +1471,15 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     value = "${stats.workDays}",
                     unit = "ngày",
                     icon = Icons.Default.WorkHistory,
-                    accentColor = Color(0xFF00E676),
+                    accentColor = SuccessGreen,
                     modifier = Modifier.weight(1f)
                 )
                 SummaryItem(
-                    label = "Tổng giờ làm",
-                    value = String.format("%.1f", stats.totalHours),
+                    label = "Tổng giờ",
+                    value = String.format(Locale.US, "%.1f", stats.totalHours),
                     unit = "giờ",
                     icon = Icons.Default.Timer,
-                    accentColor = Color(0xFF4C84FF),
+                    accentColor = PrimaryBlue,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1434,7 +1493,7 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     value = "${stats.lateArrivals}",
                     unit = "lần",
                     icon = Icons.Default.Schedule,
-                    accentColor = if (stats.lateArrivals > 0) AccentOrange else Color.Gray,
+                    accentColor = if (stats.lateArrivals > 0) Color(0xFFF59E0B) else TextSecondary,
                     modifier = Modifier.weight(1f)
                 )
                 SummaryItem(
@@ -1442,7 +1501,7 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     value = "${stats.leaveDays}",
                     unit = "ngày",
                     icon = Icons.Default.EventBusy,
-                    accentColor = Color(0xFFB388FF),
+                    accentColor = Color(0xFFA855F7),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1455,16 +1514,16 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Tiến độ giờ chuẩn (160h/tháng)", color = Color.Gray, fontSize = 11.sp)
-                    Text("${(progress * 100).toInt()}%", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Tiến độ giờ chuẩn (160h/tháng)", color = TextSecondary, fontSize = 12.sp)
+                    Text("${(progress * 100).toInt()}%", color = PrimaryBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp),
-                    color = NeonBlue,
+                        .height(8.dp),
+                    color = PrimaryBlue,
                     trackColor = Color.White.copy(alpha = 0.1f),
                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                 )
@@ -1486,28 +1545,28 @@ fun SummaryItem(
         modifier = modifier,
         color = Color.White.copy(alpha = 0.04f),
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
     ) {
         Row(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(36.dp)
                     .background(accentColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column {
+                Text(label, color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                 Row(verticalAlignment = Alignment.Bottom) {
-                    Text(value, color = White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                    Text(value, color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(3.dp))
-                    Text(unit, color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(bottom = 1.dp))
+                    Text(unit, color = TextSecondary, fontSize = 11.sp, modifier = Modifier.padding(bottom = 1.dp))
                 }
-                Text(label, color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -1876,10 +1935,14 @@ fun EmployeeAttendanceEdit(
 
 @Composable
 fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelete: () -> Unit) {
-    val timeSdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+    var showMenu by remember { mutableStateOf(false) }
+
+    val timeSdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val inTime = if (record.clockInTime != 0L) timeSdf.format(Date(record.clockInTime)) else "--:--"
     val outTime = record.clockOutTime?.let { timeSdf.format(Date(it)) } ?: "--:--"
-    
+
+    val isInShift = record.clockInTime != 0L && (record.clockOutTime == null || record.clockOutTime == 0L)
+
     val isLate = remember(record.clockInTime, employee) {
         if (record.clockInTime == 0L) false
         else {
@@ -1893,24 +1956,21 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
         }
     }
 
-    val isInShift = record.clockInTime != 0L && record.clockOutTime == null
-
-    // Calculate duration
-    val durationText = remember(record.clockInTime, record.clockOutTime) {
+    // Calculate duration in hours
+    val hrsDouble = remember(record.clockInTime, record.clockOutTime) {
         if (record.clockInTime > 0L && record.clockOutTime != null && record.clockOutTime > record.clockInTime) {
-            val diffMs = record.clockOutTime - record.clockInTime
-            val hrs = diffMs / 3600000
-            val mins = (diffMs % 3600000) / 60000
-            if (hrs > 0) "${hrs}h ${mins}p" else "${mins}p"
-        } else if (isInShift) {
-            "Đang trong ca"
-        } else {
-            "--"
-        }
+            (record.clockOutTime - record.clockInTime) / 3600000.0
+        } else 0.0
     }
 
-    // Format full date with day of week (e.g. "Thứ 2, 24/07/2026")
-    val formattedDateInfo = remember(record.dateString) {
+    val durationBadgeText = remember(hrsDouble, isInShift) {
+        if (isInShift) "Đang làm"
+        else if (hrsDouble > 0) String.format(Locale.US, "%.1f giờ", hrsDouble)
+        else "--"
+    }
+
+    // Parse date into DayOfWeek, DayNumber, MonthYear
+    val dateParts = remember(record.dateString) {
         try {
             val parser = if (record.dateString.contains("-")) {
                 SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -1930,166 +1990,183 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                     Calendar.SUNDAY -> "Chủ Nhật"
                     else -> ""
                 }
-                val displaySdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                Pair(dayOfWeekStr, displaySdf.format(parsedDate))
+                val dayNum = String.format(Locale.US, "%02d", cal.get(Calendar.DAY_OF_MONTH))
+                val monthYear = SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(parsedDate)
+                Triple(dayOfWeekStr, dayNum, monthYear)
             } else {
-                Pair("", record.dateString)
+                Triple("", record.dateString, "")
             }
         } catch (e: Exception) {
-            Pair("", record.dateString)
+            Triple("", record.dateString, "")
         }
     }
 
-    val statusColor = when {
-        isInShift -> Color(0xFF00E676)
-        isLate -> AccentOrange
-        record.clockOutTime != null -> Color(0xFF4C84FF)
-        else -> Color.Gray
+    val accentColor = when {
+        isInShift -> PrimaryBlue
+        isLate -> Color(0xFFF59E0B)
+        record.clockOutTime != null -> SuccessGreen
+        else -> TextSecondary
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = DarkContainer),
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.25f))
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.25f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Status Pillar Indicator
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(44.dp)
-                    .background(statusColor, RoundedCornerShape(2.dp))
-            )
+            // LEFT COLUMN: Vertical bar accent + Date info
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(46.dp)
+                        .background(accentColor, RoundedCornerShape(2.dp))
+                )
 
-            Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                // Header Row: Day of week + Date + Badges
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    modifier = Modifier.width(66.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (formattedDateInfo.first.isNotEmpty()) {
-                            Text(
-                                text = formattedDateInfo.first,
-                                color = NeonBlue,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                            Text(text = " • ", color = Color.Gray, fontSize = 13.sp)
-                        }
-                        Text(
-                            text = formattedDateInfo.second,
-                            color = White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                    }
+                    Text(
+                        text = dateParts.first,
+                        color = PrimaryBlue,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = dateParts.second,
+                        color = White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        lineHeight = 20.sp
+                    )
+                    Text(
+                        text = dateParts.third,
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
-                    // Status Pill Tags
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (isInShift) {
-                            Surface(
-                                color = Color(0xFF00E676).copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00E676).copy(alpha = 0.3f))
-                            ) {
-                                Text(
-                                    inTime,
-                                    color = Color(0xFF00E676),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (isLate) {
-                            Surface(
-                                color = AccentOrange.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentOrange.copy(alpha = 0.3f))
-                            ) {
-                                Text(
-                                    "ĐI TRỄ",
-                                    color = AccentOrange,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
+            Spacer(modifier = Modifier.width(6.dp))
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.08f),
+                modifier = Modifier
+                    .height(40.dp)
+                    .width(1.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
 
-                        if (durationText != "--" && !isInShift) {
-                            Surface(
-                                color = Color.White.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    durationText,
-                                    color = Color.LightGray,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
+            // MIDDLE COLUMN: Check In / Check Out timestamps
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(SuccessGreen, androidx.compose.foundation.shape.CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Vào", color = TextSecondary, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(inTime, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(PrimaryBlue, androidx.compose.foundation.shape.CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Ra", color = TextSecondary, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(outTime, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
 
-                // Time Logs Details Row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+            // RIGHT COLUMN: Hours badge, work count subtext, 3-dots menu
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Surface(
+                    color = accentColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Login, contentDescription = null, tint = Color(0xFF00E676), modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(text = "Vào: ", color = Color.Gray, fontSize = 11.sp)
-                        Text(text = inTime, color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
+                    Text(
+                        text = durationBadgeText,
+                        color = if (isInShift) PrimaryBlue else if (isLate) Color(0xFFF59E0B) else SuccessGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Logout, contentDescription = null, tint = Color(0xFF4C84FF), modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(text = "Ra: ", color = Color.Gray, fontSize = 11.sp)
-                        Text(text = outTime, color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (hrsDouble >= 8.0) "1 công" else if (hrsDouble > 0) "Thường" else "--",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (hrsDouble > 8.0) {
+                        Text(
+                            text = " • OT ${String.format(Locale.US, "%.0fh", hrsDouble - 8.0)}",
+                            color = PrimaryBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(2.dp))
 
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    Icons.Default.DeleteOutline,
-                    contentDescription = "Delete",
-                    tint = Color.Gray.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
+            // Overflow 3-dot menu
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Tùy chọn",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(DarkContainer)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Xóa công", color = Color(0xFFEF4444)) },
+                        leadingIcon = {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFEF4444))
+                        },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        }
+                    )
+                }
             }
         }
     }
@@ -2099,34 +2176,44 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 fun EmployeePayslipView(
     employee: UserConfig,
     records: List<AttendanceRecord>,
-    selectedMonthFilter: String,
-    currentMonthYm: String,
-    prevMonthYm: String,
-    currentMonthDisplay: String,
-    prevMonthDisplay: String
+    selectedMonthYm: String,
+    isAllMonths: Boolean = false
 ) {
-    val targetMonthYm = when (selectedMonthFilter) {
-        "PREVIOUS" -> prevMonthYm
-        "ALL" -> currentMonthYm
-        else -> currentMonthYm
+    val targetMonthYm = if (isAllMonths) {
+        val cal = Calendar.getInstance()
+        SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
+    } else {
+        selectedMonthYm
     }
 
-    val monthLabel = when (selectedMonthFilter) {
-        "PREVIOUS" -> prevMonthDisplay
-        "ALL" -> currentMonthDisplay
-        else -> currentMonthDisplay
+    val monthLabel = remember(selectedMonthYm, isAllMonths) {
+        if (isAllMonths) "Tất cả các tháng"
+        else {
+            try {
+                val sdfYm = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                val d = sdfYm.parse(selectedMonthYm) ?: Date()
+                val fmt = SimpleDateFormat("MM/yyyy", Locale("vi", "VN"))
+                fmt.format(d)
+            } catch (e: Exception) {
+                selectedMonthYm
+            }
+        }
     }
 
-    val monthEntries = remember(records, targetMonthYm) {
-        records.filter { record ->
-            val ds = record.dateString
-            val matchYmd = ds.startsWith(targetMonthYm)
-            val matchDmy = if (targetMonthYm.contains("-")) {
-                val parts = targetMonthYm.split("-")
-                ds.contains("/${parts[1]}/${parts[0]}")
-            } else false
-            matchYmd || matchDmy
-        }.map { it.toTimeEntry() }
+    val monthEntries = remember(records, targetMonthYm, isAllMonths) {
+        if (isAllMonths) {
+            records.map { it.toTimeEntry() }
+        } else {
+            records.filter { record ->
+                val ds = record.dateString
+                val matchYmd = ds.startsWith(targetMonthYm)
+                val matchDmy = if (targetMonthYm.contains("-")) {
+                    val parts = targetMonthYm.split("-")
+                    ds.contains("/${parts[1]}/${parts[0]}") || ds.endsWith("/${parts[1]}/${parts[0]}")
+                } else false
+                matchYmd || matchDmy
+            }.map { it.toTimeEntry() }
+        }
     }
 
     val s = remember(monthEntries, employee, targetMonthYm) {

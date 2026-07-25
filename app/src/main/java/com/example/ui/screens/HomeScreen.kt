@@ -27,8 +27,12 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -121,22 +125,22 @@ fun QuickStatCard(
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(30.dp)
                     .background(iconTint.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(16.dp))
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(15.dp))
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = value,
                 color = TextPrimary,
-                fontSize = 15.sp,
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -168,7 +172,7 @@ fun SalaryMetricColumn(
         Text(
             text = label,
             color = TextSecondary,
-            fontSize = 10.sp,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -177,7 +181,7 @@ fun SalaryMetricColumn(
         Text(
             text = value,
             color = TextPrimary,
-            fontSize = 12.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -198,6 +202,7 @@ fun HomeScreen(
     val summaryState by viewModel.salarySummaryState.collectAsStateWithLifecycle()
     val recentEntries by viewModel.monthTimeEntries.collectAsStateWithLifecycle()
     val configState by viewModel.userConfig.collectAsStateWithLifecycle()
+    val selectedMonth by viewModel.currentSelectedMonth.collectAsStateWithLifecycle()
 
     var liveTimeString by remember { mutableStateOf("") }
     var liveHMString by remember { mutableStateOf("") }
@@ -235,14 +240,18 @@ fun HomeScreen(
                             text = "TIMESNAP PRO",
                             fontWeight = FontWeight.Black,
                             color = PrimaryBlue,
-                            fontSize = 18.sp,
-                            letterSpacing = 1.2.sp
+                            fontSize = 17.sp,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "Hệ thống quản trị lương quốc dân",
                             color = TextSecondary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 },
@@ -320,18 +329,101 @@ fun HomeScreen(
             Text(
                 text = displayName,
                 color = TextPrimary,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 0.5.sp
+                letterSpacing = 0.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = liveDateString.ifEmpty { "Chủ nhật, ngày 26 tháng 07 năm 2026" },
                 color = TextSecondary,
-                fontSize = 13.sp,
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.Normal,
-                modifier = Modifier.padding(bottom = 20.dp)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
+
+            // MONTH NAVIGATION BAR (< Tháng MM/yyyy >)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+                    .background(DarkContainer, RoundedCornerShape(14.dp))
+                    .border(1.dp, PrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val sdfMonth = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()) }
+                val currentMonthDate = remember(selectedMonth) {
+                    try { sdfMonth.parse(selectedMonth) ?: Date() } catch (e: Exception) { Date() }
+                }
+
+                IconButton(
+                    onClick = {
+                        val cal = Calendar.getInstance()
+                        cal.time = currentMonthDate
+                        cal.add(Calendar.MONTH, -1)
+                        viewModel.selectMonth(sdfMonth.format(cal.time))
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBackIosNew,
+                        contentDescription = "Tháng trước",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                val displayMonthStr = remember(selectedMonth) {
+                    try {
+                        val d = sdfMonth.parse(selectedMonth) ?: Date()
+                        val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale("vi", "VN"))
+                        fmt.format(d)
+                    } catch (e: Exception) {
+                        "Tháng $selectedMonth"
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = displayMonthStr,
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        val cal = Calendar.getInstance()
+                        cal.time = currentMonthDate
+                        cal.add(Calendar.MONTH, 1)
+                        viewModel.selectMonth(sdfMonth.format(cal.time))
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowForwardIos,
+                        contentDescription = "Tháng sau",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
 
             // 3 QUICK STATS HORIZONTAL CARDS
             Row(
@@ -411,7 +503,7 @@ fun HomeScreen(
                             Text(
                                 text = formattedSalary,
                                 color = SuccessGreen,
-                                fontSize = 28.sp,
+                                fontSize = 24.sp,
                                 fontWeight = FontWeight.Black
                             )
                         }
@@ -916,12 +1008,52 @@ fun HomeScreen(
                                         }
                                     }
 
-                                    Text(
-                                        text = formattedDate,
-                                        color = TextPrimary,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    val processedEntry = remember(entry, configState) {
+                                        com.example.data.SalaryCalculator.calculateSingleEntry(entry, configState)
+                                    }
+                                    val shift = remember(entry) {
+                                        com.example.data.SalaryCalculator.getShiftForEntry(entry)
+                                    }
+                                    val isNightShift = remember(shift, entry) {
+                                        shift.shiftType == "NIGHT" || shift.shiftId == "ca_dem"
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = formattedDate,
+                                            color = TextPrimary,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+
+                                        Surface(
+                                            color = if (isNightShift) NightPurple.copy(alpha = 0.25f) else AccentOrange.copy(alpha = 0.18f),
+                                            border = BorderStroke(1.dp, if (isNightShift) NightPurple.copy(alpha = 0.6f) else AccentOrange.copy(alpha = 0.5f)),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isNightShift) Icons.Default.NightsStay else Icons.Default.WbSunny,
+                                                    contentDescription = null,
+                                                    tint = if (isNightShift) Color(0xFFC084FC) else Color(0xFFFB923C),
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                                Text(
+                                                    text = if (isNightShift) "Ca đêm" else "Ca ngày",
+                                                    color = if (isNightShift) Color(0xFFE9D5FF) else Color(0xFFFFEDD5),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
 
                                     val shiftTimeStr = remember(entry) {
                                         if (entry.checkInTime != null && entry.checkOutTime != null) {
@@ -932,17 +1064,12 @@ fun HomeScreen(
                                         } else "Ca thường"
                                     }
 
-                                    val processedEntry = remember(entry, configState) {
-                                        com.example.data.SalaryCalculator.calculateSingleEntry(entry, configState)
-                                    }
-                                    val shift = remember(entry) {
-                                        com.example.data.SalaryCalculator.getShiftForEntry(entry)
-                                    }
                                     val stdHrs = processedEntry.workDay * shift.standardHours
                                     val otHrs = processedEntry.otHours
+                                    val shiftName = if (isNightShift) "Ca đêm" else "Ca ngày"
 
                                     Text(
-                                        text = "$shiftTimeStr • ${processedEntry.workDay} công • ${DecimalFormat("#.#").format(stdHrs)}g" +
+                                        text = "$shiftName ($shiftTimeStr) • ${processedEntry.workDay} công • ${DecimalFormat("#.#").format(stdHrs)}g" +
                                                 (if (otHrs > 0) " • OT ${DecimalFormat("#.#").format(otHrs)}g" else ""),
                                         color = TextSecondary,
                                         fontSize = 12.sp,
