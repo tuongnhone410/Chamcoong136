@@ -239,7 +239,7 @@ fun AdminScreen(
                         }
                     }
                     if (addBatchAttendance) {
-                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                        val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
                         adminViewModel.batchAddAttendance(today, "08:00", "17:00")
                     }
                     showBatchEditDialog = false
@@ -1301,11 +1301,11 @@ fun EmployeeDetailView(
                                     val outH = checkOutHour.text.padStart(2, '0')
                                     val outM = checkOutMin.text.padStart(2, '0')
 
-                                    // Target stored format is yyyy-MM-dd
-                                    val dbDateStr = "$y-$m-$d"
+                                    // Target stored format is dd/MM/yyyy
+                                    val dbDateStr = "$d/$m/$y"
                                     
-                                    val fullIn = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
-                                    val fullOut = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
+                                    val fullIn = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
+                                    val fullOut = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId, 

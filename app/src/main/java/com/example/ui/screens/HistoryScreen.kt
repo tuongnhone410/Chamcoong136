@@ -262,8 +262,8 @@ fun HistoryScreen(
                                             // Perform full range acquisition
                                             val start = rangeStartStr!!
                                             val end = day.dateString
-                                            val d1 = if (start <= end) start else end
-                                            val d2 = if (start <= end) end else start
+                                            val d1 = if (isDateBeforeOrEqual(start, end)) start else end
+                                            val d2 = if (isDateBeforeOrEqual(start, end)) end else start
 
                                             val fillDates = getDatesInRange(d1, d2)
                                             selectedDates.clear()
@@ -362,8 +362,18 @@ fun HistoryScreen(
 
         // ==================== SINGLE ENTRY DIALOG POPUP (CHẾ ĐỘ 1) ====================
         showSingleDayDialog?.let { day ->
-            val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-            val isFutureDate = day.dateString > todayStr
+            val todayDate = Date()
+            val parser = if (day.dateString.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val todayStr = remember { parser.format(todayDate) }
+            val isFutureDate = remember(day.dateString) {
+                try {
+                    val d = parser.parse(day.dateString)
+                    val t = parser.parse(todayStr)
+                    d != null && t != null && d.after(t)
+                } catch(e: Exception) {
+                    false
+                }
+            }
 
             var checkInHour by remember { mutableStateOf(TextFieldValue("08")) }
             var checkInMin by remember { mutableStateOf(TextFieldValue("00")) }
@@ -1185,13 +1195,34 @@ fun HistoryScreen(
                                     return@Button
                                 }
 
-                                val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                                val hasFuture = selectedDates.any { it > todayStr }
+                                val todayDate = Date()
+                                val todayParser = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                val todayStr = todayParser.format(todayDate)
+                                
+                                val hasFuture = selectedDates.any { dateStr ->
+                                    try {
+                                        val p = if (dateStr.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                        val d = p.parse(dateStr)
+                                        val t = p.parse(todayStr)
+                                        d != null && t != null && d.after(t)
+                                    } catch(e: Exception) {
+                                        false
+                                    }
+                                }
                                 if (hasFuture) {
                                     Toast.makeText(context, "Không được chấm công cho ngày tương lai", Toast.LENGTH_LONG).show()
                                 }
 
-                                val validDates = selectedDates.filter { it <= todayStr }
+                                val validDates = selectedDates.filter { dateStr ->
+                                    try {
+                                        val p = if (dateStr.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                        val d = p.parse(dateStr)
+                                        val t = p.parse(todayStr)
+                                        d != null && t != null && !d.after(t)
+                                    } catch(e: Exception) {
+                                        true
+                                    }
+                                }
                                 if (validDates.isNotEmpty()) {
                                     val inH = startHour.text.toIntOrNull() ?: 8
                                     val inM = startMin.text.toIntOrNull() ?: 0
@@ -1371,7 +1402,7 @@ private fun getCalendarDaysForMonth(monthDate: Date): List<CalendarDayInfo> {
     val startDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
     val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
     val list = ArrayList<CalendarDayInfo>()
 
@@ -1391,9 +1422,25 @@ private fun getCalendarDaysForMonth(monthDate: Date): List<CalendarDayInfo> {
     return list
 }
 
+private fun isDateBeforeOrEqual(dateStr1: String, dateStr2: String): Boolean {
+    val parser1 = if (dateStr1.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.US) else SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val parser2 = if (dateStr2.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.US) else SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    return try {
+        val d1 = parser1.parse(dateStr1)
+        val d2 = parser2.parse(dateStr2)
+        if (d1 != null && d2 != null) {
+            !d1.after(d2)
+        } else {
+            dateStr1 <= dateStr2
+        }
+    } catch (e: Exception) {
+        dateStr1 <= dateStr2
+    }
+}
+
 private fun getDatesInRange(startStr: String, endStr: String): List<String> {
     val list = ArrayList<String>()
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val sdf = if (startStr.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     try {
         val start = sdf.parse(startStr)
         val end = sdf.parse(endStr)
