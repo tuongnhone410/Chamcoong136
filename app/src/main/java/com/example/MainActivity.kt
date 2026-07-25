@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -367,9 +368,11 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             NavigationBar(
-                containerColor = Color(0xFF161616),
-                tonalElevation = 8.dp,
-                modifier = Modifier.testTag("bottom_nav_bar")
+                containerColor = com.example.ui.theme.DarkContainer,
+                tonalElevation = 0.dp,
+                modifier = Modifier
+                    .testTag("bottom_nav_bar")
+                    .border(androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.CardBorder))
             ) {
                 // Item 1: Trang chu
                 NavigationBarItem(
@@ -383,13 +386,13 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                         }
                     },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Trang chủ", modifier = Modifier.size(22.dp)) },
-                    label = { Text("Trang chủ", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Trang chủ", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = White,
-                        selectedTextColor = NeonBlue,
-                        indicatorColor = NeonBlue,
-                        unselectedIconColor = Color(0xFF828282),
-                        unselectedTextColor = Color(0xFF828282)
+                        selectedTextColor = com.example.ui.theme.PrimaryBlue,
+                        indicatorColor = com.example.ui.theme.PrimaryBlue,
+                        unselectedIconColor = com.example.ui.theme.TextSecondary,
+                        unselectedTextColor = com.example.ui.theme.TextSecondary
                     ),
                     modifier = Modifier.testTag("nav_home_tab")
                 )
@@ -406,13 +409,13 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                         }
                     },
                     icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Lịch sử", modifier = Modifier.size(22.dp)) },
-                    label = { Text("Lịch sử", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Lịch sử", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = White,
-                        selectedTextColor = NeonBlue,
-                        indicatorColor = NeonBlue,
-                        unselectedIconColor = Color(0xFF828282),
-                        unselectedTextColor = Color(0xFF828282)
+                        selectedTextColor = com.example.ui.theme.PrimaryBlue,
+                        indicatorColor = com.example.ui.theme.PrimaryBlue,
+                        unselectedIconColor = com.example.ui.theme.TextSecondary,
+                        unselectedTextColor = com.example.ui.theme.TextSecondary
                     ),
                     modifier = Modifier.testTag("nav_history_tab")
                 )
@@ -429,13 +432,13 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                         }
                     },
                     icon = { Icon(Icons.Default.Payments, contentDescription = "Phiếu lương", modifier = Modifier.size(22.dp)) },
-                    label = { Text("Phiếu lương", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Phiếu lương", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = White,
-                        selectedTextColor = NeonBlue,
-                        indicatorColor = NeonBlue,
-                        unselectedIconColor = Color(0xFF828282),
-                        unselectedTextColor = Color(0xFF828282)
+                        selectedTextColor = com.example.ui.theme.PrimaryBlue,
+                        indicatorColor = com.example.ui.theme.PrimaryBlue,
+                        unselectedIconColor = com.example.ui.theme.TextSecondary,
+                        unselectedTextColor = com.example.ui.theme.TextSecondary
                     ),
                     modifier = Modifier.testTag("nav_payslip_tab")
                 )
@@ -452,13 +455,13 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                         }
                     },
                     icon = { Icon(Icons.Default.Settings, contentDescription = "Cài đặt", modifier = Modifier.size(22.dp)) },
-                    label = { Text("Cài đặt", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Cài đặt", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = White,
-                        selectedTextColor = NeonBlue,
-                        indicatorColor = NeonBlue,
-                        unselectedIconColor = Color(0xFF828282),
-                        unselectedTextColor = Color(0xFF828282)
+                        selectedTextColor = com.example.ui.theme.PrimaryBlue,
+                        indicatorColor = com.example.ui.theme.PrimaryBlue,
+                        unselectedIconColor = com.example.ui.theme.TextSecondary,
+                        unselectedTextColor = com.example.ui.theme.TextSecondary
                     ),
                     modifier = Modifier.testTag("nav_settings_tab")
                 )

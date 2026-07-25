@@ -2,14 +2,23 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val NeonBlue = Color(0xFF2F80ED)
-val DarkBackground = Color(0xFF0D0F13)
-val DarkContainer = Color(0xFF1F222A)
-val LightGray = Color(0xFFE0E0E0)
-val MediumGray = Color(0xFF828282)
-val AccentRed = Color(0xFFEB5757)
-val AccentGreen = Color(0xFF27AE60)
-val AccentOrange = Color(0xFFF2994A)
-val NightPurple = Color(0xFF9B51E0)
+val DarkBackground = Color(0xFF0B0F17)
+val DarkContainer = Color(0xFF151A24)
+val CardBorder = Color.White.copy(alpha = 0.06f)
+val PrimaryBlue = Color(0xFF3B82F6)
+val SuccessGreen = Color(0xFF22C55E)
+val DangerRed = Color(0xFFEF4444)
+val TextPrimary = Color(0xFFFFFFFF)
+val TextSecondary = Color(0xFFA5B4C3)
+val DividerColor = Color.White.copy(alpha = 0.08f)
+
+val NeonBlue = Color(0xFF3B82F6)
+val LightGray = Color(0xFFA5B4C3)
+val MediumGray = Color(0xFF64748B)
+val AccentRed = Color(0xFFEF4444)
+val AccentGreen = Color(0xFF22C55E)
+val AccentOrange = Color(0xFFF97316)
+val NightPurple = Color(0xFF8B5CF6)
 val White = Color(0xFFFFFFFF)
+
 
