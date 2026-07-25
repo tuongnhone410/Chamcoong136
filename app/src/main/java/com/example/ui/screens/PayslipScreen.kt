@@ -887,7 +887,7 @@ fun PayslipScreen(
                         val totalOtNightPay = s.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
 
                         if (totalOtNightHours > 0.0) {
-                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
                         }
 
                         // 16. Phụ cấp đêm
@@ -1389,7 +1389,7 @@ fun savePayslipAsPngImage(
     val projOtNightPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
     val totalOtNightPNG = summary.otNightHours + projOtNightPNG
     val totalPayNightPNG = summary.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
-    if (totalOtNightPNG > 0.0) drawRow("Làm thêm đêm 1.5 (${df.format(totalOtNightPNG)}h)", "+${fmt.format(totalPayNightPNG)}đ", paintGreen)
+    if (totalOtNightPNG > 0.0) drawRow("Làm thêm 1.5 (${df.format(totalOtNightPNG)}h)", "+${fmt.format(totalPayNightPNG)}đ", paintGreen)
 
     val finalPcCaDemCountPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") summary.caDemCount + customOt15DaysCount.toInt() else summary.caDemCount
     val finalPcCaDemPNG = if (selectedTab == 1) (summary.pcCaDemVal + customNightAllowance) else summary.pcCaDemVal

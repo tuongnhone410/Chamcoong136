@@ -648,11 +648,12 @@ object ExportUtils {
         if (config.pcTrachNhiem > 0.0) drawRow("Phụ cấp trách nhiệm", "+${fmt.format(config.pcTrachNhiem)}đ", paintGreen)
         if (config.pcKyThuat > 0.0) drawRow("Phụ cấp kỹ thuật", "+${fmt.format(config.pcKyThuat)}đ", paintGreen)
         if (pcComCaShowPNG > 0.0) drawRow("Phụ cấp cơm ca", "+${fmt.format(pcComCaShowPNG)}đ", paintGreen)
+        if (pcComOtShowPNG > 0.0) drawRow("Phụ cấp cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", paintGreen)
         
         if (summary.tienOtNgay > 0.0) drawRow("Tăng ca 1.5 (${df.format(summary.otDayHours)}h)", "+${fmt.format(summary.tienOtNgay)}đ", paintGreen)
         if (summary.tienChuNhat > 0.0) drawRow("Tăng ca chủ nhật (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
         if (summary.tienOtLe > 0.0) drawRow("Tăng ca ngày lễ (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
-        if (summary.tienOtDem > 0.0) drawRow("OTĐ 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
+        if (summary.tienOtDem > 0.0) drawRow("OT 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
         
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
         if (config.pcXangXe > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(config.pcXangXe)}đ", paintGreen)
