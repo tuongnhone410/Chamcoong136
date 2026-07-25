@@ -742,10 +742,10 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
 
             val baseCal = Calendar.getInstance()
-            val parts = dateStr.split("-")
-            val yr = parts[0].toInt()
+            val parts = if (dateStr.contains("/")) dateStr.split("/") else dateStr.split("-")
+            val yr = if (dateStr.contains("/")) parts[2].toInt() else parts[0].toInt()
             val mo = parts[1].toInt() - 1
-            val dy = parts[2].toInt()
+            val dy = if (dateStr.contains("/")) parts[0].toInt() else parts[2].toInt()
 
             baseCal.set(yr, mo, dy, checkInHour, checkInMin, 0)
             val checkInMs = baseCal.timeInMillis
@@ -885,10 +885,10 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     else -> "NORMAL"
                 }
 
-                val parts = dateStr.split("-")
-                val yr = parts[0].toInt()
+                val parts = if (dateStr.contains("/")) dateStr.split("/") else dateStr.split("-")
+                val yr = if (dateStr.contains("/")) parts[2].toInt() else parts[0].toInt()
                 val mo = parts[1].toInt() - 1
-                val dy = parts[2].toInt()
+                val dy = if (dateStr.contains("/")) parts[0].toInt() else parts[2].toInt()
 
                 val inCal = Calendar.getInstance()
                 inCal.set(yr, mo, dy, checkInHour, checkInMin, 0)

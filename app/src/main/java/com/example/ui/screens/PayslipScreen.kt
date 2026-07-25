@@ -219,13 +219,20 @@ fun PayslipScreen(
                         entries.filter { e ->
                             e.checkInTime != null || e.isWorking || e.dayType == "PAID_LEAVE" || e.dayType == "UNPAID_LEAVE" || e.dayType == "HOLIDAY_LEAVE"
                         }.mapNotNull { e ->
-                            try { e.date.split("-").getOrNull(2)?.toIntOrNull() } catch (ex: Exception) { null }
+                            try {
+                                val parts = if (e.date.contains("/")) e.date.split("/") else e.date.split("-")
+                                if (e.date.contains("/")) {
+                                    parts.getOrNull(0)?.toIntOrNull()
+                                } else {
+                                    parts.getOrNull(2)?.toIntOrNull()
+                                }
+                            } catch (ex: Exception) { null }
                         }.maxOrNull() ?: 0
                     }
                 }
 
-                val startProjectionDay = remember(lastLoggedDayOfMonth, isCurrentSelectedMonth) {
-                    if (!isCurrentSelectedMonth) 1 else (lastLoggedDayOfMonth + 1).coerceAtLeast(1)
+                val startProjectionDay = remember(lastLoggedDayOfMonth, todayDayOfMonth, isCurrentSelectedMonth) {
+                    if (!isCurrentSelectedMonth) 1 else (lastLoggedDayOfMonth + 1).coerceAtLeast(todayDayOfMonth + 1)
                 }
 
                 val defaultRemainingSundays = remember(targetYear, targetMonth, startProjectionDay, isCurrentSelectedMonth) {
@@ -271,9 +278,12 @@ fun PayslipScreen(
                         try {
                             // Check day of week
                             val cal = Calendar.getInstance()
-                            val partsDate = e.date.split("-")
+                            val partsDate = if (e.date.contains("/")) e.date.split("/") else e.date.split("-")
                             if (partsDate.size >= 3) {
-                                cal.set(partsDate[0].toInt(), partsDate[1].toInt() - 1, partsDate[2].toInt())
+                                val yr = if (e.date.contains("/")) partsDate[2].toInt() else partsDate[0].toInt()
+                                val mo = partsDate[1].toInt() - 1
+                                val dy = if (e.date.contains("/")) partsDate[0].toInt() else partsDate[2].toInt()
+                                cal.set(yr, mo, dy)
                                 cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && e.checkInTime != null
                             } else false
                         } catch (ex: Exception) { false }

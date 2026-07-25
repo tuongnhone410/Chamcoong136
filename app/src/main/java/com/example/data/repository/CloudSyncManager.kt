@@ -122,7 +122,11 @@ class CloudSyncManager(private val context: Context) {
             }
 
             // 4. Upload config and entries to cloud database (disabled)
-            val client = OkHttpClient()
+            val client = OkHttpClient.Builder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
 
             Log.d("CloudSyncManager", "Local database successfully backed up to Server for userId: $userId")
 
@@ -142,9 +146,13 @@ class CloudSyncManager(private val context: Context) {
                 .post(payload.toRequestBody(mediaTypeJson))
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                val isSuccess = response.isSuccessful
-                Log.d("CloudSyncManager", "Real Cloud Server network call resolved. Status: $isSuccess")
+            try {
+                client.newCall(request).execute().use { response ->
+                    val isSuccess = response.isSuccessful
+                    Log.d("CloudSyncManager", "Real Cloud Server network call resolved. Status: $isSuccess")
+                }
+            } catch (ex: java.io.IOException) {
+                Log.w("CloudSyncManager", "Auxiliary cloud network check timed out or failed (non-blocking): ${ex.message}")
             }
 
             return@withContext true
