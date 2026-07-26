@@ -163,16 +163,17 @@ fun SalaryMetricColumn(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    alignEnd: Boolean = false
+    alignEnd: Boolean = false,
+    horizontalAlignment: Alignment.Horizontal = if (alignEnd) Alignment.End else Alignment.Start
 ) {
     Column(
         modifier = modifier,
-        horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start
+        horizontalAlignment = horizontalAlignment
     ) {
         Text(
             text = label,
             color = TextSecondary,
-            fontSize = 9.5.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -181,7 +182,7 @@ fun SalaryMetricColumn(
         Text(
             text = value,
             color = TextPrimary,
-            fontSize = 11.5.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -302,10 +303,10 @@ fun HomeScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = DarkBackground
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -543,7 +544,7 @@ fun HomeScreen(
                     HorizontalDivider(color = DividerColor)
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 4 Columns: Ngày công, OT tích lũy, Lương giờ, Phụ cấp
+                    // 3 Columns: Ngày công, OT tích lũy, Lương giờ (Dynamic rate based on day of week)
                     val totalOt = (summaryState?.otDayHours ?: 0.0) + 
                                   (summaryState?.otNightHours ?: 0.0) +
                                   (summaryState?.chuNhatHours ?: 0.0) +
@@ -551,26 +552,16 @@ fun HomeScreen(
                     val fmtOtStr = DecimalFormat("#.#").format(totalOt) + " giờ"
 
                     val lcb = configState?.luongCoBan ?: 6000000.0
-                    val hrRate = lcb / 26.0 / 8.0
-                    val fmtHrRateStr = DecimalFormat("#,###").format(hrRate) + " đ"
+                    val baseHrRate = lcb / 26.0 / 8.0
+                    val todayCoeff = getCoeff(configState)
+                    val currentHrRate = baseHrRate * todayCoeff
+                    val fmtHrRateStr = DecimalFormat("#,###").format(currentHrRate) + " đ"
 
-                    val totalAllowances = (summaryState?.phuCapChuyenCan ?: 0.0) +
-                            (summaryState?.pcTrachNhiemVal ?: 0.0) +
-                            (summaryState?.pcKyThuatVal ?: 0.0) +
-                            (summaryState?.pcHieuSuatVal ?: 0.0) +
-                            (summaryState?.pcSanPhamVal ?: 0.0) +
-                            (summaryState?.pcChucVuVal ?: 0.0) +
-                            (summaryState?.pcDocHaiVal ?: 0.0) +
-                            (summaryState?.pcDtDoanhThuVal ?: 0.0) +
-                            (summaryState?.pcThamNienVal ?: 0.0) +
-                            (summaryState?.pcComCaVal ?: 0.0) +
-                            (summaryState?.pcComOtVal ?: 0.0) +
-                            (summaryState?.pcXangXeVal ?: 0.0) +
-                            (summaryState?.pcNhaOVal ?: 0.0) +
-                            (summaryState?.pcKhac1Val ?: 0.0) +
-                            (summaryState?.pcKhacVal ?: 0.0) +
-                            (summaryState?.pcCaDemVal ?: 0.0)
-                    val fmtAllowanceStr = DecimalFormat("#,###").format(totalAllowances) + " đ"
+                    val hrLabel = if (todayCoeff > 1.0) {
+                        "Lương giờ (OT ${DecimalFormat("#.#").format(todayCoeff)})"
+                    } else {
+                        "Lương giờ"
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -579,23 +570,20 @@ fun HomeScreen(
                         SalaryMetricColumn(
                             label = "Ngày công",
                             value = "$workingDays/26",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start
                         )
                         SalaryMetricColumn(
                             label = "OT tích lũy",
                             value = fmtOtStr,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SalaryMetricColumn(
-                            label = "Lương giờ",
-                            value = fmtHrRateStr,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SalaryMetricColumn(
-                            label = "Phụ cấp",
-                            value = fmtAllowanceStr,
                             modifier = Modifier.weight(1f),
-                            alignEnd = true
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                        SalaryMetricColumn(
+                            label = hrLabel,
+                            value = fmtHrRateStr,
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End
                         )
                     }
                 }
@@ -849,7 +837,10 @@ fun HomeScreen(
                             text = "Biểu đồ hoạt động 7 ngày gần nhất",
                             color = TextPrimary,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
                         )
 
                         Row(
@@ -863,9 +854,11 @@ fun HomeScreen(
                                 text = "Giờ làm việc",
                                 color = TextSecondary,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 imageVector = Icons.Default.ArrowDropDown,
                                 contentDescription = null,

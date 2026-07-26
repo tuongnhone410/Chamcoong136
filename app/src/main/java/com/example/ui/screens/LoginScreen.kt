@@ -57,6 +57,15 @@ fun LoginScreen(
     val savedEmail = remember { if (savedRememberMe) sharedPrefs.getString("saved_email", "") ?: "" else "" }
     val savedPassword = remember { if (savedRememberMe) sharedPrefs.getString("saved_password", "") ?: "" else "" }
 
+    val appVersionName = remember {
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            packageInfo.versionName ?: "2.1"
+        } catch (e: Exception) {
+            "2.1"
+        }
+    }
+
     var email by remember { mutableStateFlowOf(savedEmail) }
     var password by remember { mutableStateFlowOf(savedPassword) }
     var rememberMe by remember { mutableStateOf(savedRememberMe) }
@@ -503,7 +512,7 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Phiên bản 2.0.0",
+                    text = "Phiên bản $appVersionName",
                     color = Color(0xFF6B7280).copy(alpha = 0.8f),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Normal

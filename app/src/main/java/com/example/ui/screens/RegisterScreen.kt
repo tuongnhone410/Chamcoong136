@@ -54,8 +54,7 @@ fun RegisterScreen(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground),
+            .fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(

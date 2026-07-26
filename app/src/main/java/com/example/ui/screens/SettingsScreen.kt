@@ -389,10 +389,10 @@ fun SettingsScreen(
                 actions = {
                     // Hidden as requested: "ở trên có chữ đã đồng bộ m cũng xoá luôn thông báo đó đi"
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = DarkBackground
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Column(
             modifier = Modifier

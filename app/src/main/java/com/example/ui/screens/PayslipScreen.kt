@@ -103,10 +103,10 @@ fun PayslipScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Phiếu Lương Điện Tử", fontWeight = FontWeight.Bold, color = White) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = DarkBackground
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -346,11 +346,32 @@ fun PayslipScreen(
                     }
                 }
 
-                val pcKyThuatShow = if (selectedTab == 1) c.pcKyThuat else s.pcKyThuatVal
-                val pcTrachNhiemShow = if (selectedTab == 1) c.pcTrachNhiem else s.pcTrachNhiemVal
-                val pcChucVuShow = if (selectedTab == 1) c.pcChucVu else s.pcChucVuVal
-                val pcHieuSuatShow = if (selectedTab == 1) c.pcHieuSuat else s.pcHieuSuatVal
-                val pcSanPhamShow = if (selectedTab == 1) c.pcSanPham else s.pcSanPhamVal
+                val soNgayCongDuKien = if (isCurrentSelectedMonth) {
+                    s.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
+                } else {
+                    s.standardWorkDays
+                }
+                val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+
+                fun calcPr(fieldName: String, valRaw: Double): Double {
+                    return com.example.data.SalaryCalculator.calculateAllowanceValue(
+                        fieldName = fieldName,
+                        allowanceValue = valRaw,
+                        calcType = c.getCalcTypeFor(fieldName),
+                        totalWorkDays = soNgayCongDuKienDouble,
+                        comCaCount = s.workingDays,
+                        comOtCount = 0,
+                        nightShiftsCount = s.caDemCount,
+                        scheduledDaysSoFar = s.workingDays,
+                        totalScheduledDaysInMonth = 26
+                    )
+                }
+
+                val pcKyThuatShow = if (selectedTab == 1) calcPr("pcKyThuat", c.pcKyThuat) else s.pcKyThuatVal
+                val pcTrachNhiemShow = if (selectedTab == 1) calcPr("pcTrachNhiem", c.pcTrachNhiem) else s.pcTrachNhiemVal
+                val pcChucVuShow = if (selectedTab == 1) calcPr("pcChucVu", c.pcChucVu) else s.pcChucVuVal
+                val pcHieuSuatShow = if (selectedTab == 1) calcPr("pcHieuSuat", c.pcHieuSuat) else s.pcHieuSuatVal
+                val pcSanPhamShow = if (selectedTab == 1) calcPr("pcSanPham", c.pcSanPham) else s.pcSanPhamVal
 
                 val pcComCaShow = if (selectedTab == 1) {
                     if (isCurrentSelectedMonth) {
@@ -365,33 +386,35 @@ fun PayslipScreen(
                 val otMealAllowance = if (selectedTab == 1) customOt15DaysCount * c.pcComOt else 0.0
                 val pcComOtShow = if (selectedTab == 1) s.pcComOtVal + otMealAllowance else s.pcComOtVal
 
-                val pcNhaOShow = if (selectedTab == 1) c.pcNhaO else s.pcNhaOVal
-                val pcDocHaiShow = if (selectedTab == 1) c.pcDocHai else s.pcDocHaiVal
-                val pcDtDoanhThuShow = if (selectedTab == 1) c.pcDtDoanhThu else s.pcDtDoanhThuVal
-                val pcXangXeShow = if (selectedTab == 1) c.pcXangXe else s.pcXangXeVal
-                val pcKhacShow = if (selectedTab == 1) c.pcKhac else s.pcKhacVal
-                val pcKhac1Show = if (selectedTab == 1) c.pcKhac1 else s.pcKhac1Val
-                val pcThamNienShow = if (selectedTab == 1) c.pcThamNien else s.pcThamNienVal
+                val pcNhaOShow = if (selectedTab == 1) calcPr("pcNhaO", c.pcNhaO) else s.pcNhaOVal
+                val pcDocHaiShow = if (selectedTab == 1) calcPr("pcDocHai", c.pcDocHai) else s.pcDocHaiVal
+                val pcDtDoanhThuShow = if (selectedTab == 1) calcPr("pcDtDoanhThu", c.pcDtDoanhThu) else s.pcDtDoanhThuVal
+                val pcXangXeShow = if (selectedTab == 1) calcPr("pcXangXe", c.pcXangXe) else s.pcXangXeVal
+                val pcKhacShow = if (selectedTab == 1) calcPr("pcKhac", c.pcKhac) else s.pcKhacVal
+                val pcKhac1Show = if (selectedTab == 1) calcPr("pcKhac1", c.pcKhac1) else s.pcKhac1Val
+                val pcThamNienShow = if (selectedTab == 1) calcPr("pcThamNien", c.pcThamNien) else s.pcThamNienVal
 
                 val pcChuyenCanShow = if (selectedTab == 1) {
-                    if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc
+                    if (hasLoggedUnpaidOrAbsent) 0.0 else calcPr("tienChuyenCanGoc", c.tienChuyenCanGoc)
                 } else {
                     s.phuCapChuyenCan
                 }
+
+                val luongDuKienBaseSalary = Math.round((c.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble()
 
                 val currentProratedAllowancesSum = s.pcKyThuatVal + s.pcTrachNhiemVal + s.pcChucVuVal + s.pcHieuSuatVal +
                         s.pcSanPhamVal + s.pcComCaVal + s.pcComOtVal + s.pcNhaOVal + s.pcDocHaiVal + 
                         s.pcDtDoanhThuVal + s.pcXangXeVal + s.pcKhac1Val + s.pcThamNienVal + s.phuCapChuyenCan +
                         s.pcCaDemVal
 
-                val fullProjectedAllowancesSum = c.pcKyThuat + c.pcTrachNhiem + c.pcChucVu + c.pcHieuSuat +
-                        c.pcSanPham + pcComCaShow + pcComOtShow + c.pcNhaO + c.pcDocHai + 
-                        c.pcDtDoanhThu + c.pcXangXe + c.pcKhac1 + c.pcThamNien + (if (hasLoggedUnpaidOrAbsent) 0.0 else c.tienChuyenCanGoc) +
+                val fullProjectedAllowancesSum = pcKyThuatShow + pcTrachNhiemShow + pcChucVuShow + pcHieuSuatShow +
+                        pcSanPhamShow + pcComCaShow + pcComOtShow + pcNhaOShow + pcDocHaiShow + 
+                        pcDtDoanhThuShow + pcXangXeShow + pcKhac1Show + pcThamNienShow + pcChuyenCanShow +
                         s.pcCaDemVal
 
                 val allowanceAdjustment = fullProjectedAllowancesSum - currentProratedAllowancesSum
 
-                val baseSalaryAdjustment = if (isCurrentSelectedMonth) additionalWeekdaysPay else 0.0
+                val baseSalaryAdjustment = if (isCurrentSelectedMonth) (luongDuKienBaseSalary - s.baseBasicSalary) else 0.0
                 val breakHours = if (c.tinhKhauTruNghi) c.soGioNghiGiaiLao else 0.0
                 val totalOtHours = customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0)
                 val customOt15Pay = totalOtHours * hourlySalary * c.heSoOtNgayThuong
@@ -399,11 +422,6 @@ fun PayslipScreen(
                     customOt15DaysCount * c.pcKhac
                 } else 0.0
                 val luongDuKienVal = s.luongThucNhan + baseSalaryAdjustment + additionalSundaysPay + allowanceAdjustment + customOt15Pay + customNightAllowance
-                val soNgayCongDuKien = if (isCurrentSelectedMonth) {
-                    s.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
-                } else {
-                    s.standardWorkDays
-                }
 
                 Row(
                     modifier = Modifier
@@ -792,7 +810,7 @@ fun PayslipScreen(
 
                         // 1. Lương cơ bản
                         if (selectedTab == 1) {
-                            PayslipMoneyRow(label = "Lương Cơ Bản Thỏa Thuận", value = c.luongCoBan, isAddition = true)
+                            PayslipMoneyRow(label = "Lương cơ bản dự kiến ($soNgayCongDuKien / 26 công)", value = luongDuKienBaseSalary, isAddition = true)
                             if (s.standardWorkDays == 27) {
                                 PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true)
                             }
@@ -1311,7 +1329,8 @@ fun savePayslipAsPngImage(
     canvas.drawText("PHIẾU LƯƠNG ĐIỆN TỬ CHI TIẾT", paddingX, currentY, paintDocTitle)
     currentY += 40f
     val statusText = if (selectedTab == 1) "Trạng thái: Dự kiến" else "Trạng thái: Đã phê duyệt"
-    canvas.drawText("Tháng $monthLabel | $statusText", paddingX, currentY, paintDocInfo)
+    val formattedMonthLabel = if (monthLabel.startsWith("Tháng", ignoreCase = true)) monthLabel else "Tháng $monthLabel"
+    canvas.drawText("$formattedMonthLabel | $statusText", paddingX, currentY, paintDocInfo)
     currentY += 80f
 
     // Helper functions

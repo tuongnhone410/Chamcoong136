@@ -152,7 +152,7 @@ fun AdminScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
         floatingActionButton = {
@@ -166,7 +166,7 @@ fun AdminScreen(
                 }
             }
         },
-        containerColor = DarkBackground
+        containerColor = Color.Transparent
     ) { padding ->
         PullToRefreshBox(
             isRefreshing = isLoading,

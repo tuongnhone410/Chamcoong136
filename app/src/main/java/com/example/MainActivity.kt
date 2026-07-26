@@ -34,6 +34,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.*
 import com.example.ui.screens.AdminScreen // Ensure it is imported if not covered by *
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NeonBlue
@@ -317,36 +322,60 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground
                 ) {
-                    NavHost(
-                        navController = rootNavController,
-                        startDestination = startDest
-                    ) {
-                        composable("login") {
-                            LoginScreen(
-                                viewModel = viewModel,
-                                onNavigateToRegister = { rootNavController.navigate("register") },
-                                onLoginSuccess = {
-                                    rootNavController.navigate("main") {
-                                        popUpTo("login") { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Full screen dusk building background image matching login screen
+                        Image(
+                            painter = painterResource(id = R.drawable.img_login_bg),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
 
-                        composable("register") {
-                            RegisterScreen(
-                                viewModel = viewModel,
-                                onNavigateToLogin = { rootNavController.navigate("login") },
-                                onRegisterSuccess = {
-                                    rootNavController.navigate("main") {
-                                        popUpTo("register") { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
+                        // Dark gradient overlay for optimal readability and high contrast
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF0B0F17).copy(alpha = 0.72f),
+                                            Color(0xFF070A0F).copy(alpha = 0.93f)
+                                        )
+                                    )
+                                )
+                        )
 
-                        composable("main") {
-                            MainTabScreenContainer(viewModel = viewModel)
+                        NavHost(
+                            navController = rootNavController,
+                            startDestination = startDest
+                        ) {
+                            composable("login") {
+                                LoginScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToRegister = { rootNavController.navigate("register") },
+                                    onLoginSuccess = {
+                                        rootNavController.navigate("main") {
+                                            popUpTo("login") { inclusive = true }
+                                        }
+                                    }
+                                )
+                            }
+
+                            composable("register") {
+                                RegisterScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToLogin = { rootNavController.navigate("login") },
+                                    onRegisterSuccess = {
+                                        rootNavController.navigate("main") {
+                                            popUpTo("register") { inclusive = true }
+                                        }
+                                    }
+                                )
+                            }
+
+                            composable("main") {
+                                MainTabScreenContainer(viewModel = viewModel)
+                            }
                         }
                     }
                 }
@@ -366,9 +395,10 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = Color.Transparent,
         bottomBar = {
             NavigationBar(
-                containerColor = com.example.ui.theme.DarkContainer,
+                containerColor = com.example.ui.theme.DarkContainer.copy(alpha = 0.88f),
                 tonalElevation = 0.dp,
                 modifier = Modifier
                     .testTag("bottom_nav_bar")

@@ -529,11 +529,26 @@ object ExportUtils {
         val isCurrentSelectedMonth = selectedMonth.startsWith(String.format(Locale.US, "%04d-%02d", currentYear, currentMonth))
 
         // UI Pre-calculations
-        val pcKyThuatShowPNG = if (selectedTab == 1) config.pcKyThuat else summary.pcKyThuatVal
-        val pcTrachNhiemShowPNG = if (selectedTab == 1) config.pcTrachNhiem else summary.pcTrachNhiemVal
-        val pcChucVuShowPNG = if (selectedTab == 1) config.pcChucVu else summary.pcChucVuVal
-        val pcHieuSuatShowPNG = if (selectedTab == 1) config.pcHieuSuat else summary.pcHieuSuatVal
-        val pcSanPhamShowPNG = if (selectedTab == 1) config.pcSanPham else summary.pcSanPhamVal
+        val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+        fun calcPrPNG(fieldName: String, valRaw: Double): Double {
+            return com.example.data.SalaryCalculator.calculateAllowanceValue(
+                fieldName = fieldName,
+                allowanceValue = valRaw,
+                calcType = config.getCalcTypeFor(fieldName),
+                totalWorkDays = soNgayCongDuKienDouble,
+                comCaCount = summary.workingDays,
+                comOtCount = 0,
+                nightShiftsCount = summary.caDemCount,
+                scheduledDaysSoFar = summary.workingDays,
+                totalScheduledDaysInMonth = 26
+            )
+        }
+
+        val pcKyThuatShowPNG = if (selectedTab == 1) calcPrPNG("pcKyThuat", config.pcKyThuat) else summary.pcKyThuatVal
+        val pcTrachNhiemShowPNG = if (selectedTab == 1) calcPrPNG("pcTrachNhiem", config.pcTrachNhiem) else summary.pcTrachNhiemVal
+        val pcChucVuShowPNG = if (selectedTab == 1) calcPrPNG("pcChucVu", config.pcChucVu) else summary.pcChucVuVal
+        val pcHieuSuatShowPNG = if (selectedTab == 1) calcPrPNG("pcHieuSuat", config.pcHieuSuat) else summary.pcHieuSuatVal
+        val pcSanPhamShowPNG = if (selectedTab == 1) calcPrPNG("pcSanPham", config.pcSanPham) else summary.pcSanPhamVal
 
         val pcComCaShowPNG = if (selectedTab == 1) {
             if (isCurrentSelectedMonth) {
@@ -551,16 +566,16 @@ object ExportUtils {
             summary.pcComOtVal
         }
 
-        val pcNhaOShowPNG = if (selectedTab == 1) config.pcNhaO else summary.pcNhaOVal
-        val pcDocHaiShowPNG = if (selectedTab == 1) config.pcDocHai else summary.pcDocHaiVal
-        val pcDtDoanhThuShowPNG = if (selectedTab == 1) config.pcDtDoanhThu else summary.pcDtDoanhThuVal
-        val pcXangXeShowPNG = if (selectedTab == 1) config.pcXangXe else summary.pcXangXeVal
-        val pcKhacShowPNG = if (selectedTab == 1) config.pcKhac else summary.pcKhacVal
-        val pcKhac1ShowPNG = if (selectedTab == 1) config.pcKhac1 else summary.pcKhac1Val
-        val pcThamNienShowPNG = if (selectedTab == 1) config.pcThamNien else summary.pcThamNienVal
+        val pcNhaOShowPNG = if (selectedTab == 1) calcPrPNG("pcNhaO", config.pcNhaO) else summary.pcNhaOVal
+        val pcDocHaiShowPNG = if (selectedTab == 1) calcPrPNG("pcDocHai", config.pcDocHai) else summary.pcDocHaiVal
+        val pcDtDoanhThuShowPNG = if (selectedTab == 1) calcPrPNG("pcDtDoanhThu", config.pcDtDoanhThu) else summary.pcDtDoanhThuVal
+        val pcXangXeShowPNG = if (selectedTab == 1) calcPrPNG("pcXangXe", config.pcXangXe) else summary.pcXangXeVal
+        val pcKhacShowPNG = if (selectedTab == 1) calcPrPNG("pcKhac", config.pcKhac) else summary.pcKhacVal
+        val pcKhac1ShowPNG = if (selectedTab == 1) calcPrPNG("pcKhac1", config.pcKhac1) else summary.pcKhac1Val
+        val pcThamNienShowPNG = if (selectedTab == 1) calcPrPNG("pcThamNien", config.pcThamNien) else summary.pcThamNienVal
 
         val pcChuyenCanShowPNG = if (selectedTab == 1) {
-            if (hasLoggedUnpaidOrAbsent) 0.0 else config.tienChuyenCanGoc
+            if (hasLoggedUnpaidOrAbsent) 0.0 else calcPrPNG("tienChuyenCanGoc", config.tienChuyenCanGoc)
         } else {
             summary.phuCapChuyenCan
         }
@@ -599,7 +614,9 @@ object ExportUtils {
         canvas.drawText(docType, 60f, currentY, paintTextSubTitle)
         
         currentY += 40f
-        canvas.drawText("Tháng $monthLabel | Trạng thái: Đã phê duyệt", 60f, currentY, paintTextMonth)
+        val formattedMonthLabel = if (monthLabel.startsWith("Tháng", ignoreCase = true)) monthLabel else "Tháng $monthLabel"
+        val statusText = if (selectedTab == 1) "Trạng thái: Dự kiến" else "Trạng thái: Đã phê duyệt"
+        canvas.drawText("$formattedMonthLabel | $statusText", 60f, currentY, paintTextMonth)
 
         // Main content starts
         currentY = 280f
@@ -640,13 +657,20 @@ object ExportUtils {
         currentY += 20f
         drawSectionHeader("THU NHẬP CHI TIẾT (+)")
         
+        val luongDuKienBaseSalary = Math.round((config.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble()
         val baseSalaryLabel = if (selectedTab == 1) "Lương theo công dự kiến" else "Lương theo công thực tế"
-        val baseSalaryValue = if (selectedTab == 1) luongDuKienVal else summary.baseBasicSalary
+        val baseSalaryValue = if (selectedTab == 1) luongDuKienBaseSalary else summary.baseBasicSalary
         drawRow(baseSalaryLabel, "+${fmt.format(baseSalaryValue)}đ", paintGreen)
         
         if (pcChuyenCanShowPNG > 0.0) drawRow("Phụ cấp chuyên cần", "+${fmt.format(pcChuyenCanShowPNG)}đ", paintGreen)
-        if (config.pcTrachNhiem > 0.0) drawRow("Phụ cấp trách nhiệm", "+${fmt.format(config.pcTrachNhiem)}đ", paintGreen)
-        if (config.pcKyThuat > 0.0) drawRow("Phụ cấp kỹ thuật", "+${fmt.format(config.pcKyThuat)}đ", paintGreen)
+        if (pcTrachNhiemShowPNG > 0.0) drawRow("Phụ cấp trách nhiệm", "+${fmt.format(pcTrachNhiemShowPNG)}đ", paintGreen)
+        if (pcKyThuatShowPNG > 0.0) drawRow("Phụ cấp kỹ thuật", "+${fmt.format(pcKyThuatShowPNG)}đ", paintGreen)
+        if (pcHieuSuatShowPNG > 0.0) drawRow("Phụ cấp hiệu suất", "+${fmt.format(pcHieuSuatShowPNG)}đ", paintGreen)
+        if (pcSanPhamShowPNG > 0.0) drawRow("Phụ cấp sản phẩm", "+${fmt.format(pcSanPhamShowPNG)}đ", paintGreen)
+        if (pcChucVuShowPNG > 0.0) drawRow("Phụ cấp chức vụ", "+${fmt.format(pcChucVuShowPNG)}đ", paintGreen)
+        if (pcDocHaiShowPNG > 0.0) drawRow("Phụ cấp độc hại", "+${fmt.format(pcDocHaiShowPNG)}đ", paintGreen)
+        if (pcDtDoanhThuShowPNG > 0.0) drawRow("Phụ cấp doanh thu", "+${fmt.format(pcDtDoanhThuShowPNG)}đ", paintGreen)
+        if (pcThamNienShowPNG > 0.0) drawRow("Phụ cấp thâm niên", "+${fmt.format(pcThamNienShowPNG)}đ", paintGreen)
         if (pcComCaShowPNG > 0.0) drawRow("Phụ cấp cơm ca", "+${fmt.format(pcComCaShowPNG)}đ", paintGreen)
         if (pcComOtShowPNG > 0.0) drawRow("Phụ cấp cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", paintGreen)
         
@@ -656,8 +680,9 @@ object ExportUtils {
         if (summary.tienOtDem > 0.0) drawRow("OT 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
         
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
-        if (config.pcXangXe > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(config.pcXangXe)}đ", paintGreen)
-        if (config.pcNhaO > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(config.pcNhaO)}đ", paintGreen)
+        if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
+        if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
+        if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
 
         // Section 3: Khấu trừ & Nghĩa vụ
         currentY += 20f
