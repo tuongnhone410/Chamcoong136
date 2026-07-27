@@ -439,7 +439,8 @@ object ExportUtils {
         drawSectionHeader("THU NHẬP CHI TIẾT (+)")
         
         val luongDuKienBaseSalary = Math.round((config.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble()
-        val baseSalaryLabel = if (selectedTab == 1) "Lương theo công dự kiến" else "Lương theo công thực tế"
+        val baseSalaryLabel = if (selectedTab == 1) "LCB thực nhận ($soNgayCongDuKien / ${summary.standardWorkDays})" 
+                              else "LCB thực nhận (${summary.workingDays} / ${summary.standardWorkDays})"
         val baseSalaryValue = if (selectedTab == 1) luongDuKienBaseSalary else summary.baseBasicSalary
         drawRow(baseSalaryLabel, "+${fmt.format(baseSalaryValue)}đ", paintGreen)
         

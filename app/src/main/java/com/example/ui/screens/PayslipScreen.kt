@@ -810,16 +810,9 @@ fun PayslipScreen(
 
                         // 1. Lương cơ bản
                         if (selectedTab == 1) {
-                            PayslipMoneyRow(label = "Lương cơ bản dự kiến ($soNgayCongDuKien / 26 công)", value = luongDuKienBaseSalary, isAddition = true)
-                            if (s.standardWorkDays == 27) {
-                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true)
-                            }
+                            PayslipMoneyRow(label = "LCB thực nhận ($soNgayCongDuKien / ${s.standardWorkDays})", value = luongDuKienBaseSalary, isAddition = true)
                         } else {
-                            val label = if (s.isCurrentMonth) "Lương Cơ Bản Tạm Tính" else "Thực Nhận"
-                            PayslipMoneyRow(label = label, value = s.baseBasicSalary, isAddition = true)
-                            if (s.standardWorkDays == 27) {
-                                PayslipMoneyRow(label = "Bù công dôi dư tháng 31 ngày (1 ngày LCB)", value = dailySalary, isAddition = true)
-                            }
+                            PayslipMoneyRow(label = "LCB thực nhận (${s.workingDays} / ${s.standardWorkDays})", value = s.baseBasicSalary, isAddition = true)
                         }
                         
                         // 2. Chuyên cần
@@ -1362,16 +1355,11 @@ fun savePayslipAsPngImage(
     // 2. THU NHẬP CHI TIẾT
     drawSectionHeader("THU NHẬP CHI TIẾT (+)")
     
+    val luongDuKienBaseSalary = Math.round((config.luongCoBan / 26.0) * soNgayCongDuKien).toDouble()
     if (selectedTab == 1) {
-        drawRow("Lương theo công thực tế", "+${fmt.format(config.luongCoBan)}đ", paintGreen)
-        if (summary.standardWorkDays == 27) {
-            drawRow("Bù công tháng 31 ngày", "+${fmt.format(dailySalary)}đ", paintGreen)
-        }
+        drawRow("LCB thực nhận ($soNgayCongDuKien / ${summary.standardWorkDays})", "+${fmt.format(luongDuKienBaseSalary)}đ", paintGreen)
     } else {
-        drawRow("Lương theo công thực tế", "+${fmt.format(summary.baseBasicSalary)}đ", paintGreen)
-        if (summary.standardWorkDays == 27) {
-            drawRow("Bù công tháng 31 ngày", "+${fmt.format(dailySalary)}đ", paintGreen)
-        }
+        drawRow("LCB thực nhận (${summary.workingDays} / ${summary.standardWorkDays})", "+${fmt.format(summary.baseBasicSalary)}đ", paintGreen)
     }
 
     if (pcChuyenCanShowPNG > 0.0) drawRow("Phụ cấp chuyên cần", "+${fmt.format(pcChuyenCanShowPNG)}đ", paintGreen)

@@ -2369,7 +2369,7 @@ fun EmployeePayslipView(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                PayslipMoneyRow(label = "Lương cơ bản thực tế", value = s.baseBasicSalary, isAddition = true)
+                PayslipMoneyRow(label = "LCB thực nhận (${s.workingDays} / ${s.standardWorkDays})", value = s.baseBasicSalary, isAddition = true)
                 
                 if (employee.tienChuyenCanGoc > 0.0 && s.phuCapChuyenCan > 0.0) {
                     PayslipMoneyRow(label = "Chuyên cần", value = s.phuCapChuyenCan, isAddition = true)
