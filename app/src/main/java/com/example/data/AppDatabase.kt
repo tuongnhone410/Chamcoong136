@@ -12,10 +12,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface UserConfigDao {
-    @Query("SELECT * FROM user_config WHERE uid = :uid LIMIT 1")
+    @Query("SELECT * FROM legacy_user_config WHERE uid = :uid LIMIT 1")
     suspend fun getConfig(uid: String): UserConfig?
 
-    @Query("SELECT * FROM user_config WHERE uid = :uid LIMIT 1")
+    @Query("SELECT * FROM legacy_user_config WHERE uid = :uid LIMIT 1")
     fun getConfigFlow(uid: String): Flow<UserConfig?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

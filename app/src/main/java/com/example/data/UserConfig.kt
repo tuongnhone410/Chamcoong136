@@ -3,7 +3,7 @@ package com.example.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "user_config")
+@Entity(tableName = "legacy_user_config")
 data class UserConfig(
     @PrimaryKey val uid: String,
     val fullName: String,
