@@ -5,7 +5,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -236,24 +239,34 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "TIMESNAP PRO",
-                            fontWeight = FontWeight.Black,
-                            color = PrimaryBlue,
-                            fontSize = 17.sp,
-                            letterSpacing = 1.2.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.app_logo),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(32.dp)
                         )
-                        Text(
-                            text = "Hệ thống quản trị lương quốc dân",
-                            color = TextSecondary,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Column {
+                            Text(
+                                text = "TIMESNAP PRO",
+                                fontWeight = FontWeight.Black,
+                                color = PrimaryBlue,
+                                fontSize = 17.sp,
+                                letterSpacing = 1.2.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Hệ thống quản trị lương quốc dân",
+                                color = TextSecondary,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 },
                 actions = {

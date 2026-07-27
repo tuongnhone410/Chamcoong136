@@ -423,16 +423,18 @@ fun AdminScreen(
 data class ShiftStatusInfo(
     val label: String,
     val color: Color,
-    val timeDetail: String = ""
+    val timeDetail: String = "",
+    val isInShift: Boolean = false,
+    val isOutShift: Boolean = false
 )
 
 fun getEmployeeShiftStatus(rec: AttendanceRecord?): ShiftStatusInfo {
     if (rec == null) {
-        return ShiftStatusInfo("Chưa vào ca", Color(0xFF8F9BB3), "")
+        return ShiftStatusInfo("Chưa vào ca", Color(0xFF8F9BB3), "", isInShift = false, isOutShift = false)
     }
     val statusLower = rec.status.lowercase()
     if (statusLower.contains("phep") || statusLower.contains("leave")) {
-        return ShiftStatusInfo("Nghỉ phép", Color(0xFFFFB74D), "")
+        return ShiftStatusInfo("Nghỉ phép", Color(0xFFFFB74D), "", isInShift = false, isOutShift = false)
     }
 
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -441,12 +443,12 @@ fun getEmployeeShiftStatus(rec: AttendanceRecord?): ShiftStatusInfo {
 
     return if (rec.clockInTime != 0L) {
         if (outStr == null) {
-            ShiftStatusInfo("Đang trong ca", Color(0xFF00E676), "Vào: $inStr")
+            ShiftStatusInfo(inStr, Color(0xFF00E676), "", isInShift = true, isOutShift = false)
         } else {
-            ShiftStatusInfo("Đã ra ca", Color(0xFF4C84FF), "Vào: $inStr - Ra: $outStr")
+            ShiftStatusInfo(outStr, Color(0xFF4C84FF), "Vào: $inStr", isInShift = false, isOutShift = true)
         }
     } else {
-        ShiftStatusInfo("Chưa vào ca", Color(0xFF8F9BB3), "")
+        ShiftStatusInfo("Chưa vào ca", Color(0xFF8F9BB3), "", isInShift = false, isOutShift = false)
     }
 }
 
@@ -515,12 +517,10 @@ fun EmployeeListView(
             ) {
                 item {
                     val inShiftCount = employees.count { 
-                        val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
-                        status.label == "Đang trong ca"
+                        getEmployeeShiftStatus(todayAttendanceMap[it.userId]).isInShift
                     }
                     val outShiftCount = employees.count { 
-                        val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
-                        status.label == "Đã ra ca"
+                        getEmployeeShiftStatus(todayAttendanceMap[it.userId]).isOutShift
                     }
                     val notInCount = employees.size - inShiftCount - outShiftCount
 
@@ -910,8 +910,13 @@ fun EmployeeDetailView(
                                 .background(shiftStatus.color, androidx.compose.foundation.shape.CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
+                        val bottomStatusText = when {
+                            shiftStatus.isInShift -> "Hôm nay: Vào ${shiftStatus.label}"
+                            shiftStatus.isOutShift -> "Hôm nay: Ra ${shiftStatus.label} (${shiftStatus.timeDetail})"
+                            else -> "Hôm nay: ${shiftStatus.label}"
+                        }
                         Text(
-                            text = "Hôm nay: ${shiftStatus.label} ${if (shiftStatus.timeDetail.isNotEmpty()) "(${shiftStatus.timeDetail})" else ""}",
+                            text = bottomStatusText,
                             color = shiftStatus.color,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
@@ -1193,8 +1198,8 @@ fun EmployeeDetailView(
 
                     var checkInHour by remember { mutableStateOf(TextFieldValue("08")) }
                     var checkInMin by remember { mutableStateOf(TextFieldValue("00")) }
-                    var checkOutHour by remember { mutableStateOf(TextFieldValue("17")) }
-                    var checkOutMin by remember { mutableStateOf(TextFieldValue("00")) }
+                    var checkOutHour by remember { mutableStateOf(TextFieldValue("")) }
+                    var checkOutMin by remember { mutableStateOf(TextFieldValue("")) }
                     
                     val focusRequesters = remember { List(7) { FocusRequester() } }
 
@@ -1371,14 +1376,18 @@ fun EmployeeDetailView(
                                     
                                     val inH = checkInHour.text.padStart(2, '0')
                                     val inM = checkInMin.text.padStart(2, '0')
-                                    val outH = checkOutHour.text.padStart(2, '0')
-                                    val outM = checkOutMin.text.padStart(2, '0')
 
                                     // Target stored format is dd/MM/yyyy
                                     val dbDateStr = "$d/$m/$y"
                                     
                                     val fullIn = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
-                                    val fullOut = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
+                                    val fullOut = if (checkOutHour.text.trim().isEmpty() && checkOutMin.text.trim().isEmpty()) {
+                                        null
+                                    } else {
+                                        val outH = checkOutHour.text.padStart(2, '0')
+                                        val outM = checkOutMin.text.padStart(2, '0')
+                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
+                                    }
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId, 
@@ -1632,6 +1641,7 @@ fun EmployeeConfigEdit(
     var pcThamNien by remember { mutableStateOf(formatCurrency(employee.pcThamNien)) }
     var pcDtDoanhThu by remember { mutableStateOf(formatCurrency(employee.pcDtDoanhThu)) }
     var pcKhac by remember { mutableStateOf(formatCurrency(employee.pcKhac)) }
+    var pcKhac1 by remember { mutableStateOf(formatCurrency(employee.pcKhac1)) }
 
     // Others
     var chuyenCan by remember { mutableStateOf(formatCurrency(employee.tienChuyenCanGoc)) }
@@ -1721,7 +1731,8 @@ fun EmployeeConfigEdit(
                 AdminInputField("Phụ cấp độc hại", pcDocHai, onValueChange = { pcDocHai = it }, isNumeric = true)
                 AdminInputField("Phụ cấp điện thoại", pcDtDoanhThu, onValueChange = { pcDtDoanhThu = it }, isNumeric = true)
                 AdminInputField("Phụ cấp xăng xe", pcXangXe, onValueChange = { pcXangXe = it }, isNumeric = true)
-                AdminInputField("Phụ cấp khác", pcKhac, onValueChange = { pcKhac = it }, isNumeric = true)
+                AdminInputField("Phụ cấp ca đêm", pcKhac, onValueChange = { pcKhac = it }, isNumeric = true)
+                AdminInputField("Phụ cấp khác", pcKhac1, onValueChange = { pcKhac1 = it }, isNumeric = true)
             }
         }
 
@@ -1774,6 +1785,7 @@ fun EmployeeConfigEdit(
                         pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcKhac = pcKhac.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: 0.0,
                         tienChuyenCanGoc = chuyenCan.replace(".", "").toDoubleOrNull() ?: 0.0,
                         soNgayPhepNam = phepNam.toIntOrNull() ?: 12,
                         thuong = 0.0,
@@ -1943,18 +1955,19 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 
     val isInShift = record.clockInTime != 0L && (record.clockOutTime == null || record.clockOutTime == 0L)
 
-    val isLate = remember(record.clockInTime, employee) {
-        if (record.clockInTime == 0L) false
-        else {
+    val processedEntry = remember(record.clockInTime, record.clockOutTime, employee) {
+        if (record.clockInTime > 0L) {
             val tempEntry = com.example.data.model.TimeEntry(
                 userId = employee.userId,
                 date = record.dateString,
                 checkInTime = record.clockInTime,
                 checkOutTime = record.clockOutTime
             )
-            com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee).lateMinutes > 0
-        }
+            com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee)
+        } else null
     }
+
+    val isLate = (processedEntry?.lateMinutes ?: 0) > 0
 
     // Calculate duration in hours
     val hrsDouble = remember(record.clockInTime, record.clockOutTime) {
@@ -2117,16 +2130,18 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 
                 Spacer(modifier = Modifier.height(3.dp))
 
+                val otHrs = processedEntry?.otHours ?: 0.0
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (hrsDouble >= 8.0) "1 công" else if (hrsDouble > 0) "Thường" else "--",
+                        text = if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (hrsDouble >= 8.0 || (processedEntry?.workDay ?: 0.0) >= 1.0) "1 công" else if (hrsDouble > 0) "Thường" else "--",
                         color = TextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
-                    if (hrsDouble > 8.0) {
+                    if (otHrs > 0.0) {
+                        val otStr = if (otHrs % 1.0 == 0.0) String.format(Locale.US, "%.0fh", otHrs) else String.format(Locale.US, "%.1fh", otHrs)
                         Text(
-                            text = " • OT ${String.format(Locale.US, "%.0fh", hrsDouble - 8.0)}",
+                            text = " • OT $otStr",
                             color = PrimaryBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -2369,10 +2384,7 @@ fun EmployeePayslipView(
                     PayslipMoneyRow(label = "Nhà ở", value = s.pcNhaOVal, isAddition = true)
                 }
                 if (employee.pcKhac1 > 0.0 && s.pcKhac1Val > 0.0) {
-                    PayslipMoneyRow(label = "Khác 1", value = s.pcKhac1Val, isAddition = true)
-                }
-                if (employee.pcKhac > 0.0 && s.pcKhacVal > 0.0) {
-                    PayslipMoneyRow(label = "Khác", value = s.pcKhacVal, isAddition = true)
+                    PayslipMoneyRow(label = "Phụ cấp khác", value = s.pcKhac1Val, isAddition = true)
                 }
 
                 HorizontalDivider(

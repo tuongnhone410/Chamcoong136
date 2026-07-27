@@ -349,7 +349,7 @@ object ExportUtils {
         val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
                 pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
                 pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
-                pcKhac1Pr + pcKhacPr + pcCaDemPr
+                pcKhac1Pr + pcCaDemPr
 
         var missedDays = 0
         val effectiveJoinDate: String? = if (config.ngayVaoLam.isNotBlank()) {
@@ -682,7 +682,7 @@ object ExportUtils {
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
         if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
         if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
-        if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
+        if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
 
         // Section 3: Khấu trừ & Nghĩa vụ
         currentY += 20f

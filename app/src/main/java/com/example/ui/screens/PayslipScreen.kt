@@ -932,7 +932,7 @@ fun PayslipScreen(
 
                         // 20. Khác 1
                         if (c.pcKhac1 > 0.0) {
-                            PayslipMoneyRow(label = "Khác 1", value = pcKhac1Show, isAddition = true)
+                            PayslipMoneyRow(label = "Phụ cấp khác", value = pcKhac1Show, isAddition = true)
                         }
 
 
@@ -1416,7 +1416,7 @@ fun savePayslipAsPngImage(
 
     if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
     if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
-    if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
+    if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
     
     currentY += 30f
 
