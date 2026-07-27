@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
 
-@Database(entities = [TimeEntry::class, UserConfig::class], version = 9, exportSchema = false)
+@Database(entities = [TimeEntry::class, UserConfig::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun timeEntryDao(): TimeEntryDao
     abstract fun userConfigDao(): UserConfigDao
@@ -48,7 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "timesnap_pro_db"
                 )
                 .addMigrations(MIGRATION_5_6, MIGRATION_7_8)
-                .fallbackToDestructiveMigration(dropAllTables = true) // safe for production prototyping iteration
+                .fallbackToDestructiveMigration() // safe for production prototyping iteration
                 .build()
                 INSTANCE = instance
                 instance

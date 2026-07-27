@@ -15,7 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditCalendar
@@ -182,7 +182,7 @@ fun HistoryScreen(
                 val vietnameseMonthLabel = remember(selectedMonth) {
                     val parser = SimpleDateFormat("yyyy-MM", Locale.getDefault())
                     val d = parser.parse(selectedMonth) ?: Date()
-                    val formatter = SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("vi-VN"))
+                    val formatter = SimpleDateFormat("MMMM yyyy", Locale("vi", "VN"))
                     formatter.format(d).replaceFirstChar { it.uppercase() }
                 }
 
@@ -202,7 +202,7 @@ fun HistoryScreen(
                     selectedDates.clear()
                     rangeStartStr = null
                 }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
+                    Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
                 }
             }
 
@@ -1102,7 +1102,7 @@ fun HistoryScreen(
                             )()
                         }
 
-                        HorizontalDivider(color = Color(0xFF2C2C2C))
+                        Divider(color = Color(0xFF2C2C2C))
 
                         // Checkbox A: Bỏ qua (OT 2.0)
                         Row(

@@ -5,10 +5,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.ui.res.painterResource
-import com.example.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -31,7 +28,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.NightsStay
@@ -43,7 +40,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -217,7 +213,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         val clockFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val clockHMFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("EEEE, 'ngày' dd 'tháng' MM 'năm' yyyy", Locale.forLanguageTag("vi-VN"))
+        val dateFormat = SimpleDateFormat("EEEE, 'ngày' dd 'tháng' MM 'năm' yyyy", Locale("vi", "VN"))
         while (true) {
             val now = Date()
             liveTimeString = clockFormat.format(now)
@@ -240,37 +236,24 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.app_logo),
-                            contentDescription = "Logo",
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop
+                    Column {
+                        Text(
+                            text = "TIMESNAP PRO",
+                            fontWeight = FontWeight.Black,
+                            color = PrimaryBlue,
+                            fontSize = 17.sp,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Column {
-                            Text(
-                                text = "TIMESNAP PRO",
-                                fontWeight = FontWeight.Black,
-                                color = PrimaryBlue,
-                                fontSize = 17.sp,
-                                letterSpacing = 1.2.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "Hệ thống quản trị lương quốc dân",
-                                color = TextSecondary,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            text = "Hệ thống quản trị lương quốc dân",
+                            color = TextSecondary,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 },
                 actions = {
@@ -400,7 +383,7 @@ fun HomeScreen(
                 val displayMonthStr = remember(selectedMonth) {
                     try {
                         val d = sdfMonth.parse(selectedMonth) ?: Date()
-                        val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale.forLanguageTag("vi-VN"))
+                        val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale("vi", "VN"))
                         fmt.format(d)
                     } catch (e: Exception) {
                         "Tháng $selectedMonth"
@@ -435,7 +418,7 @@ fun HomeScreen(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        imageVector = Icons.Default.ArrowForwardIos,
                         contentDescription = "Tháng sau",
                         tint = PrimaryBlue,
                         modifier = Modifier.size(16.dp)
@@ -1008,7 +991,7 @@ fun HomeScreen(
                                             }
                                             val dateVal = parser.parse(entry.date)
                                             if (dateVal != null) {
-                                                val formatter = SimpleDateFormat("EEEE, dd/MM", Locale.forLanguageTag("vi-VN"))
+                                                val formatter = SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN"))
                                                 formatter.format(dateVal).replaceFirstChar { it.uppercase() }
                                             } else {
                                                 entry.date
@@ -1312,7 +1295,7 @@ fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
 private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> {
     val cal = Calendar.getInstance()
     val sdfValue = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    val sdfDay = SimpleDateFormat("EEE", Locale.forLanguageTag("vi-VN"))
+    val sdfDay = SimpleDateFormat("EEE", Locale("vi", "VN"))
 
     val dates = ArrayList<Pair<String, String>>()
     for (i in 6 downTo 0) {

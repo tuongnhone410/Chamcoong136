@@ -22,7 +22,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -122,32 +121,36 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Sleek App Logo Emblem
+                // Nested concentric rings logo (matches screenshot)
                 Box(
                     modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color(0xFF151A24))
-                        .border(
-                            width = 1.5.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFF3B82F6),
-                                    Color(0xFF60A5FA).copy(alpha = 0.3f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(22.dp)
-                        ),
+                        .size(64.dp)
+                        .border(1.dp, Color(0xFF2563EB).copy(alpha = 0.25f), shape = CircleShape)
+                        .padding(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.app_logo),
-                        contentDescription = "App Logo",
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(22.dp)),
-                        contentScale = ContentScale.Crop
-                    )
+                            .size(52.dp)
+                            .border(1.dp, Color(0xFF2563EB).copy(alpha = 0.5f), shape = CircleShape)
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF2563EB).copy(alpha = 0.15f), shape = CircleShape)
+                                .border(2.dp, Color(0xFF2563EB), shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "App Logo",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -172,13 +175,13 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // Main transparent login card
+                // Main semi-transparent glassmorphic login card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, Color(0xFF1F2937).copy(alpha = 0.5f)),
+                    border = BorderStroke(1.dp, Color(0xFF1F2937).copy(alpha = 0.6f)),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color.Transparent
+                        containerColor = Color(0xFF111827).copy(alpha = 0.85f)
                     )
                 ) {
                     Column(

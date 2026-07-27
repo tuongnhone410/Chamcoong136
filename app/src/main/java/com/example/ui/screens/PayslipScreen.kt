@@ -24,11 +24,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalAtm
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -92,7 +92,7 @@ fun PayslipScreen(
         try {
             val parser = SimpleDateFormat("yyyy-MM", Locale.getDefault())
             val d = parser.parse(selectedMonth) ?: Date()
-            val formatter = SimpleDateFormat("MMMM / yyyy", Locale.forLanguageTag("vi-VN"))
+            val formatter = SimpleDateFormat("MMMM / yyyy", Locale("vi", "VN"))
             formatter.format(d).replaceFirstChar { it.uppercase() }
         } catch (e: Exception) {
             selectedMonth
@@ -152,14 +152,14 @@ fun PayslipScreen(
                     cal.add(Calendar.MONTH, 1)
                     viewModel.selectMonth(sdfMonth.format(cal.time))
                 }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
+                    Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
                 }
             }
             
             if (summary == null || config == null) {
                 // Empty state setup
                 Spacer(modifier = Modifier.height(60.dp))
-                Icon(Icons.AutoMirrored.Filled.ReceiptLong, "Receipt Empty", modifier = Modifier.size(72.dp), tint = MediumGray)
+                Icon(Icons.Default.ReceiptLong, "Receipt Empty", modifier = Modifier.size(72.dp), tint = MediumGray)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Chưa có thông tin phiếu lương", color = LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text("Vui lòng check-in hoặc cấu hình mức lương trước.", color = MediumGray, fontSize = 12.sp, textAlign = TextAlign.Center)
@@ -925,12 +925,7 @@ fun PayslipScreen(
                             PayslipMoneyRow(label = "Nhà ở", value = pcNhaOShow, isAddition = true)
                         }
 
-                        // 19. Khác (Now merged into Night Allowance)
-                        // if (c.pcKhac > 0.0) {
-                        //     PayslipMoneyRow(label = "Khác", value = pcKhacShow, isAddition = true)
-                        // }
-
-                        // 20. Khác 1
+                        // 19. Phụ cấp khác
                         if (c.pcKhac1 > 0.0) {
                             PayslipMoneyRow(label = "Phụ cấp khác", value = pcKhac1Show, isAddition = true)
                         }
@@ -1416,7 +1411,7 @@ fun savePayslipAsPngImage(
 
     if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
     if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
-    if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
+    if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
     
     currentY += 30f
 
