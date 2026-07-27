@@ -1378,12 +1378,15 @@ fun EmployeeDetailView(
                                     val dbDateStr = "$d/$m/$y"
                                     
                                     val fullIn = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
-                                    val fullOut = if (outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
+                                    var fullOut = if (outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
                                         val outH = outHStr.padStart(2, '0')
                                         val outM = outMStr.padStart(2, '0')
                                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
                                     } else {
                                         null
+                                    }
+                                    if (fullOut != null && fullOut <= fullIn) {
+                                        fullOut += 24 * 3600 * 1000L
                                     }
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
@@ -1955,11 +1958,15 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
     val calculatedEntry = remember(record.clockInTime, record.clockOutTime, employee) {
         if (record.clockInTime == 0L) null
         else {
+            var outMs = record.clockOutTime
+            if (outMs != null && outMs <= record.clockInTime) {
+                outMs += 24 * 3600 * 1000L
+            }
             val tempEntry = com.example.data.model.TimeEntry(
                 userId = employee.userId,
                 date = record.dateString,
                 checkInTime = record.clockInTime,
-                checkOutTime = record.clockOutTime
+                checkOutTime = outMs
             )
             com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee)
         }
@@ -1968,11 +1975,16 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
     val isLate = calculatedEntry?.let { it.lateMinutes > 0 } ?: false
     val otHours = calculatedEntry?.otHours ?: 0.0
     val workDay = calculatedEntry?.workDay ?: 0.0
+    val isNightShift = calculatedEntry?.shiftType == "NIGHT"
 
     // Calculate duration in hours
     val hrsDouble = remember(record.clockInTime, record.clockOutTime) {
-        if (record.clockInTime > 0L && record.clockOutTime != null && record.clockOutTime > record.clockInTime) {
-            (record.clockOutTime - record.clockInTime) / 3600000.0
+        if (record.clockInTime > 0L && record.clockOutTime != null) {
+            var outMs = record.clockOutTime
+            if (outMs <= record.clockInTime) {
+                outMs += 24 * 3600 * 1000L
+            }
+            (outMs - record.clockInTime) / 3600000.0
         } else 0.0
     }
 
@@ -2114,21 +2126,44 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.Center
             ) {
-                Surface(
-                    color = accentColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = durationBadgeText,
-                        color = if (isInShift) PrimaryBlue else if (isLate) Color(0xFFF59E0B) else SuccessGreen,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                    val shiftLabel = if (isNightShift) "🌙 Ca đêm" else "☀️ Ca ngày"
+                    val shiftBg = if (isNightShift) Color(0xFF6366F1).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
+                    val shiftTextCol = if (isNightShift) Color(0xFFA5B4FC) else Color(0xFFFCD34D)
+
+                    Surface(
+                        color = shiftBg,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, shiftTextCol.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = shiftLabel,
+                            color = shiftTextCol,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Surface(
+                        color = accentColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = durationBadgeText,
+                            color = if (isInShift) PrimaryBlue else if (isLate) Color(0xFFF59E0B) else SuccessGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -2370,7 +2405,7 @@ fun EmployeePayslipView(
                     PayslipMoneyRow(label = "OT 3.0 (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
                 }
                 if (s.tienOtDem > 0.0) {
-                    PayslipMoneyRow(label = "OT 1.5 (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
+                    PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(s.otNightHours)}h)", value = s.tienOtDem, isAddition = true, isAccent = true)
                 }
                 if (s.pcCaDemVal > 0.0) {
                     PayslipMoneyRow(label = "Phụ cấp ca đêm (${s.caDemCount} ca)", value = s.pcCaDemVal, isAddition = true)
@@ -2383,9 +2418,6 @@ fun EmployeePayslipView(
                 }
                 if (employee.pcKhac1 > 0.0 && s.pcKhac1Val > 0.0) {
                     PayslipMoneyRow(label = "Khác 1", value = s.pcKhac1Val, isAddition = true)
-                }
-                if (employee.pcKhac > 0.0 && s.pcKhacVal > 0.0) {
-                    PayslipMoneyRow(label = "Khác", value = s.pcKhacVal, isAddition = true)
                 }
 
                 HorizontalDivider(

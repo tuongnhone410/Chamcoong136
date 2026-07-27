@@ -349,7 +349,7 @@ object ExportUtils {
         val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
                 pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
                 pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
-                pcKhac1Pr + pcKhacPr + pcCaDemPr
+                pcKhac1Pr + pcCaDemPr
 
         var missedDays = 0
         val effectiveJoinDate: String? = if (config.ngayVaoLam.isNotBlank()) {
@@ -360,19 +360,45 @@ object ExportUtils {
             null
         }
 
+        val effectiveJoinDateYmd: String? = if (!effectiveJoinDate.isNullOrBlank()) {
+            val s = effectiveJoinDate.trim()
+            if (s.contains("/")) {
+                val p = s.split("/")
+                if (p.size == 3) {
+                    val d = p[0].padStart(2, '0')
+                    val m = p[1].padStart(2, '0')
+                    val y = p[2]
+                    "$y-$m-$d"
+                } else s
+            } else if (s.contains("-") && !s.startsWith("20")) {
+                val p = s.split("-")
+                if (p.size == 3) {
+                    val d = p[0].padStart(2, '0')
+                    val m = p[1].padStart(2, '0')
+                    val y = p[2]
+                    "$y-$m-$d"
+                } else s
+            } else s
+        } else null
+
         if (isCurrentSelectedMonth) {
             try {
                 for (day in 1 until todayDayOfMonth) {
-                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
-                    if (effectiveJoinDate != null && dateStr < effectiveJoinDate) {
+                    val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+                    val dateStrDmy = String.format(Locale.US, "%02d/%02d/%04d", day, currentMonth, currentYear)
+                    if (effectiveJoinDateYmd != null && dateStrYmd < effectiveJoinDateYmd) {
                         continue
                     }
                     val cal = Calendar.getInstance()
                     cal.set(currentYear, currentMonth - 1, day)
                     val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-                    val isHoliday = isHolidayDate(dateStr)
+                    val isHoliday = isHolidayDate(dateStrYmd)
                     if (!isSunday && !isHoliday) {
-                        val entryForDay = entries.find { it.date == dateStr }
+                        val entryForDay = entries.find { 
+                            it.date == dateStrYmd || it.date == dateStrDmy ||
+                            it.date == "$day/$currentMonth/$currentYear" ||
+                            it.date == "$day/${String.format(Locale.US, "%02d", currentMonth)}/$currentYear"
+                        }
                         val workedOrPaid = entryForDay != null && (
                             entryForDay.checkInTime != null || 
                             entryForDay.dayType == "PAID_LEAVE" || 
@@ -388,7 +414,7 @@ object ExportUtils {
                 e.printStackTrace()
             }
         } else {
-            if (effectiveJoinDate != null && effectiveJoinDate.startsWith(selectedMonth)) {
+            if (effectiveJoinDateYmd != null && effectiveJoinDateYmd.startsWith(selectedMonth)) {
                 try {
                     val maxDaysInMo = Calendar.getInstance().apply {
                         set(Calendar.YEAR, targetYear)
@@ -396,14 +422,14 @@ object ExportUtils {
                     }.getActualMaximum(Calendar.DAY_OF_MONTH)
                     var expectedDaysFromJoin = 0
                     for (day in 1..maxDaysInMo) {
-                        val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                        if (dateStr < effectiveJoinDate) {
+                        val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                        if (dateStrYmd < effectiveJoinDateYmd) {
                             continue
                         }
                         val cal = Calendar.getInstance()
                         cal.set(targetYear, targetMonth - 1, day)
                         val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-                        val isHoliday = isHolidayDate(dateStr)
+                        val isHoliday = isHolidayDate(dateStrYmd)
                         if (!isSunday && !isHoliday) {
                             expectedDaysFromJoin++
                         }
@@ -418,7 +444,13 @@ object ExportUtils {
         }
 
         val hasUnpaidOrAbsent = missedDays > 0 || entries.any { 
-            it.dayType == "UNPAID_LEAVE" && (effectiveJoinDate == null || it.date >= effectiveJoinDate)
+            it.dayType == "UNPAID_LEAVE" && (effectiveJoinDateYmd == null || run {
+                val entryYmd = if (it.date.contains("/")) {
+                    val p = it.date.split("/")
+                    if (p.size == 3) "${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}" else it.date
+                } else it.date
+                entryYmd >= effectiveJoinDateYmd
+            })
         }
         val chuyenCanValue = if (hasUnpaidOrAbsent) {
             0.0
@@ -677,7 +709,7 @@ object ExportUtils {
         if (summary.tienOtNgay > 0.0) drawRow("Tăng ca 1.5 (${df.format(summary.otDayHours)}h)", "+${fmt.format(summary.tienOtNgay)}đ", paintGreen)
         if (summary.tienChuNhat > 0.0) drawRow("Tăng ca chủ nhật (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
         if (summary.tienOtLe > 0.0) drawRow("Tăng ca ngày lễ (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
-        if (summary.tienOtDem > 0.0) drawRow("OT 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
+        if (summary.tienOtDem > 0.0) drawRow("OTĐ 1.5 (${df.format(summary.otNightHours)}h)", "+${fmt.format(summary.tienOtDem)}đ", paintGreen)
         
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
         if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
@@ -749,12 +781,16 @@ object ExportUtils {
 }
 
 fun AttendanceRecord.toTimeEntry(): TimeEntry {
+    var rawOut = this.clockOutTime
+    if (this.clockInTime > 0 && rawOut != null && rawOut <= this.clockInTime) {
+        rawOut += 24 * 3600 * 1000L
+    }
     return TimeEntry(
         id = this.id.toInt(),
         userId = this.uid,
         date = this.dateString,
         checkInTime = this.clockInTime,
-        checkOutTime = this.clockOutTime,
+        checkOutTime = rawOut,
         dayType = if (this.status.isBlank()) "NORMAL" else this.status,
         isWorking = this.clockOutTime == null && this.clockInTime > 0, // Simplified guess
         note = this.notes

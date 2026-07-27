@@ -905,7 +905,7 @@ fun PayslipScreen(
                         val totalOtNightPay = s.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
 
                         if (totalOtNightHours > 0.0) {
-                            PayslipMoneyRow(label = "OT 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
                         }
 
                         // 16. Phụ cấp đêm
