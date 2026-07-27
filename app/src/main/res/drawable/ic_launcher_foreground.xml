@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/timesnap_neon_icon_1779537266718"
+        android:drawable="@drawable/app_logo"
         android:gravity="center" />
 </layer-list>
