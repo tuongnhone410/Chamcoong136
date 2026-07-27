@@ -35,7 +35,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # BƯỚC THẦN THÁNH: Tự tạo file debug.keystore ảo để né lỗi validate của Gradle
+      # Tắt KSP Incremental & cấu hình thuộc tính Gradle để tránh lỗi Headless/IntelliJ OpenAPI trên CI
+      - name: Configure Gradle Properties for KSP
+        run: |
+          echo "ksp.incremental=false" >> gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4096m -Djava.awt.headless=true" >> gradle.properties
+
+      # Tự tạo file debug.keystore ảo
       - name: Generate Dummy Debug Keystore
         run: |
           keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
@@ -44,10 +50,11 @@ jobs:
         run: |
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
+      # Chạy clean trước khi assemble và thêm flag dọn dẹp môi trường
       - name: Build Debug APK
         env:
-          GRADLE_OPTS: -Djava.awt.headless=true
-        run: ./gradlew assembleDebug --no-configuration-cache
+          GRADLE_OPTS: "-Djava.awt.headless=true -Didea.active=false"
+        run: ./gradlew clean assembleDebug --no-daemon --no-configuration-cache
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
