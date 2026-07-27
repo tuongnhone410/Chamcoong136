@@ -31,7 +31,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.NightsStay
@@ -216,7 +216,7 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         val clockFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val clockHMFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormat = SimpleDateFormat("EEEE, 'ngày' dd 'tháng' MM 'năm' yyyy", Locale("vi", "VN"))
+        val dateFormat = SimpleDateFormat("EEEE, 'ngày' dd 'tháng' MM 'năm' yyyy", Locale.forLanguageTag("vi-VN"))
         while (true) {
             val now = Date()
             liveTimeString = clockFormat.format(now)
@@ -396,7 +396,7 @@ fun HomeScreen(
                 val displayMonthStr = remember(selectedMonth) {
                     try {
                         val d = sdfMonth.parse(selectedMonth) ?: Date()
-                        val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale("vi", "VN"))
+                        val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale.forLanguageTag("vi-VN"))
                         fmt.format(d)
                     } catch (e: Exception) {
                         "Tháng $selectedMonth"
@@ -431,7 +431,7 @@ fun HomeScreen(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowForwardIos,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                         contentDescription = "Tháng sau",
                         tint = PrimaryBlue,
                         modifier = Modifier.size(16.dp)
@@ -1004,7 +1004,7 @@ fun HomeScreen(
                                             }
                                             val dateVal = parser.parse(entry.date)
                                             if (dateVal != null) {
-                                                val formatter = SimpleDateFormat("EEEE, dd/MM", Locale("vi", "VN"))
+                                                val formatter = SimpleDateFormat("EEEE, dd/MM", Locale.forLanguageTag("vi-VN"))
                                                 formatter.format(dateVal).replaceFirstChar { it.uppercase() }
                                             } else {
                                                 entry.date
@@ -1308,7 +1308,7 @@ fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
 private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> {
     val cal = Calendar.getInstance()
     val sdfValue = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    val sdfDay = SimpleDateFormat("EEE", Locale("vi", "VN"))
+    val sdfDay = SimpleDateFormat("EEE", Locale.forLanguageTag("vi-VN"))
 
     val dates = ArrayList<Pair<String, String>>()
     for (i in 6 downTo 0) {

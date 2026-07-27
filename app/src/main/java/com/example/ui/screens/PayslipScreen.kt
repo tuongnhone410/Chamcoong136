@@ -24,11 +24,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalAtm
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -92,7 +92,7 @@ fun PayslipScreen(
         try {
             val parser = SimpleDateFormat("yyyy-MM", Locale.getDefault())
             val d = parser.parse(selectedMonth) ?: Date()
-            val formatter = SimpleDateFormat("MMMM / yyyy", Locale("vi", "VN"))
+            val formatter = SimpleDateFormat("MMMM / yyyy", Locale.forLanguageTag("vi-VN"))
             formatter.format(d).replaceFirstChar { it.uppercase() }
         } catch (e: Exception) {
             selectedMonth
@@ -152,14 +152,14 @@ fun PayslipScreen(
                     cal.add(Calendar.MONTH, 1)
                     viewModel.selectMonth(sdfMonth.format(cal.time))
                 }) {
-                    Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
                 }
             }
             
             if (summary == null || config == null) {
                 // Empty state setup
                 Spacer(modifier = Modifier.height(60.dp))
-                Icon(Icons.Default.ReceiptLong, "Receipt Empty", modifier = Modifier.size(72.dp), tint = MediumGray)
+                Icon(Icons.AutoMirrored.Filled.ReceiptLong, "Receipt Empty", modifier = Modifier.size(72.dp), tint = MediumGray)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Chưa có thông tin phiếu lương", color = LightGray, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text("Vui lòng check-in hoặc cấu hình mức lương trước.", color = MediumGray, fontSize = 12.sp, textAlign = TextAlign.Center)

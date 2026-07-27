@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -120,11 +122,11 @@ fun AdminScreen(
                         }
                     } else if (selectedEmployee != null) {
                         IconButton(onClick = { adminViewModel.selectEmployee(null) }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back to list", tint = White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to list", tint = White)
                         }
                     } else {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = White)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = White)
                         }
                     }
                 },
@@ -967,7 +969,7 @@ fun EmployeeDetailView(
             containerColor = DarkBackground,
             contentColor = NeonBlue,
             indicator = { tabPositions ->
-                TabRowDefaults.Indicator(
+                TabRowDefaults.SecondaryIndicator(
                     Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
                     color = NeonBlue,
                     height = 3.dp
@@ -1038,7 +1040,7 @@ fun EmployeeDetailView(
                         else {
                             try {
                                 val d = sdfYm.parse(selectedMonthYm) ?: Date()
-                                val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale("vi", "VN"))
+                                val fmt = SimpleDateFormat("'Tháng' MM/yyyy", Locale.forLanguageTag("vi-VN"))
                                 fmt.format(d)
                             } catch (e: Exception) {
                                 "Tháng $selectedMonthYm"
@@ -1697,7 +1699,7 @@ fun EmployeeConfigEdit(
         }
 
         item {
-            ConfigSection(title = "Hệ số tăng ca", icon = Icons.Default.TrendingUp) {
+            ConfigSection(title = "Hệ số tăng ca", icon = Icons.AutoMirrored.Filled.TrendingUp) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
                         AdminInputField("Hệ số ngày thường", hsOtThuong, onValueChange = { hsOtThuong = it }, isNumeric = true, keyboardType = KeyboardType.Decimal)
@@ -2207,7 +2209,7 @@ fun EmployeePayslipView(
             try {
                 val sdfYm = SimpleDateFormat("yyyy-MM", Locale.getDefault())
                 val d = sdfYm.parse(selectedMonthYm) ?: Date()
-                val fmt = SimpleDateFormat("MM/yyyy", Locale("vi", "VN"))
+                val fmt = SimpleDateFormat("MM/yyyy", Locale.forLanguageTag("vi-VN"))
                 fmt.format(d)
             } catch (e: Exception) {
                 selectedMonthYm

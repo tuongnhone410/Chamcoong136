@@ -48,7 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "timesnap_pro_db"
                 )
                 .addMigrations(MIGRATION_5_6, MIGRATION_7_8)
-                .fallbackToDestructiveMigration() // safe for production prototyping iteration
+                .fallbackToDestructiveMigration(dropAllTables = true) // safe for production prototyping iteration
                 .build()
                 INSTANCE = instance
                 instance
