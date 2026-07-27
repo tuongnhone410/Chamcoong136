@@ -2042,7 +2042,7 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // LEFT COLUMN: Vertical bar accent + Date info
@@ -2054,42 +2054,45 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                         .background(accentColor, RoundedCornerShape(2.dp))
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 Column(
                     horizontalAlignment = Alignment.Start,
-                    modifier = Modifier.width(66.dp)
+                    modifier = Modifier.width(60.dp)
                 ) {
                     Text(
                         text = dateParts.first,
                         color = PrimaryBlue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                     Text(
                         text = dateParts.second,
                         color = White,
-                        fontSize = 18.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Black,
-                        lineHeight = 20.sp
+                        lineHeight = 18.sp,
+                        maxLines = 1
                     )
                     Text(
                         text = dateParts.third,
                         color = TextSecondary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             HorizontalDivider(
                 color = Color.White.copy(alpha = 0.08f),
                 modifier = Modifier
                     .height(40.dp)
                     .width(1.dp)
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
             // MIDDLE COLUMN: Check In / Check Out timestamps
             Column(
@@ -2099,25 +2102,25 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
+                            .size(6.dp)
                             .background(SuccessGreen, androidx.compose.foundation.shape.CircleShape)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Vào", color = TextSecondary, fontSize = 12.sp)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(inTime, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Vào", color = TextSecondary, fontSize = 11.sp, maxLines = 1)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(inTime, color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
+                            .size(6.dp)
                             .background(PrimaryBlue, androidx.compose.foundation.shape.CircleShape)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Ra", color = TextSecondary, fontSize = 12.sp)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(outTime, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Ra", color = TextSecondary, fontSize = 11.sp, maxLines = 1)
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(outTime, color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
                 }
             }
 
@@ -2142,9 +2145,10 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                         Text(
                             text = shiftLabel,
                             color = shiftTextCol,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
+                            maxLines = 1
                         )
                     }
 
@@ -2156,9 +2160,10 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                         Text(
                             text = durationBadgeText,
                             color = if (isInShift) PrimaryBlue else if (isLate) Color(0xFFF59E0B) else SuccessGreen,
-                            fontSize = 11.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
+                            maxLines = 1
                         )
                     }
                 }
@@ -2169,15 +2174,19 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                     Text(
                         text = if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (workDay >= 1.0) "1 công" else if (workDay > 0) "${workDay} công" else "Thường",
                         color = TextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     if (otHours > 0.0) {
                         Text(
                             text = " • OT ${String.format(Locale.US, "%.1fh", otHours)}",
                             color = PrimaryBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     }
                 }

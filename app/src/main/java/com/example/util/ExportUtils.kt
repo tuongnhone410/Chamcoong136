@@ -104,8 +104,6 @@ object ExportUtils {
         selectedMonth: String,
         firstEntryDate: String? = null
     ): SalarySummary {
-        val luongBasic = config.luongCoBan
-
         var targetYear = 2026
         var targetMonth = 5
         try {
@@ -122,236 +120,23 @@ object ExportUtils {
         val isCurrentSelectedMonth = (targetYear == currentYear && targetMonth == currentMonth)
         val todayStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, todayDayOfMonth)
 
-        val calMo = Calendar.getInstance().apply {
+        val maxDaysInMo = Calendar.getInstance().apply {
             set(Calendar.YEAR, targetYear)
             set(Calendar.MONTH, targetMonth - 1)
-        }
-        val maxDays = calMo.getActualMaximum(Calendar.DAY_OF_MONTH)
-        
-        var totalScheduledDaysInMonth = 0
-        var scheduledDaysSoFar = 0
-        for (d in 1..maxDays) {
-            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, d)
-            calMo.set(Calendar.DAY_OF_MONTH, d)
-            val isSunday = calMo.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
-            val isHoliday = isHolidayDate(dateStr)
-            if (!isSunday && !isHoliday) {
-                totalScheduledDaysInMonth++
-                if (!isCurrentSelectedMonth || dateStr < todayStr) {
-                    scheduledDaysSoFar++
-                }
-            }
-        }
+        }.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-        val expectedWorkDaysCount = totalScheduledDaysInMonth
-        val standardWorkDaysInMonth = totalScheduledDaysInMonth
-        val dailySalary = luongBasic / 26.0
-        val hourlySalary = dailySalary / 8.0
-
-        // Find all public holidays in the selected month
         val holidayDatesInMonth = mutableSetOf<String>()
-        try {
-            val maxDaysInMo = Calendar.getInstance().apply {
-                set(Calendar.YEAR, targetYear)
-                set(Calendar.MONTH, targetMonth - 1)
-            }.getActualMaximum(Calendar.DAY_OF_MONTH)
-            for (day in 1..maxDaysInMo) {
-                val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                val dateStrDmy = String.format(Locale.US, "%02d/%02d/%04d", day, targetMonth, targetYear)
-                if (isHolidayDate(dateStrDmy)) {
-                    if (!isCurrentSelectedMonth || dateStrYmd <= todayStr) {
-                        holidayDatesInMonth.add(dateStrDmy)
-                        holidayDatesInMonth.add(dateStrYmd)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        val workedHolidayDates = entries.filter { e ->
-            holidayDatesInMonth.contains(e.date) && e.checkInTime != null
-        }.map { it.date }.toSet()
-
-        val unworkedHolidaysCount = (holidayDatesInMonth - workedHolidayDates).size
-
-        var workingDaysCount = unworkedHolidaysCount
-        var actualPresenceDaysCount = 0
-        var totalStandardHours = unworkedHolidaysCount * 8.0
-        var totalOtDayHours = 0.0
-        var totalOtNightHours = 0.0
-
-        var otDayPay = 0.0
-        var totalOtLeHours = 0.0
-        var otLePay = 0.0
-        var otNightPay = 0.0
-        var comOtDaysCount = 0
-        var totalSundayHours = 0.0
-        var sundayPay = 0.0
-        var nightShiftsCount = 0
-
-        for (e in entries) {
-            // Ensure entry belongs to selected month (handles yyyy-MM-dd and dd/MM/yyyy)
-            val parts = selectedMonth.split("-")
-            val isSameMonth = if (parts.size == 2) {
-                e.date.endsWith("/${parts[1]}/${parts[0]}") || e.date.contains("/${parts[1]}/${parts[0]}") || e.date.startsWith(selectedMonth)
-            } else {
-                e.date.contains(selectedMonth)
-            }
-            
-            if (!isSameMonth) continue
-
-            val entryTime = try {
-                val parser = if (e.date.contains("/")) {
-                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                } else {
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                }
-                parser.parse(e.date)?.time ?: 0L
-            } catch (ex: Exception) { 0L }
-
-            val todayTime = try {
-                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(todayStr)?.time ?: 0L
-            } catch (ex: Exception) { 0L }
-
-            if (isCurrentSelectedMonth && entryTime > todayTime) {
-                continue
-            }
-
-            val isHolidayDateVal = holidayDatesInMonth.contains(e.date)
-            if (isHolidayDateVal && e.checkInTime == null) {
-                continue
-            }
-
-            if (e.dayType == "PAID_LEAVE" || e.dayType == "HOLIDAY_LEAVE") {
-                workingDaysCount++
-                totalStandardHours += 8.0
-                continue
-            }
-            if (e.dayType == "UNPAID_LEAVE") {
-                continue
-            }
-
-            if (e.checkInTime == null) continue
-
-            val inCal = Calendar.getInstance()
-            inCal.timeInMillis = e.checkInTime
-            val inHour = inCal.get(Calendar.HOUR_OF_DAY)
-            val inMin = inCal.get(Calendar.MINUTE)
-            val inTotalMin = inHour * 60 + inMin
-            val isNightShift = (inTotalMin in (18 * 60)..(19 * 60 + 30)) || 
-                               inHour >= 22 || inHour <= 6 || 
-                               e.dayType == "NIGHT"
-
-            if (isNightShift) {
-                nightShiftsCount++
-            }
-
-            val isSunday = (e.dayType == "SUNDAY" || com.example.data.SalaryCalculator.isSunday(e.date))
-
-            if (e.isWorking) {
-                if (isSunday) {
-                    actualPresenceDaysCount++
-                    totalSundayHours += 8.0
-                    sundayPay += 8.0 * hourlySalary * config.heSoOtChuNhat
-                } else {
-                    workingDaysCount++
-                    actualPresenceDaysCount++
-                    totalStandardHours += 8.0
-                }
-                continue
-            }
-
-            if (e.checkOutTime == null) continue
-
-            val finalCheckIn = e.checkInTime
-            val finalCheckOut = e.checkOutTime
-
-            val durationMs = (finalCheckOut - finalCheckIn).coerceAtLeast(0L)
-            val rawHours = durationMs / 3600000.0
-            
-            val breakHours = if (config.tinhKhauTruNghi) config.soGioNghiGiaiLao else 0.0
-            val eBreakHours = e.customBreakHours ?: breakHours
-            val actualHours = (rawHours - eBreakHours).coerceAtLeast(0.0)
-
-            val finalStandardHours = actualHours.coerceAtMost(8.0)
-            val finalOtHours = (actualHours - 8.0).coerceAtLeast(0.0)
-
-            // Meal OT Count: >= 10h total (including 8h shift + 2h OT) OR >= 2h OT
-            if (actualHours >= 10.0 || finalOtHours >= 2.0) {
-                comOtDaysCount++
-            }
-
-            if (isSunday) {
-                actualPresenceDaysCount++
-                totalSundayHours += actualHours
-                val dayPay = actualHours * hourlySalary * config.heSoOtChuNhat
-                sundayPay += dayPay
-            } else {
-                workingDaysCount++
-                actualPresenceDaysCount++
-                totalStandardHours += finalStandardHours
-
-                if (finalOtHours > 0.0) {
-                    if (e.dayType == "HOLIDAY" || com.example.data.SalaryCalculator.isHoliday(e.date)) {
-                        totalOtLeHours += finalOtHours
-                        otLePay += finalOtHours * (hourlySalary * config.heSoOtNgayLe)
-                    } else {
-                        // OT Night Logic (3:30 - 7:30)
-                        val outCal = Calendar.getInstance().apply { timeInMillis = finalCheckOut }
-                        val outHour = outCal.get(Calendar.HOUR_OF_DAY) + outCal.get(Calendar.MINUTE) / 60.0
-                        
-                        var nightOtHours = 0.0
-                        var normalOtHours = 0.0
-
-                        if (outHour > 3.5 && outHour <= 7.5) {
-                            nightOtHours = Math.min(finalOtHours, outHour - 3.5)
-                            normalOtHours = finalOtHours - nightOtHours
-                        } else if (outHour > 7.5) {
-                            nightOtHours = Math.min(finalOtHours, 4.0)
-                            normalOtHours = finalOtHours - nightOtHours
-                        } else {
-                            normalOtHours = finalOtHours
-                            nightOtHours = 0.0
-                        }
-
-                        if (nightOtHours > 0.0) {
-                            totalOtNightHours += nightOtHours
-                            otNightPay += nightOtHours * (hourlySalary * config.heSoOtDem)
-                        }
-                        if (normalOtHours > 0.0) {
-                            totalOtDayHours += normalOtHours
-                            otDayPay += normalOtHours * (hourlySalary * config.heSoOtNgayThuong)
-                        }
-                    }
+        for (day in 1..maxDaysInMo) {
+            val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            val dateStrDmy = String.format(Locale.US, "%02d/%02d/%04d", day, targetMonth, targetYear)
+            if (isHolidayDate(dateStrYmd) || isHolidayDate(dateStrDmy)) {
+                if (!isCurrentSelectedMonth || dateStrYmd <= todayStr) {
+                    holidayDatesInMonth.add(dateStrYmd)
+                    holidayDatesInMonth.add(dateStrDmy)
                 }
             }
         }
-        val allowanceDivisor = 26.0
 
-        val pcKyThuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKyThuat", config.pcKyThuat, config.getCalcTypeFor("pcKyThuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcTrachNhiemPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcTrachNhiem", config.pcTrachNhiem, config.getCalcTypeFor("pcTrachNhiem"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcChucVuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcChucVu", config.pcChucVu, config.getCalcTypeFor("pcChucVu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcHieuSuatPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcHieuSuat", config.pcHieuSuat, config.getCalcTypeFor("pcHieuSuat"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcSanPhamPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcSanPham", config.pcSanPham, config.getCalcTypeFor("pcSanPham"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcComCaPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComCa", config.pcComCa, config.getCalcTypeFor("pcComCa"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcComOtPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcComOt", config.pcComOt, config.getCalcTypeFor("pcComOt"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcNhaOPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcNhaO", config.pcNhaO, config.getCalcTypeFor("pcNhaO"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcDocHaiPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDocHai", config.pcDocHai, config.getCalcTypeFor("pcDocHai"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcDtDoanhThuPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcDtDoanhThu", config.pcDtDoanhThu, config.getCalcTypeFor("pcDtDoanhThu"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcXangXePr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcXangXe", config.pcXangXe, config.getCalcTypeFor("pcXangXe"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcThamNienPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcKhac1Pr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcKhacPr = com.example.data.SalaryCalculator.calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), workingDaysCount.toDouble(), actualPresenceDaysCount, comOtDaysCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-
-        val pcCaDemPr = pcKhacPr
-
-        val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
-                pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
-                pcDocHaiPr + pcDtDoanhThuPr + pcXangXePr + pcThamNienPr + 
-                pcKhac1Pr + pcCaDemPr
-
-        var missedDays = 0
         val effectiveJoinDate: String? = if (config.ngayVaoLam.isNotBlank()) {
             config.ngayVaoLam.trim()
         } else if (firstEntryDate != null && firstEntryDate.startsWith(selectedMonth)) {
@@ -381,154 +166,118 @@ object ExportUtils {
             } else s
         } else null
 
+        var expectedWorkDaysSoFar = 0
+        var totalWorkDaysInMonth = 0
+
+        for (day in 1..maxDaysInMo) {
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            val cal = Calendar.getInstance()
+            cal.set(targetYear, targetMonth - 1, day)
+            val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+            val isHoliday = isHolidayDate(dateStr)
+            if (!isSunday && !isHoliday) {
+                totalWorkDaysInMonth++
+            }
+        }
+
         if (isCurrentSelectedMonth) {
-            try {
-                for (day in 1 until todayDayOfMonth) {
-                    val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
-                    val dateStrDmy = String.format(Locale.US, "%02d/%02d/%04d", day, currentMonth, currentYear)
-                    if (effectiveJoinDateYmd != null && dateStrYmd < effectiveJoinDateYmd) {
-                        continue
-                    }
-                    val cal = Calendar.getInstance()
-                    cal.set(currentYear, currentMonth - 1, day)
-                    val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-                    val isHoliday = isHolidayDate(dateStrYmd)
-                    if (!isSunday && !isHoliday) {
-                        val entryForDay = entries.find { 
-                            it.date == dateStrYmd || it.date == dateStrDmy ||
-                            it.date == "$day/$currentMonth/$currentYear" ||
-                            it.date == "$day/${String.format(Locale.US, "%02d", currentMonth)}/$currentYear"
-                        }
-                        val workedOrPaid = entryForDay != null && (
-                            entryForDay.checkInTime != null || 
-                            entryForDay.dayType == "PAID_LEAVE" || 
-                            entryForDay.dayType == "HOLIDAY_LEAVE" || 
-                            entryForDay.isWorking
-                        )
-                        if (!workedOrPaid) {
-                            missedDays++
-                        }
-                    }
+            for (day in 1 until todayDayOfMonth) {
+                val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+                if (effectiveJoinDateYmd != null && dateStr < effectiveJoinDateYmd) {
+                    continue
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+                val cal = Calendar.getInstance()
+                cal.set(currentYear, currentMonth - 1, day)
+                val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+                val isHoliday = isHolidayDate(dateStr)
+                if (!isSunday && !isHoliday) {
+                    expectedWorkDaysSoFar++
+                }
             }
         } else {
             if (effectiveJoinDateYmd != null && effectiveJoinDateYmd.startsWith(selectedMonth)) {
-                try {
-                    val maxDaysInMo = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, targetYear)
-                        set(Calendar.MONTH, targetMonth - 1)
-                    }.getActualMaximum(Calendar.DAY_OF_MONTH)
-                    var expectedDaysFromJoin = 0
-                    for (day in 1..maxDaysInMo) {
-                        val dateStrYmd = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
-                        if (dateStrYmd < effectiveJoinDateYmd) {
-                            continue
-                        }
-                        val cal = Calendar.getInstance()
-                        cal.set(targetYear, targetMonth - 1, day)
-                        val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
-                        val isHoliday = isHolidayDate(dateStrYmd)
-                        if (!isSunday && !isHoliday) {
-                            expectedDaysFromJoin++
-                        }
+                for (day in 1..maxDaysInMo) {
+                    val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                    if (dateStr < effectiveJoinDateYmd) {
+                        continue
                     }
-                    missedDays = (expectedDaysFromJoin - workingDaysCount).coerceAtLeast(0)
-                } catch (e: Exception) {
-                    missedDays = (expectedWorkDaysCount - workingDaysCount).coerceAtLeast(0)
+                    val cal = Calendar.getInstance()
+                    cal.set(targetYear, targetMonth - 1, day)
+                    val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+                    val isHoliday = isHolidayDate(dateStr)
+                    if (!isSunday && !isHoliday) {
+                        expectedWorkDaysSoFar++
+                    }
                 }
             } else {
-                missedDays = (expectedWorkDaysCount - workingDaysCount).coerceAtLeast(0)
+                expectedWorkDaysSoFar = totalWorkDaysInMonth
             }
         }
 
-        val hasUnpaidOrAbsent = missedDays > 0 || entries.any { 
-            it.dayType == "UNPAID_LEAVE" && (effectiveJoinDateYmd == null || run {
-                val entryYmd = if (it.date.contains("/")) {
-                    val p = it.date.split("/")
-                    if (p.size == 3) "${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}" else it.date
-                } else it.date
-                entryYmd >= effectiveJoinDateYmd
-            })
-        }
-        val chuyenCanValue = if (hasUnpaidOrAbsent) {
-            0.0
-        } else {
-            com.example.data.SalaryCalculator.calculateAllowanceValue(
-                "tienChuyenCanGoc",
-                config.tienChuyenCanGoc,
-                config.getCalcTypeFor("tienChuyenCanGoc"),
-                workingDaysCount.toDouble(),
-                actualPresenceDaysCount,
-                comOtDaysCount,
-                nightShiftsCount,
-                scheduledDaysSoFar,
-                totalScheduledDaysInMonth
-            )
+        val monthEntries = entries.filter { e ->
+            val parts = selectedMonth.split("-")
+            val isSameMonth = if (parts.size == 2) {
+                e.date.endsWith("/${parts[1]}/${parts[0]}") || e.date.contains("/${parts[1]}/${parts[0]}") || e.date.startsWith(selectedMonth)
+            } else {
+                e.date.contains(selectedMonth)
+            }
+            isSameMonth
         }
 
-        val tongCom = pcComCaPr + pcComOtPr
-
-        val tieuBaoHiem = Math.round(config.luongDongBaoHiem * (config.tiLeDongBaoHiem / 100.0)).toDouble()
-        val doanPhi = config.doanPhiCongDoan
-
-        val baseBasicSalary = Math.round((luongBasic / 26.0) * workingDaysCount).toDouble()
-        val tienKhauTruNghi = 0.0
-
-        val roundedOtDay = Math.round(otDayPay).toDouble()
-        val roundedOtLePay = Math.round(otLePay).toDouble()
-        val roundedOtNight = Math.round(otNightPay).toDouble()
-        val roundedSundayPay = Math.round(sundayPay).toDouble()
-
-        val grossAdditions = baseBasicSalary + roundedOtDay + roundedOtLePay + roundedOtNight + roundedSundayPay + phuCapTong + chuyenCanValue
-        val totalDeductions = tieuBaoHiem + doanPhi + tienKhauTruNghi
-        val luongThucNhan = Math.round(grossAdditions - totalDeductions).coerceAtLeast(0L).toDouble()
+        val vmSummary = com.example.data.SalaryCalculator.calculateMonthlySalary(
+            entries = monthEntries,
+            config = config,
+            scheduledDaysSoFar = expectedWorkDaysSoFar,
+            totalScheduledDaysInMonth = totalWorkDaysInMonth,
+            earliestDate = effectiveJoinDateYmd,
+            selectedMonth = selectedMonth,
+            todayStr = todayStr,
+            isCurrentSelectedMonth = isCurrentSelectedMonth,
+            holidayDatesInMonth = holidayDatesInMonth
+        )
 
         return SalarySummary(
-            workingDays = workingDaysCount,
-            standardHours = totalStandardHours,
-            otDayHours = totalOtDayHours,
-            otNightHours = totalOtNightHours,
-            tienOtNgay = roundedOtDay,
-            tienOtDem = roundedOtNight,
-            tongTienCom = tongCom,
-            phuCap = phuCapTong,
-            phuCapXangXe = pcXangXePr,
-            phuCapDienThoai = pcDtDoanhThuPr,
-            phuCapNhaO = pcNhaOPr,
-            phuCapChuyenCan = chuyenCanValue,
-            thuong = 0.0,
-            tienBh = tieuBaoHiem,
-            doanPhi = doanPhi,
-            tienKhauTruNghi = tienKhauTruNghi,
-            luongThucNhan = luongThucNhan,
-            baseBasicSalary = baseBasicSalary,
-            expectedWorkDays = expectedWorkDaysCount,
-            standardWorkDays = standardWorkDaysInMonth,
-            isCurrentMonth = isCurrentSelectedMonth,
-            
-            pcKyThuatVal = pcKyThuatPr,
-            pcTrachNhiemVal = pcTrachNhiemPr,
-            pcChucVuVal = pcChucVuPr,
-            pcHieuSuatVal = pcHieuSuatPr,
-            pcSanPhamVal = pcSanPhamPr,
-            pcComCaVal = pcComCaPr,
-            pcComOtVal = pcComOtPr,
-            pcNhaOVal = pcNhaOPr,
-            pcDocHaiVal = pcDocHaiPr,
-            pcDtDoanhThuVal = pcDtDoanhThuPr,
-            pcXangXeVal = pcXangXePr,
-            pcThamNienVal = pcThamNienPr,
-            pcKhac1Val = pcKhac1Pr,
-            pcKhacVal = pcKhacPr,
-            pcCaDemVal = pcCaDemPr,
-            caDemCount = nightShiftsCount,
-            
-            tienChuNhat = roundedSundayPay,
-            otLeHours = totalOtLeHours,
-            tienOtLe = roundedOtLePay,
-            chuNhatHours = totalSundayHours
+            workingDays = vmSummary.workingDays,
+            standardHours = vmSummary.standardHours,
+            otDayHours = vmSummary.otDayHours,
+            otNightHours = vmSummary.otNightHours,
+            tienOtNgay = vmSummary.tienOtNgay,
+            tienOtDem = vmSummary.tienOtDem,
+            tongTienCom = vmSummary.tongTienCom,
+            phuCap = vmSummary.phuCap,
+            phuCapXangXe = vmSummary.phuCapXangXe,
+            phuCapDienThoai = vmSummary.phuCapDienThoai,
+            phuCapNhaO = vmSummary.phuCapNhaO,
+            phuCapChuyenCan = vmSummary.phuCapChuyenCan,
+            thuong = vmSummary.thuong,
+            tienBh = vmSummary.tienBh,
+            doanPhi = vmSummary.doanPhi,
+            tienKhauTruNghi = vmSummary.tienKhauTruNghi,
+            luongThucNhan = vmSummary.luongThucNhan,
+            baseBasicSalary = vmSummary.baseBasicSalary,
+            expectedWorkDays = vmSummary.expectedWorkDays,
+            standardWorkDays = vmSummary.standardWorkDays,
+            isCurrentMonth = vmSummary.isCurrentMonth,
+            pcKyThuatVal = vmSummary.pcKyThuatVal,
+            pcTrachNhiemVal = vmSummary.pcTrachNhiemVal,
+            pcChucVuVal = vmSummary.pcChucVuVal,
+            pcHieuSuatVal = vmSummary.pcHieuSuatVal,
+            pcSanPhamVal = vmSummary.pcSanPhamVal,
+            pcComCaVal = vmSummary.pcComCaVal,
+            pcComOtVal = vmSummary.pcComOtVal,
+            pcNhaOVal = vmSummary.pcNhaOVal,
+            pcDocHaiVal = vmSummary.pcDocHaiVal,
+            pcDtDoanhThuVal = vmSummary.pcDtDoanhThuVal,
+            pcXangXeVal = vmSummary.pcXangXeVal,
+            pcThamNienVal = vmSummary.pcThamNienVal,
+            pcKhac1Val = vmSummary.pcKhac1Val,
+            pcKhacVal = vmSummary.pcKhacVal,
+            pcCaDemVal = vmSummary.pcCaDemVal,
+            caDemCount = vmSummary.caDemCount,
+            tienChuNhat = vmSummary.tienChuNhat,
+            chuNhatHours = vmSummary.chuNhatHours,
+            otLeHours = vmSummary.otLeHours,
+            tienOtLe = vmSummary.tienOtLe
         )
     }
 

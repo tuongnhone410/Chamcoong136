@@ -150,10 +150,14 @@ object SalaryCalculator {
         val normOutMs = if (rawOut != null) {
             val dayOffset = if (shift.shiftType == "NIGHT") 1 else 0
             val stdOutMs = getMillisForTime(rawIn, shift.endTime, dayOffset)
-            val windowEndMs = getMillisForTime(rawIn, shift.checkOutWindowEnd, dayOffset)
 
-            if (rawOut in stdOutMs..windowEndMs) {
-                stdOutMs
+            if (rawOut >= stdOutMs) {
+                val diffMs = rawOut - stdOutMs
+                if (diffMs < 30 * 60000L) {
+                    stdOutMs
+                } else {
+                    rawOut
+                }
             } else {
                 rawOut
             }
@@ -413,12 +417,8 @@ object SalaryCalculator {
                 comCaCount++
             }
             
-            // comOtCount: Either worked >= 10h total OR has >= 2h calculated OT
-            val workedDurationHrs = if (e.rawCheckOut != null) {
-                (e.rawCheckOut - e.rawCheckIn) / 3600000.0
-            } else 0.0
-            
-            if (workedDurationHrs >= 10.0 || e.otHours >= 2.0) {
+            // comOtCount: Only count if calculated OT is >= 2.0h (satisfying OT meal >= 2 hours condition)
+            if (e.otHours >= 2.0) {
                 comOtCount++
             }
         }
