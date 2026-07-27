@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
 
-@Database(entities = [TimeEntry::class, UserConfig::class], version = 8, exportSchema = false)
+@Database(entities = [TimeEntry::class, UserConfig::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun timeEntryDao(): TimeEntryDao
     abstract fun userConfigDao(): UserConfigDao
