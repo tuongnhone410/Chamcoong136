@@ -62,6 +62,27 @@ class MainActivity : ComponentActivity() {
         
         setContent {
             MyApplicationTheme {
+                // Yêu cầu quyền thông báo trên Android 13+ (Tiramisu)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        if (isGranted) {
+                            android.util.Log.d("MainActivity", "Quyền thông báo đã được cấp")
+                        } else {
+                            android.util.Log.d("MainActivity", "Quyền thông báo bị từ chối")
+                        }
+                    }
+                    
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != 
+                            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
+
                 val viewModel: TimeSnapViewModel = viewModel()
                 val sessionState by viewModel.currentUserSession.collectAsStateWithLifecycle()
                 

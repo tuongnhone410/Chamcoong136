@@ -84,11 +84,50 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", day, month, year)
                 val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", year, month, day)
 
-                val monthRecords = FirestoreService.getAllAttendanceLogsInMonth(monthStr)
-                val todayMap = monthRecords.filter { r ->
+                val calYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) }
+                val yYear = calYesterday.get(Calendar.YEAR)
+                val yMonth = calYesterday.get(Calendar.MONTH) + 1
+                val yDay = calYesterday.get(Calendar.DAY_OF_MONTH)
+
+                val yesterdayYmd = String.format(Locale.US, "%04d-%02d-%02d", yYear, yMonth, yDay)
+                val yesterdayDmy = String.format(Locale.US, "%02d/%02d/%04d", yDay, yMonth, yYear)
+                val yesterdayShortDmy = String.format(Locale.US, "%d/%d/%04d", yDay, yMonth, yYear)
+                val yesterdayShortYmd = String.format(Locale.US, "%04d-%d-%d", yYear, yMonth, yDay)
+
+                val yesterdayMonthStr = String.format(Locale.US, "%04d-%02d", yYear, yMonth)
+                val monthRecords = if (yesterdayMonthStr != monthStr) {
+                    FirestoreService.getAllAttendanceLogsInMonth(monthStr) + FirestoreService.getAllAttendanceLogsInMonth(yesterdayMonthStr)
+                } else {
+                    FirestoreService.getAllAttendanceLogsInMonth(monthStr)
+                }
+
+                val todayMap = mutableMapOf<String, AttendanceRecord>()
+                val recordIsToday = mutableMapOf<String, Boolean>()
+                for (r in monthRecords) {
                     val ds = r.dateString.trim()
-                    ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
-                }.associateBy { it.uid }
+                    val isToday = ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
+                    val isYesterday = ds == yesterdayYmd || ds == yesterdayDmy || ds == yesterdayShortDmy || ds == yesterdayShortYmd || ds.endsWith(yesterdayYmd)
+                    
+                    val uid = r.uid
+                    if (isToday) {
+                        val existing = todayMap[uid]
+                        val existingIsToday = recordIsToday[uid] == true
+                        if (existing == null || !existingIsToday || (existing.clockOutTime != null && r.clockOutTime == null) || r.clockInTime > existing.clockInTime) {
+                            todayMap[uid] = r
+                            recordIsToday[uid] = true
+                        }
+                    } else if (isYesterday) {
+                        val isCurrentlyActiveNightShift = r.clockInTime > 0 && (r.clockOutTime == null || r.clockOutTime == 0L)
+                        if (isCurrentlyActiveNightShift) {
+                            val existing = todayMap[uid]
+                            val existingIsToday = recordIsToday[uid] == true
+                            if (existing == null || (!existingIsToday && r.clockInTime > existing.clockInTime)) {
+                                todayMap[uid] = r
+                                recordIsToday[uid] = false
+                            }
+                        }
+                    }
+                }
 
                 _todayAttendanceMap.value = todayMap
             } catch (e: Exception) {

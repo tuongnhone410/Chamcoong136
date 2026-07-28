@@ -144,6 +144,15 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     hasRestoredForSession[session.uid] = false
                     _cloudSyncStatus.value = "Đang kiểm tra..."
                     checkAndFetchSalaryConfigFromFirestore(session.uid)
+                    
+                    // Khởi tạo kênh thông báo và lên lịch nhắc nhở Check-in
+                    try {
+                        com.example.notification.NotificationHelper.createNotificationChannel(getApplication())
+                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(getApplication(), session.uid)
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to init notifications: ${e.message}")
+                    }
+
                     try {
                         // 1. Migrate local guest records if any
                         migrateGuestDataToUser(session.uid)
@@ -319,6 +328,32 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
+
+                // Lên lịch nhắc Check-out nối đuôi động dựa trên ca làm việc
+                try {
+                    val shift = com.example.data.SalaryCalculator.SHIFTS[sId]
+                    if (shift != null) {
+                        val shiftDuration = try {
+                            val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
+                            val start = sdf.parse(shift.startTime)?.time ?: 0L
+                            val end = sdf.parse(shift.endTime)?.time ?: 0L
+                            var diff = end - start
+                            if (diff < 0) diff += 24 * 60 * 60 * 1000L
+                            diff
+                        } catch (e: Exception) {
+                            8 * 60 * 60 * 1000L
+                        }
+                        val delayMs = shiftDuration + 15 * 60 * 1000L // 15 phút buffer
+                        com.example.notification.NotificationHelper.scheduleCheckOutReminder(
+                            context = getApplication(),
+                            uid = session.uid,
+                            delayMs = delayMs,
+                            shiftId = sId
+                        )
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TimeSnapViewModel", "Failed to schedule checkout reminder: ${e.message}")
+                }
             } else {
                 // Perform check-out
                 val cal = Calendar.getInstance()
@@ -337,6 +372,16 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
+
+                // Hủy nhắc nhở Check-out vì đã check-out thủ công thành công trước hạn
+                try {
+                    com.example.notification.NotificationHelper.cancelCheckOutReminder(
+                        context = getApplication(),
+                        uid = session.uid
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("TimeSnapViewModel", "Failed to cancel checkout reminder: ${e.message}")
+                }
             }
             triggerSync()
             viewModelScope.launch(Dispatchers.IO) {

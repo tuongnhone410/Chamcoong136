@@ -302,7 +302,19 @@ object FirestoreService {
                     val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", year, month, day)
                     val todayDocId = formatDateForDocId(todayDmy)
 
+                    val calYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) }
+                    val yYear = calYesterday.get(Calendar.YEAR)
+                    val yMonth = calYesterday.get(Calendar.MONTH) + 1
+                    val yDay = calYesterday.get(Calendar.DAY_OF_MONTH)
+
+                    val yesterdayYmd = String.format(Locale.US, "%04d-%02d-%02d", yYear, yMonth, yDay)
+                    val yesterdayDmy = String.format(Locale.US, "%02d/%02d/%04d", yDay, yMonth, yYear)
+                    val yesterdayShortDmy = String.format(Locale.US, "%d/%d/%04d", yDay, yMonth, yYear)
+                    val yesterdayShortYmd = String.format(Locale.US, "%04d-%d-%d", yYear, yMonth, yDay)
+                    val yesterdayDocId = formatDateForDocId(yesterdayDmy)
+
                     val map = mutableMapOf<String, AttendanceRecord>()
+                    val recordIsToday = mutableMapOf<String, Boolean>()
                     for (doc in snapshot.documents) {
                         val uid = doc.reference.parent.parent?.id ?: continue
                         val rec = doc.toAttendanceRecord(uid)
@@ -315,10 +327,25 @@ object FirestoreService {
                         val isToday = ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || docId == todayDocId || 
                                       clockInDate == todayYmd || clockInDmy == todayDmy || ds.endsWith(todayYmd)
                         
+                        val isYesterday = ds == yesterdayYmd || ds == yesterdayDmy || ds == yesterdayShortDmy || ds == yesterdayShortYmd || docId == yesterdayDocId ||
+                                      clockInDate == yesterdayYmd || clockInDmy == yesterdayDmy || ds.endsWith(yesterdayYmd)
+
                         if (isToday) {
                             val existing = map[uid]
-                            if (existing == null || (existing.clockOutTime != null && rec.clockOutTime == null) || rec.clockInTime > existing.clockInTime) {
+                            val existingIsToday = recordIsToday[uid] == true
+                            if (existing == null || !existingIsToday || (existing.clockOutTime != null && rec.clockOutTime == null) || rec.clockInTime > existing.clockInTime) {
                                 map[uid] = rec
+                                recordIsToday[uid] = true
+                            }
+                        } else if (isYesterday) {
+                            val isCurrentlyActiveNightShift = rec.clockInTime > 0 && (rec.clockOutTime == null || rec.clockOutTime == 0L)
+                            if (isCurrentlyActiveNightShift) {
+                                val existing = map[uid]
+                                val existingIsToday = recordIsToday[uid] == true
+                                if (existing == null || (!existingIsToday && rec.clockInTime > existing.clockInTime)) {
+                                    map[uid] = rec
+                                    recordIsToday[uid] = false
+                                }
                             }
                         }
                     }
