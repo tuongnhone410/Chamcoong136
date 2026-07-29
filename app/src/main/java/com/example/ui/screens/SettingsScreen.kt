@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -977,6 +979,129 @@ fun SettingsScreen(
                 )
             }
 
+            // CATEGORY 5: CẤU HÌNH NHẮC NHỞ CHẤM CÔNG (Notification Config)
+            val notificationPrefs = LocalContext.current.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+            var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
+            var smartLearningEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("smart_learning_enabled", true)) }
+
+            CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Bật thông báo nhắc nhở",
+                                color = White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Gửi thông báo nhắc nhở check-in khi vào ca và check-out khi ra ca.",
+                                color = LightGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = notificationsEnabled,
+                            onCheckedChange = { isEnabled ->
+                                notificationsEnabled = isEnabled
+                                notificationPrefs.edit().putBoolean("notifications_enabled", isEnabled).apply()
+                                
+                                val session = sessionState
+                                if (session != null) {
+                                    if (isEnabled) {
+                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                    } else {
+                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                                    }
+                                }
+                                Toast.makeText(context, if (isEnabled) "Đã bật nhắc nhở chấm công" else "Đã tắt nhắc nhở chấm công", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = White,
+                                checkedTrackColor = NeonBlue,
+                                uncheckedThumbColor = MediumGray,
+                                uncheckedTrackColor = Color(0xFF1E1E1E)
+                            )
+                        )
+                    }
+
+                    if (notificationsEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Thuật toán học ca làm việc (AI)",
+                                    color = White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Tự động học thói quen đi ca ngày hoặc ca đêm của bạn từ lịch sử chấm công, tự động né ngày lễ và ngày Chủ Nhật.",
+                                    color = LightGray,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = smartLearningEnabled,
+                                onCheckedChange = { isEnabled ->
+                                    smartLearningEnabled = isEnabled
+                                    notificationPrefs.edit().putBoolean("smart_learning_enabled", isEnabled).apply()
+                                    
+                                    val session = sessionState
+                                    if (session != null) {
+                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                    }
+                                    Toast.makeText(context, if (isEnabled) "Đã bật học máy thông minh" else "Đã tắt học máy thông minh", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = White,
+                                    checkedTrackColor = NeonBlue,
+                                    uncheckedThumbColor = MediumGray,
+                                    uncheckedTrackColor = Color(0xFF1E1E1E)
+                                )
+                            )
+                        }
+
+                        // Info card explaining the behavior
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(NeonBlue.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                                .border(1.dp, NeonBlue.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "💡 Nguyên lý học máy thông minh:",
+                                    color = NeonBlue,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca (Ca ngày 07:30 hoặc Ca đêm 19:30).\n" +
+                                           "• Vào ngày thứ Hai chuyển tiếp hoặc khi đổi ca, hệ thống sẽ tự nhắc nhở cả 2 ca để bạn không quên, và sẽ học ngay lập tức sau lần chấm công đầu tiên của tuần mới.\n" +
+                                           "• Nếu bỏ qua thông báo và vẫn chấm ca cũ, hệ thống vẫn duy trì lịch nhắc cũ để tránh báo sai.",
+                                    color = LightGray,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
             CategoryLayout(title = "THÔNG TIN PHIÊN BẢN", icon = Icons.Default.Info) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1267,8 +1392,10 @@ fun SettingsScreen(
 fun CategoryLayout(
     title: String,
     icon: ImageVector,
+    initiallyExpanded: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    var isExpanded by remember { mutableStateOf(initiallyExpanded) }
     Card(
         colors = CardDefaults.cardColors(containerColor = DarkContainer),
         shape = RoundedCornerShape(12.dp),
@@ -1280,7 +1407,10 @@ fun CategoryLayout(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(vertical = 4.dp)
             ) {
                 Icon(icon, contentDescription = title, tint = NeonBlue, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1294,8 +1424,21 @@ fun CategoryLayout(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Thu gọn" else "Mở rộng",
+                    tint = LightGray,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            content()
+            if (isExpanded) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    content()
+                }
+            }
         }
     }
 }

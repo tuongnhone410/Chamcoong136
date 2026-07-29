@@ -19,6 +19,14 @@ class ReminderWorker(
         val uid = inputData.getString("uid") ?: return Result.failure()
         val reminderType = inputData.getString("reminderType") ?: return Result.failure()
 
+        // 0. Kiểm tra công tắc bật/tắt thông báo tổng
+        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+        if (!notificationsEnabled) {
+            android.util.Log.d("ReminderWorker", "Thông báo nhắc nhở đã bị tắt. Hủy bỏ doWork.")
+            return Result.success()
+        }
+
         android.util.Log.d("ReminderWorker", "Bắt đầu kiểm tra cho loại nhắc nhở: $reminderType, user: $uid")
 
         when (reminderType) {
@@ -44,6 +52,52 @@ class ReminderWorker(
                         android.util.Log.d("ReminderWorker", "Hôm nay nhân viên không có lịch phân ca, không gửi thông báo Check-in.")
                         NotificationHelper.scheduleNextCheckInReminder(context, uid)
                         return Result.success()
+                    }
+
+                    // 1b. Smart safety filter: Đối chiếu với thói quen học được
+                    val smartLearningEnabled = sharedPrefs.getBoolean("smart_learning_enabled", true)
+                    if (smartLearningEnabled) {
+                        val dayOfWeek = today.get(Calendar.DAY_OF_WEEK)
+                        val isTransitionDay = (dayOfWeek == Calendar.MONDAY)
+
+                        if (!isTransitionDay) {
+                            // Dự đoán thói quen đi ca từ lịch sử
+                            val db = com.example.data.db.AppDatabase.getInstance(context)
+                            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 12)
+                            if (entries.size >= 3) {
+                                var dayShiftCount = 0
+                                var nightShiftCount = 0
+                                for (entry in entries) {
+                                    val checkIn = entry.checkInTime ?: continue
+                                    val cal = Calendar.getInstance().apply { timeInMillis = checkIn }
+                                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                                    if (hour in 5..15) {
+                                        dayShiftCount++
+                                    } else {
+                                        nightShiftCount++
+                                    }
+                                }
+                                
+                                val habit = when {
+                                    dayShiftCount >= 3 && dayShiftCount > nightShiftCount -> "DAY"
+                                    nightShiftCount >= 3 && nightShiftCount > dayShiftCount -> "NIGHT"
+                                    else -> "UNKNOWN"
+                                }
+
+                                val currentHour = today.get(Calendar.HOUR_OF_DAY)
+                                if (habit == "DAY" && currentHour >= 12) {
+                                    // Thói quen là ca ngày nhưng bây giờ đã là tối -> Bỏ qua thông báo nhắc Check-in tối
+                                    android.util.Log.d("ReminderWorker", "Bỏ qua thông báo nhắc nhở tối (19:15) vì thói quen của bạn là Ca Ngày.")
+                                    NotificationHelper.scheduleNextCheckInReminder(context, uid)
+                                    return Result.success()
+                                } else if (habit == "NIGHT" && currentHour < 12) {
+                                    // Thói quen là ca đêm nhưng bây giờ lại là sáng -> Bỏ qua thông báo nhắc Check-in sáng
+                                    android.util.Log.d("ReminderWorker", "Bỏ qua thông báo nhắc nhở sáng (07:15) vì thói quen của bạn là Ca Đêm.")
+                                    NotificationHelper.scheduleNextCheckInReminder(context, uid)
+                                    return Result.success()
+                                }
+                            }
+                        }
                     }
 
                     // 2. Kiểm tra nếu nhân viên ĐÃ check-in từ trước thì không gửi nhắc nhở nữa
