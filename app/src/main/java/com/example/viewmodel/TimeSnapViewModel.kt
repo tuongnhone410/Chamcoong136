@@ -168,13 +168,20 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                             currentEntries = repository.getEntries(session.uid).first()
                         }
                         
-                        // 4. Check and migrate legacy AttendanceRecord logs (from local and remote databases)
+                        // 4. Sync latest attendance logs from Firestore (if Admin clocked out or edited time)
+                        syncAttendanceLogsFromFirestore(session.uid)
+
+                        // 5. Check and migrate legacy AttendanceRecord logs (from local and remote databases)
                         migrateLegacyData(session.uid)
                         
-                        // 5. Final sync: Upload current merged state to the server to ensure cloud is up to date
+                        // 6. Final sync: Upload current merged state to the server to ensure cloud is up to date
                         val finalEntries = repository.getEntries(session.uid).first()
                         val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
                         cloudSyncManager.uploadToServer(session.uid, finalEntries, config)
+                        
+                        // Update active working entry StateFlow immediately
+                        val active = repository.getActiveEntry(session.uid)
+                        _activeWorkingEntry.value = active
                         
                         hasRestoredForSession[session.uid] = true
                         _cloudSyncStatus.value = "Đã đồng bộ"
@@ -415,6 +422,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
             viewModelScope.launch(Dispatchers.IO) {
                 try {
+                    syncAttendanceLogsFromFirestore(session.uid)
                     val list = repository.getEntries(session.uid).first()
                     val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
                     cloudSyncManager.uploadToServer(session.uid, list, config)
@@ -473,14 +481,106 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 for (entry in entries) {
                     repository.insertOrUpdate(entry)
                 }
-                _cloudSyncStatus.value = "Đã khôi phục đám mây"
-                _triggerRefresh.value += 1
-            } else {
-                _cloudSyncStatus.value = "Không tìm thấy dữ liệu mây"
             }
+            syncAttendanceLogsFromFirestore(userId)
+            _cloudSyncStatus.value = "Đã khôi phục đám mây"
+            _triggerRefresh.value += 1
         } catch (e: Exception) {
             _cloudSyncStatus.value = "Lỗi khôi phục đám mây"
             android.util.Log.e("TimeSnapViewModel", "Failed suspended server restore", e)
+        }
+    }
+
+    private suspend fun syncAttendanceLogsFromFirestore(userId: String) {
+        if (userId.startsWith("demo") || userId.contains("demo")) return
+        try {
+            android.util.Log.d("TimeSnapViewModel", "Syncing attendance logs from Firestore for $userId")
+            val remoteRecords = com.example.data.FirestoreService.getAttendanceLogsForUser(userId)
+            if (remoteRecords.isEmpty()) return
+
+            val currentEntries = repository.getEntries(userId).first()
+            val config = repository.getConfigDirect(userId) ?: UserConfig(userId = userId)
+
+            for (log in remoteRecords) {
+                var formattedDate = log.dateString.trim()
+                try {
+                    if (formattedDate.contains("-")) {
+                        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                        val date = parser.parse(formattedDate)
+                        if (date != null) {
+                            formattedDate = formatter.format(date)
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TimeSnapViewModel", "Failed to parse log date: ${log.dateString}", e)
+                }
+
+                if (formattedDate.isBlank() && log.clockInTime > 0) {
+                    formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(log.clockInTime))
+                }
+                if (formattedDate.isBlank()) continue
+
+                val existingEntry = currentEntries.find { entry ->
+                    entry.date == formattedDate || 
+                    (entry.checkInTime != null && log.clockInTime > 0 && 
+                     SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(entry.checkInTime)) == formattedDate)
+                }
+
+                val remoteClockOut = log.clockOutTime
+                val remoteClockIn = log.clockInTime
+                val remoteIsWorking = (remoteClockOut == null || remoteClockOut == 0L) && (remoteClockIn > 0L)
+
+                if (existingEntry != null) {
+                    val needsUpdate = (existingEntry.checkOutTime != remoteClockOut) ||
+                                      (existingEntry.isWorking != remoteIsWorking) ||
+                                      (remoteClockIn > 0L && existingEntry.checkInTime != remoteClockIn)
+
+                    if (needsUpdate) {
+                        android.util.Log.d("TimeSnapViewModel", "Updating local TimeEntry for $formattedDate from Firestore (isWorking: ${existingEntry.isWorking} -> $remoteIsWorking, checkOut: ${existingEntry.checkOutTime} -> $remoteClockOut)")
+                        val updated = existingEntry.copy(
+                            checkInTime = if (remoteClockIn > 0L) remoteClockIn else existingEntry.checkInTime,
+                            checkOutTime = remoteClockOut,
+                            isWorking = remoteIsWorking,
+                            note = if (log.notes.isNotBlank()) log.notes else existingEntry.note
+                        )
+                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, config)
+                        repository.insertOrUpdate(calculated)
+                    }
+                } else {
+                    val cal = Calendar.getInstance()
+                    var isSunday = false
+                    try {
+                        val parser = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                        val date = parser.parse(formattedDate)
+                        if (date != null) {
+                            cal.time = date
+                            isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+
+                    val dayType = if (isSunday) "SUNDAY" else "NORMAL"
+                    val newEntry = TimeEntry(
+                        id = 0,
+                        userId = userId,
+                        date = formattedDate,
+                        checkInTime = if (remoteClockIn > 0L) remoteClockIn else null,
+                        checkOutTime = remoteClockOut,
+                        isWorking = remoteIsWorking,
+                        dayType = dayType,
+                        note = log.notes.takeIf { it.isNotBlank() }
+                    )
+                    val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, config)
+                    repository.insertOrUpdate(calculated)
+                }
+            }
+            val active = repository.getActiveEntry(userId)
+            _activeWorkingEntry.value = active
+            _triggerRefresh.value += 1
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Error syncing attendance logs from Firestore for $userId", e)
         }
     }
 
