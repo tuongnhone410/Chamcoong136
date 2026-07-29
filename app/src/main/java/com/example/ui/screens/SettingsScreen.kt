@@ -1552,7 +1552,7 @@ fun AllowanceRowItem(
         "MONTHLY_PRO_RATED" -> "Theo tháng (/26)"
         "MONTHLY_FLAT" -> "Tháng cố định"
         "PER_WORK_DAY" -> "Theo ngày công"
-        "OT_MEAL_GE_2H" -> "Cơm OT ≥ 2h"
+        "OT_MEAL_GE_2H", "OT_MEAL_GE_1H" -> "Cơm OT ≥ 1h"
         "PER_NIGHT_SHIFT" -> "Số ca đêm"
         else -> "Theo tháng (/26)"
     }
@@ -1674,11 +1674,11 @@ fun AllowanceEditDialog(
                         "MONTHLY_PRO_RATED" to ("Theo tháng (/26)" to "Chia 26 ngày công chuẩn và nhân ngày làm thực tế"),
                         "MONTHLY_FLAT" to ("Tháng cố định" to "Hưởng đủ 100% cố định không tính theo ngày công"),
                         "PER_WORK_DAY" to ("Theo ngày công" to "Cộng thêm theo số ngày đi làm thực tế"),
-                        "OT_MEAL_GE_2H" to ("Cơm OT ≥ 2h" to "Nhân với số ngày tăng ca từ 2 giờ trở lên"),
+                        "OT_MEAL_GE_1H" to ("Cơm OT ≥ 1h" to "Nhân với số ngày tăng ca từ 1 giờ trở lên"),
                         "PER_NIGHT_SHIFT" to ("Theo số ca đêm" to "Nhân trực tiếp với số ca làm việc ban đêm")
                     ).forEach { (typeKey, info) ->
                         val (typeLabel, description) = info
-                        val isSelected = selectedType == typeKey
+                        val isSelected = selectedType == typeKey || (typeKey == "OT_MEAL_GE_1H" && selectedType == "OT_MEAL_GE_2H")
                         
                         Box(
                             modifier = Modifier

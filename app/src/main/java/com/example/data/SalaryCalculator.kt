@@ -263,7 +263,7 @@ object SalaryCalculator {
                     totalWorkDays * allowanceValue
                 }
             }
-            "OT_MEAL_GE_2H" -> {
+            "OT_MEAL_GE_2H", "OT_MEAL_GE_1H" -> {
                 comOtCount * allowanceValue
             }
             "PER_NIGHT_SHIFT" -> {
@@ -417,8 +417,8 @@ object SalaryCalculator {
                 comCaCount++
             }
             
-            // comOtCount: Only count if calculated OT is >= 2.0h (satisfying OT meal >= 2 hours condition)
-            if (e.otHours >= 2.0) {
+            // comOtCount: Only count if calculated OT is >= 1.0h (satisfying OT meal >= 1 hour condition)
+            if (e.otHours >= 1.0) {
                 comOtCount++
             }
         }

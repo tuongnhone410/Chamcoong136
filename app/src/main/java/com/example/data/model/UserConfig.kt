@@ -88,7 +88,7 @@ data class UserConfig(
         fun getDefaultCalcType(field: String): String {
             return when (field) {
                 "pcComCa" -> "PER_WORK_DAY"
-                "pcComOt" -> "OT_MEAL_GE_2H"
+                "pcComOt" -> "OT_MEAL_GE_1H"
                 "pcKhac" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
                 "pcThamNien" -> "MONTHLY_FLAT"
                 "tienChuyenCanGoc" -> "MONTHLY_PRO_RATED"
