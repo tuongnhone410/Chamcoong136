@@ -441,7 +441,7 @@ fun getEmployeeShiftStatus(rec: AttendanceRecord?): ShiftStatusInfo {
 
     return if (rec.clockInTime != 0L) {
         if (outStr == null) {
-            ShiftStatusInfo("+$inStr", Color(0xFF00E676), "")
+            ShiftStatusInfo(inStr, Color(0xFF00E676), "")
         } else {
             ShiftStatusInfo(outStr, Color(0xFF4C84FF), "")
         }
@@ -516,11 +516,11 @@ fun EmployeeListView(
                 item {
                     val inShiftCount = employees.count { 
                         val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
-                        status.label == "Đang trong ca"
+                        status.color == Color(0xFF00E676)
                     }
                     val outShiftCount = employees.count { 
                         val status = getEmployeeShiftStatus(todayAttendanceMap[it.userId])
-                        status.label == "Đã ra ca"
+                        status.color == Color(0xFF4C84FF)
                     }
                     val notInCount = employees.size - inShiftCount - outShiftCount
 
