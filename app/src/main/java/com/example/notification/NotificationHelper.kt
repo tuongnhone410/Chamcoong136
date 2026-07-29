@@ -157,19 +157,24 @@ object NotificationHelper {
                     }
                 }
 
-                // Định nghĩa các mốc nhắc nhở (nhắc nhở trước 15 phút)
+                val reminderMinutesStr = sharedPrefs.getString("reminder_minutes_before", "15") ?: "15"
+                val reminderMinutes = reminderMinutesStr.toIntOrNull() ?: 15
+
+                // Định nghĩa các mốc nhắc nhở (nhắc nhở trước giờ vào ca: Ca ngày 07:30, Ca đêm 19:30)
                 val reminder1 = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 7)
-                    set(Calendar.MINUTE, 15)
+                    set(Calendar.MINUTE, 30)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
+                    add(Calendar.MINUTE, -reminderMinutes)
                 }
 
                 val reminder2 = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 19)
-                    set(Calendar.MINUTE, 15)
+                    set(Calendar.MINUTE, 30)
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
+                    add(Calendar.MINUTE, -reminderMinutes)
                 }
 
                 val targetTime = Calendar.getInstance()

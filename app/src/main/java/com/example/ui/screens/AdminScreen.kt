@@ -741,18 +741,7 @@ fun EmployeeDetailView(
     var isAllMonths by remember { mutableStateOf(false) }
 
     fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
-        if (monthYmd.isEmpty()) return true
-        val parts = monthYmd.split("-")
-        if (parts.size < 2) return dateStr.contains(monthYmd)
-        val year = parts[0]
-        val month = parts[1]
-        val slashPattern = "/$month/$year"
-        val dashPattern = "-$month-$year"
-        val altDashPattern = "$year-$month"
-        return dateStr.startsWith(altDashPattern) || 
-               dateStr.contains(slashPattern) || 
-               dateStr.contains(dashPattern) ||
-               dateStr.endsWith(slashPattern)
+        return com.example.util.ExportUtils.isRecordInMonth(dateStr, monthYmd)
     }
 
     val filteredRecords = remember(records, selectedMonthYm, isAllMonths) {
@@ -2262,13 +2251,7 @@ fun EmployeePayslipView(
             records.map { it.toTimeEntry() }
         } else {
             records.filter { record ->
-                val ds = record.dateString
-                val matchYmd = ds.startsWith(targetMonthYm)
-                val matchDmy = if (targetMonthYm.contains("-")) {
-                    val parts = targetMonthYm.split("-")
-                    ds.contains("/${parts[1]}/${parts[0]}") || ds.endsWith("/${parts[1]}/${parts[0]}")
-                } else false
-                matchYmd || matchDmy
+                ExportUtils.isRecordInMonth(record.dateString, targetMonthYm)
             }.map { it.toTimeEntry() }
         }
     }

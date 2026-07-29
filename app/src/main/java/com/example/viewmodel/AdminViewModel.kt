@@ -266,16 +266,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     
                     // Filter records for the target month (handles yyyy-MM-dd and dd/MM/yyyy)
                     val monthEntries = records.filter { record ->
-                        val ds = record.dateString
-                        val matchYmd = ds.startsWith(finalMonthStr)
-                        val matchDmy = if (finalMonthStr.contains("-")) {
-                            val parts = finalMonthStr.split("-")
-                            if (parts.size >= 2) {
-                                ds.contains("/${parts[1]}/${parts[0]}") || ds.endsWith("/${parts[1]}/${parts[0]}")
-                            } else false
-                        } else false
-                        
-                        matchYmd || matchDmy
+                        ExportUtils.isRecordInMonth(record.dateString, finalMonthStr)
                     }.map { it.toTimeEntry() }
                     
                     // 2. Calculate summary
@@ -318,13 +309,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
                 val records = FirestoreService.getAttendanceLogsForUser(employee.userId)
                 val monthEntries = records.filter { record ->
-                    val ds = record.dateString
-                    val matchYmd = ds.startsWith(finalMonthStr)
-                    val matchDmy = if (finalMonthStr.contains("-")) {
-                        val parts = finalMonthStr.split("-")
-                        ds.contains("/${parts[1]}/${parts[0]}")
-                    } else false
-                    matchYmd || matchDmy
+                    ExportUtils.isRecordInMonth(record.dateString, finalMonthStr)
                 }.map { it.toTimeEntry() }
 
                 val summary = ExportUtils.calculateSalarySummary(monthEntries, employee, finalMonthStr)

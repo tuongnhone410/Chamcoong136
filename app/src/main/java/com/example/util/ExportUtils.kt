@@ -98,6 +98,31 @@ object ExportUtils {
         }
     }
 
+    fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
+        if (monthYmd.isEmpty()) return true
+        val parts = monthYmd.split("-")
+        if (parts.size < 2) return dateStr.contains(monthYmd)
+        val year = parts[0]
+        val monthStr = parts[1]
+        val monthIntStr = monthStr.toIntOrNull()?.toString() ?: monthStr
+        
+        val slashPattern1 = "/$monthStr/$year"
+        val slashPattern2 = "/$monthIntStr/$year"
+        val dashPattern1 = "-$monthStr-$year"
+        val dashPattern2 = "-$monthIntStr-$year"
+        val altDashPattern1 = "$year-$monthStr"
+        val altDashPattern2 = "$year-$monthIntStr"
+        
+        return dateStr.startsWith(altDashPattern1) || 
+               dateStr.startsWith(altDashPattern2) ||
+               dateStr.contains(slashPattern1) || 
+               dateStr.contains(slashPattern2) || 
+               dateStr.contains(dashPattern1) || 
+               dateStr.contains(dashPattern2) || 
+               dateStr.endsWith(slashPattern1) || 
+               dateStr.endsWith(slashPattern2)
+    }
+
     fun calculateSalarySummary(
         entries: List<TimeEntry>, 
         config: UserConfig, 

@@ -12,8 +12,8 @@ class TimeRepository(
 ) {
     fun getEntries(userId: String): Flow<List<TimeEntry>> = timeEntryDao.getEntriesForUser(userId)
 
-    fun getEntriesInMonth(userId: String, monthPattern: String): Flow<List<TimeEntry>> {
-        return timeEntryDao.getEntriesForUserInMonth(userId, monthPattern)
+    fun getEntriesInMonth(userId: String, monthPattern: String, altMonthPattern: String): Flow<List<TimeEntry>> {
+        return timeEntryDao.getEntriesForUserInMonth(userId, monthPattern, altMonthPattern)
     }
 
     suspend fun getEntryByDate(userId: String, date: String): TimeEntry? {
@@ -32,12 +32,12 @@ class TimeRepository(
         timeEntryDao.delete(entry)
     }
 
-    suspend fun deleteEntriesInMonth(userId: String, monthPattern: String) {
-        timeEntryDao.deleteEntriesInMonth(userId, monthPattern)
+    suspend fun deleteEntriesInMonth(userId: String, monthPattern: String, altMonthPattern: String) {
+        timeEntryDao.deleteEntriesInMonth(userId, monthPattern, altMonthPattern)
     }
 
-    suspend fun getEntriesInMonthDirect(userId: String, monthPattern: String): List<TimeEntry> {
-        return timeEntryDao.getEntriesForUserInMonthDirect(userId, monthPattern)
+    suspend fun getEntriesInMonthDirect(userId: String, monthPattern: String, altMonthPattern: String): List<TimeEntry> {
+        return timeEntryDao.getEntriesForUserInMonthDirect(userId, monthPattern, altMonthPattern)
     }
 
     suspend fun getLastCompletedEntries(userId: String, limit: Int): List<TimeEntry> {

@@ -1,5 +1,6 @@
 
 package com.example.ui.screens
+import java.util.Locale
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 import android.widget.Toast
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -983,6 +985,8 @@ fun SettingsScreen(
             val notificationPrefs = LocalContext.current.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
             var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
             var smartLearningEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("smart_learning_enabled", true)) }
+            var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
+            var showMinutesPickerDialog by remember { mutableStateOf(false) }
 
             CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1073,6 +1077,56 @@ fun SettingsScreen(
                             )
                         }
 
+                        Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+
+                        // Cấu hình thời gian nhắc chung trước giờ vào ca
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    showMinutesPickerDialog = true
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Số phút nhắc nhở trước ca",
+                                    color = White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Gửi thông báo nhắc nhở trước giờ vào ca (phút).",
+                                    color = LightGray,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "$reminderMinutes phút",
+                                    color = NeonBlue,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = "Edit Reminder Minutes",
+                                    tint = LightGray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         // Info card explaining the behavior
                         Box(
                             modifier = Modifier
@@ -1089,9 +1143,9 @@ fun SettingsScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca (Ca ngày 07:30 hoặc Ca đêm 19:30).\n" +
+                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca (Ca ngày hoặc Ca đêm).\n" +
                                            "• Vào ngày thứ Hai chuyển tiếp hoặc khi đổi ca, hệ thống sẽ tự nhắc nhở cả 2 ca để bạn không quên, và sẽ học ngay lập tức sau lần chấm công đầu tiên của tuần mới.\n" +
-                                           "• Nếu bỏ qua thông báo và vẫn chấm ca cũ, hệ thống vẫn duy trì lịch nhắc cũ để tránh báo sai.",
+                                           "• Gửi thông báo trước giờ vào ca đúng $reminderMinutes phút theo cài đặt của bạn.",
                                     color = LightGray,
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp
@@ -1100,6 +1154,26 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            if (showMinutesPickerDialog) {
+                MinutesReminderPickerDialog(
+                    title = "Cài đặt số phút nhắc nhở",
+                    initialMinutes = reminderMinutes,
+                    onDismiss = { showMinutesPickerDialog = false },
+                    onSave = { newMinutes ->
+                        reminderMinutes = newMinutes
+                        notificationPrefs.edit().putString("reminder_minutes_before", newMinutes).apply()
+                        
+                        val session = sessionState
+                        if (session != null) {
+                            com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                        }
+                        
+                        Toast.makeText(context, "Đã cập nhật thời gian nhắc nhở thành $newMinutes phút trước khi vào ca", Toast.LENGTH_SHORT).show()
+                        showMinutesPickerDialog = false
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -1723,6 +1797,89 @@ fun AllowanceEditDialog(
                             }
                         }
                     }
+                }
+            }
+        },
+        containerColor = Color(0xFF121212),
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+fun MinutesReminderPickerDialog(
+    title: String,
+    initialMinutes: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var textValue by remember { mutableStateOf(initialMinutes) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    val trimmed = textValue.trim()
+                    val minutesVal = trimmed.toIntOrNull()
+                    if (minutesVal != null && minutesVal in 1..240) {
+                        onSave(trimmed)
+                    }
+                },
+                enabled = textValue.trim().toIntOrNull() != null && textValue.trim().toInt() in 1..240,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+            ) {
+                Text("Xác nhận", color = White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy", color = LightGray)
+            }
+        },
+        title = {
+            Text(
+                text = title,
+                color = White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Nhập số phút nhắc nhở trước giờ vào ca:",
+                    color = LightGray,
+                    fontSize = 13.sp
+                )
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { newValue ->
+                        if (newValue.all { it.isDigit() } && newValue.length <= 3) {
+                            textValue = newValue
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = White, fontSize = 16.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = White,
+                        unfocusedTextColor = White,
+                        focusedBorderColor = NeonBlue,
+                        unfocusedBorderColor = MediumGray,
+                        cursorColor = NeonBlue
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                val isError = textValue.trim().toIntOrNull() == null || textValue.trim().toInt() <= 0 || textValue.trim().toInt() > 240
+                if (isError && textValue.isNotEmpty()) {
+                    Text(
+                        text = "Vui lòng nhập từ 1 đến 240 phút",
+                        color = AccentOrange,
+                        fontSize = 11.sp
+                    )
                 }
             }
         },

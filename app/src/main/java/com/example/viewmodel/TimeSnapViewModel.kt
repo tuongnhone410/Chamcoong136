@@ -82,7 +82,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         if (session != null) {
             val parts = month.split("-")
             val monthPattern = if (parts.size == 2) "%/${parts[1]}/${parts[0]}" else "%"
-            repository.getEntriesInMonth(session.uid, monthPattern)
+            val altMonthPattern = if (parts.size == 2) "${parts[0]}-${parts[1]}-%" else "%"
+            repository.getEntriesInMonth(session.uid, monthPattern, altMonthPattern)
         } else {
             flowOf(emptyList())
         }
@@ -1027,10 +1028,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             val parts = month.split("-")
             val monthPattern = if (parts.size == 2) "%/${parts[1]}/${parts[0]}" else "%"
-            val allEntries = repository.getEntriesInMonthDirect(session.uid, monthPattern)
+            val altMonthPattern = if (parts.size == 2) "${parts[0]}-${parts[1]}-%" else "%"
+            val allEntries = repository.getEntriesInMonthDirect(session.uid, monthPattern, altMonthPattern)
             val phepToRestore = allEntries.count { it.dayType == "PAID_LEAVE" }
             
-            repository.deleteEntriesInMonth(session.uid, monthPattern)
+            repository.deleteEntriesInMonth(session.uid, monthPattern, altMonthPattern)
             
             if (phepToRestore > 0) {
                 val config = repository.getConfigDirect(session.uid)

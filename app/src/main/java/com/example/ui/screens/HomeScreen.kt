@@ -926,8 +926,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     val todayStr = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) }
-                    val currentYearMonth = remember { SimpleDateFormat("/MM/yyyy", Locale.getDefault()).format(Date()) }
-                    val sortedLogs = remember(recentEntries, todayStr, isExpanded, currentYearMonth) {
+                    val sortedLogs = remember(recentEntries, todayStr, isExpanded, selectedMonth) {
                         val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
                         val todayTime = try { sdf.parse(todayStr)?.time ?: Long.MAX_VALUE } catch(e: Exception) { Long.MAX_VALUE }
                         val filtered = recentEntries.filter { 
@@ -940,7 +939,7 @@ fun HomeScreen(
                         }
                         if (isExpanded) {
                             filtered
-                                .filter { it.date.endsWith(currentYearMonth) || it.date.contains(currentYearMonth) }
+                                .filter { com.example.util.ExportUtils.isRecordInMonth(it.date, selectedMonth) }
                                 .sortedWith { a, b ->
                                     try {
                                         val ta = (if (a.date.contains("/")) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) else SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())).parse(a.date)?.time ?: 0L
