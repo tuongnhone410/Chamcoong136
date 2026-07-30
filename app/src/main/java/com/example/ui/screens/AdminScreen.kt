@@ -757,13 +757,9 @@ fun EmployeeDetailView(
     val monthStats = remember(filteredRecords, employee) {
         val workDays = filteredRecords.count { it.clockOutTime != null }
         val lateCount = filteredRecords.count { r ->
-            if (r.clockInTime > 0) {
-                val tempEntry = com.example.data.model.TimeEntry(
-                    userId = employee.userId,
-                    date = r.dateString,
-                    checkInTime = r.clockInTime,
-                    checkOutTime = r.clockOutTime
-                )
+            val isLeave = com.example.data.SalaryCalculator.isLeaveType(r.status)
+            if (!isLeave && r.clockInTime > 0) {
+                val tempEntry = r.toTimeEntry()
                 com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee).lateMinutes > 0
             } else {
                 false
@@ -2133,24 +2129,16 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 
     val isInShift = record.clockInTime != 0L && (record.clockOutTime == null || record.clockOutTime == 0L)
 
-    val calculatedEntry = remember(record.clockInTime, record.clockOutTime, employee) {
-        if (record.clockInTime == 0L) null
+    val tempEntry = record.toTimeEntry()
+    val calculatedEntry = remember(record.clockInTime, record.clockOutTime, record.status, employee) {
+        if (record.clockInTime == 0L && !com.example.data.SalaryCalculator.isLeaveType(record.status)) null
         else {
-            var outMs = record.clockOutTime
-            if (outMs != null && outMs <= record.clockInTime) {
-                outMs += 24 * 3600 * 1000L
-            }
-            val tempEntry = com.example.data.model.TimeEntry(
-                userId = employee.userId,
-                date = record.dateString,
-                checkInTime = record.clockInTime,
-                checkOutTime = outMs
-            )
             com.example.data.SalaryCalculator.calculateSingleEntry(tempEntry, employee)
         }
     }
 
-    val isLate = calculatedEntry?.let { it.lateMinutes > 0 } ?: false
+    val isLeave = com.example.data.SalaryCalculator.isLeaveType(record.status) || com.example.data.SalaryCalculator.isLeaveType(calculatedEntry?.dayType)
+    val isLate = if (isLeave) false else (calculatedEntry?.let { it.lateMinutes > 0 } ?: false)
     val otHours = calculatedEntry?.otHours ?: 0.0
     val workDay = calculatedEntry?.workDay ?: 0.0
     val isNightShift = calculatedEntry?.shiftType == "NIGHT"
@@ -2204,7 +2192,17 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
         }
     }
 
+    val statusUpper = record.status.uppercase(Locale.ROOT)
+    val leaveBadge = when {
+        statusUpper.contains("PAID") || statusUpper == "NP" || statusUpper == "PHEP" || statusUpper.contains("PHÉP") -> "🟡 Phép năm" to Color(0xFFF2C94C)
+        statusUpper.contains("UNAUTHORIZED") || statusUpper == "KP" || statusUpper.contains("KHONGPHEP") || statusUpper.contains("KHÔNG PHÉP") -> "🔴 Nghỉ không phép" to Color(0xFFEB5757)
+        statusUpper.contains("UNPAID") || statusUpper.contains("KHÔNG LƯƠNG") || statusUpper.contains("KHONG LUONG") -> "🟠 Nghỉ không lương" to Color(0xFFFF9800)
+        statusUpper.contains("HOLIDAY") || statusUpper.contains("LỄ") || statusUpper.contains("LE") -> "🟣 Nghỉ lễ" to Color(0xFFBB86FC)
+        else -> null
+    }
+
     val accentColor = when {
+        leaveBadge != null -> leaveBadge.second
         isInShift -> PrimaryBlue
         isLate -> Color(0xFFF59E0B)
         record.clockOutTime != null -> SuccessGreen
@@ -2311,14 +2309,6 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val leaveBadge = when (record.status) {
-                        "PAID_LEAVE", "NP", "PHEP", "Nghỉ phép", "Nghỉ phép có lương" -> "🟡 Phép năm" to Color(0xFFF2C94C)
-                        "UNPAID_LEAVE", "Nghỉ không lương" -> "🟠 Nghỉ không lương" to Color(0xFFFF9800)
-                        "UNAUTHORIZED_LEAVE", "KP", "Nghỉ không phép", "Không phép", "Nghỉ KP" -> "🔴 Nghỉ không phép" to Color(0xFFEB5757)
-                        "HOLIDAY_LEAVE", "Nghỉ lễ" -> "🟣 Nghỉ lễ" to Color(0xFFBB86FC)
-                        else -> null
-                    }
-
                     if (leaveBadge != null) {
                         Surface(
                             color = leaveBadge.second.copy(alpha = 0.2f),
@@ -2375,7 +2365,7 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (workDay >= 1.0) "1 công" else if (workDay > 0) "${workDay} công" else "Thường",
+                        text = if (leaveBadge != null) leaveBadge.first else if (isInShift) "Trong ca" else if (isLate) "Đi trễ" else if (workDay >= 1.0) "1 công" else if (workDay > 0) "${workDay} công" else "Thường",
                         color = TextSecondary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,

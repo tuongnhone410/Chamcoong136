@@ -102,16 +102,24 @@ object SalaryCalculator {
         return cal.timeInMillis
     }
 
+    fun isLeaveType(dayType: String?): Boolean {
+        if (dayType.isNullOrBlank()) return false
+        val upper = dayType.uppercase(Locale.ROOT)
+        return upper == "PAID_LEAVE" || upper == "UNPAID_LEAVE" || upper == "UNAUTHORIZED_LEAVE" || upper == "HOLIDAY_LEAVE" ||
+               upper == "PAIDLEAVE" || upper == "UNPAIDLEAVE" || upper == "UNAUTHORIZEDLEAVE" || upper == "HOLIDAYLEAVE" ||
+               upper == "PAID" || upper == "UNPAID" || upper == "UNAUTHORIZED" || upper == "HOLIDAY" ||
+               upper == "NP" || upper == "PHEP" || upper == "KP" || upper == "KHONGPHEP" || upper == "ABSENT" ||
+               upper.contains("LEAVE") || upper.contains("PHÉP") || upper.contains("PHEP") || upper.contains("NGHỈ") || upper.contains("NGHI")
+    }
+
     /**
      * Step 1 - 6: Process and calculate single record details.
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
     fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
-        if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE" || entry.dayType == "UNPAID_LEAVE" || entry.dayType == "UNAUTHORIZED_LEAVE") {
-            val workD = when (entry.dayType) {
-                "PAID_LEAVE", "HOLIDAY_LEAVE" -> 1.0
-                else -> 0.0
-            }
+        if (isLeaveType(entry.dayType)) {
+            val upper = entry.dayType.uppercase(Locale.ROOT)
+            val workD = if (upper.contains("PAID") || upper == "NP" || upper.contains("PHEP") || upper.contains("PHÉP") || upper.contains("HOLIDAY") || upper.contains("LỄ") || upper.contains("LE")) 1.0 else 0.0
             return entry.copy(
                 workDay = workD,
                 otHours = 0.0,

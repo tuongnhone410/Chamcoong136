@@ -181,7 +181,7 @@ fun TabHistoryContent(
                                         val isHolidayLeave = stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE"
                                         
                                         when {
-                                            isPaidLeave -> Color(0xFFF2C94C).copy(alpha = 0.2f)
+                                            isPaidLeave || stUpper.contains("PAID") || stUpper.contains("PHÉP") -> Color(0xFFF2C94C).copy(alpha = 0.2f)
                                             isUnpaidLeave -> Color(0xFFFF9800).copy(alpha = 0.2f)
                                             isUnauthorizedLeave -> Color(0xFFEB5757).copy(alpha = 0.2f)
                                             isHolidayLeave -> Color(0xFF9B51E0).copy(alpha = 0.2f)
@@ -213,7 +213,7 @@ fun TabHistoryContent(
                         )
                         if (record != null) {
                             val stUpper = record.status.uppercase(Locale.ROOT)
-                            val isPaidLeave = stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP"
+                            val isPaidLeave = stUpper.contains("PAID") || stUpper == "NP" || stUpper.contains("PHEP") || stUpper.contains("PHÉP")
                             val isUnpaidLeave = stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID"
                             val isUnauthorizedLeave = stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP")
                             val isHolidayLeave = stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE"
