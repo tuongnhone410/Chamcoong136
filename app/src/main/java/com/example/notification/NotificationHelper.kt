@@ -119,6 +119,12 @@ object NotificationHelper {
         val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
         if (!notificationsEnabled) return
 
+        val autoCheckoutEnabled = sharedPrefs.getBoolean("auto_checkout_enabled", false)
+        if (autoCheckoutEnabled) {
+            android.util.Log.d("NotificationHelper", "Chế độ tự động ra ca đang bật. Tắt thông báo nhắc nhở ra ca.")
+            return
+        }
+
         val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
         val checkInTime = activeEntry.checkInTime ?: System.currentTimeMillis()
 
@@ -152,6 +158,88 @@ object NotificationHelper {
         }
 
         scheduleCheckOutReminder(context, uid, delayMs, shift.shiftId)
+    }
+
+    // Ước tính giờ ra ca dựa trên lịch sử làm việc cũ hoặc giờ ca mặc định
+    suspend fun estimateHistoricalCheckoutTime(context: Context, uid: String, activeEntry: TimeEntry): Long {
+        val checkInMs = activeEntry.checkInTime ?: System.currentTimeMillis()
+        val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
+        val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInMs }
+        
+        var targetHour = -1
+        var targetMin = -1
+
+        try {
+            val db = com.example.data.db.AppDatabase.getInstance(context)
+            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 15)
+            val validCheckoutTimes = entries.mapNotNull { it.checkOutTime }
+            if (validCheckoutTimes.isNotEmpty()) {
+                var totalMinutesInDay = 0L
+                for (coTime in validCheckoutTimes) {
+                    val calCO = Calendar.getInstance().apply { timeInMillis = coTime }
+                    val mins = calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
+                    totalMinutesInDay += mins
+                }
+                val avgMins = (totalMinutesInDay / validCheckoutTimes.size).toInt()
+                targetHour = avgMins / 60
+                targetMin = avgMins % 60
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NotificationHelper", "Lỗi lấy lịch sử checkout: ${e.message}")
+        }
+
+        if (targetHour == -1) {
+            val endParts = shift.endTime.split(":")
+            targetHour = endParts.getOrNull(0)?.toIntOrNull() ?: 19
+            targetMin = endParts.getOrNull(1)?.toIntOrNull() ?: 30
+        }
+
+        val targetCal = Calendar.getInstance().apply {
+            timeInMillis = checkInMs
+            set(Calendar.HOUR_OF_DAY, targetHour)
+            set(Calendar.MINUTE, targetMin)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        if (shift.shiftType == "NIGHT" || targetCal.before(calCheckIn)) {
+            targetCal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        return targetCal.timeInMillis
+    }
+
+    // Đặt lịch Hẹn giờ / Tự động Ra Ca
+    fun scheduleAutoCheckOut(context: Context, uid: String, targetTimeMs: Long) {
+        val now = System.currentTimeMillis()
+        val delayMs = (targetTimeMs - now).coerceAtLeast(1000L)
+
+        // Tắt nhắc nhở ra ca thông thường để tránh tạo tín hiệu nhắc nhở khi đã bật tự động ra ca
+        cancelCheckOutReminder(context, uid)
+
+        val data = Data.Builder()
+            .putString("uid", uid)
+            .putLong("scheduledTimeMs", targetTimeMs)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<AutoCheckOutWorker>()
+            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+            .setInputData(data)
+            .addTag("auto_checkout_$uid")
+            .build()
+
+        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+            "auto_checkout_$uid",
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+        android.util.Log.d("NotificationHelper", "Đã đặt lịch Hẹn giờ / Tự động ra ca sau ${delayMs / 1000 / 60} phút cho user $uid")
+    }
+
+    // Hủy Hẹn giờ / Tự động Ra Ca
+    fun cancelAutoCheckOut(context: Context, uid: String) {
+        WorkManager.getInstance(context.applicationContext).cancelUniqueWork("auto_checkout_$uid")
+        android.util.Log.d("NotificationHelper", "Đã hủy Tự động ra ca cho user $uid")
     }
 
     // Hủy nhắc nhở Check-out (gọi khi nhân viên check-out thủ công trước giờ)

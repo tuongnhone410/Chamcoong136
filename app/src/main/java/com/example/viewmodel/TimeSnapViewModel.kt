@@ -287,23 +287,28 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun deleteTimeEntryFromLegacyLog(entry: TimeEntry) {
+    private suspend fun deleteTimeEntryFromLegacyLog(entry: TimeEntry) {
         if (entry.userId.startsWith("demo")) return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                com.example.data.FirestoreService.deleteAttendanceRecord(entry.userId, entry.date)
-            } catch (e: Exception) {
-                android.util.Log.e("TimeSnapViewModel", "Failed to delete legacy log: ${e.message}")
-            }
+        try {
+            com.example.data.FirestoreService.deleteAttendanceRecord(entry.userId, entry.date)
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Failed to delete legacy log: ${e.message}")
         }
     }
 
     // Toggle Check-In / Check-Out
-    fun toggleCheckIn(note: String = "") {
+    fun toggleCheckIn(
+        note: String = "",
+        enableAutoCheckout: Boolean? = null,
+        customCheckoutTime: String? = null
+    ) {
         val session = currentUserSession.value ?: return
         val todayStr = dateFormatter.format(Date())
 
         viewModelScope.launch(Dispatchers.IO) {
+            val sharedPrefs = getApplication<Application>().getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+            val isAutoCheckoutEnabled = enableAutoCheckout ?: sharedPrefs.getBoolean("auto_checkout_enabled", false)
+            val storedCustomTime = customCheckoutTime ?: sharedPrefs.getString("custom_checkout_time", "") ?: ""
             val active = repository.getActiveEntry(session.uid)
             if (active == null) {
                 // Check if an entry already exists for today. If so, overwrite it or create new
@@ -340,15 +345,56 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
-                // Lên lịch nhắc Check-out nối đuôi động dựa trên ca làm việc thực tế
-                try {
-                    com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(
-                        context = getApplication(),
-                        uid = session.uid,
-                        activeEntry = calculated
-                    )
-                } catch (e: Exception) {
-                    android.util.Log.e("TimeSnapViewModel", "Failed to schedule checkout reminder: ${e.message}")
+                if (isAutoCheckoutEnabled) {
+                    try {
+                        var targetMs: Long = 0L
+                        if (storedCustomTime.isNotBlank()) {
+                            val parts = storedCustomTime.split(":")
+                            val targetHour = parts.getOrNull(0)?.toIntOrNull()
+                            val targetMin = parts.getOrNull(1)?.toIntOrNull()
+                            if (targetHour != null && targetMin != null) {
+                                val tCal = Calendar.getInstance().apply {
+                                    timeInMillis = calculated.checkInTime ?: System.currentTimeMillis()
+                                    set(Calendar.HOUR_OF_DAY, targetHour)
+                                    set(Calendar.MINUTE, targetMin)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                                if (tCal.timeInMillis <= (calculated.checkInTime ?: System.currentTimeMillis())) {
+                                    tCal.add(Calendar.DAY_OF_YEAR, 1)
+                                }
+                                targetMs = tCal.timeInMillis
+                            }
+                        }
+
+                        if (targetMs <= 0L) {
+                            // Tự nhìn lại các ngày cũ ra ca lúc mấy giờ
+                            targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(
+                                context = getApplication(),
+                                uid = session.uid,
+                                activeEntry = calculated
+                            )
+                        }
+
+                        com.example.notification.NotificationHelper.scheduleAutoCheckOut(
+                            context = getApplication(),
+                            uid = session.uid,
+                            targetTimeMs = targetMs
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to schedule auto checkout: ${e.message}")
+                    }
+                } else {
+                    // Lên lịch nhắc Check-out nối đuôi động dựa trên ca làm việc thực tế
+                    try {
+                        com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(
+                            context = getApplication(),
+                            uid = session.uid,
+                            activeEntry = calculated
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to schedule checkout reminder: ${e.message}")
+                    }
                 }
             } else {
                 // Perform check-out
@@ -369,9 +415,13 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
-                // Hủy nhắc nhở Check-out vì đã check-out thủ công thành công trước hạn
+                // Hủy nhắc nhở Check-out & Tự động ra ca vì đã check-out thủ công thành công trước hạn
                 try {
                     com.example.notification.NotificationHelper.cancelCheckOutReminder(
+                        context = getApplication(),
+                        uid = session.uid
+                    )
+                    com.example.notification.NotificationHelper.cancelAutoCheckOut(
                         context = getApplication(),
                         uid = session.uid
                     )
@@ -410,7 +460,6 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    syncAttendanceLogsFromFirestore(session.uid)
                     val list = repository.getEntries(session.uid).first()
                     val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
                     cloudSyncManager.uploadToServer(session.uid, list, config)
@@ -1119,6 +1168,10 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val altMonthPattern = if (parts.size == 2) "${parts[0]}-${parts[1]}-%" else "%"
             val allEntries = repository.getEntriesInMonthDirect(session.uid, monthPattern, altMonthPattern)
             val phepToRestore = allEntries.count { it.dayType == "PAID_LEAVE" }
+            
+            for (entry in allEntries) {
+                deleteTimeEntryFromLegacyLog(entry)
+            }
             
             repository.deleteEntriesInMonth(session.uid, monthPattern, altMonthPattern)
             

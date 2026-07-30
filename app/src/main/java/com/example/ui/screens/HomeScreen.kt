@@ -42,6 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -203,6 +204,10 @@ fun HomeScreen(
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
     var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
     var showReminderDialog by remember { mutableStateOf(false) }
+
+    var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
+    var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
+    var showAutoCheckoutSetupDialog by remember { mutableStateOf(false) }
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val userSession by viewModel.currentUserSession.collectAsStateWithLifecycle()
@@ -712,7 +717,11 @@ fun HomeScreen(
                                     )
                                 )
                                 .clickable {
-                                    viewModel.toggleCheckIn(quickNoteText)
+                                    viewModel.toggleCheckIn(quickNoteText, autoCheckoutEnabled, customCheckoutTime)
+                                    if (!isWorking && autoCheckoutEnabled) {
+                                        val msg = if (customCheckoutTime.isNotBlank()) "🤖 Đã bật Tự động ra ca lúc $customCheckoutTime" else "🤖 Đã bật Tự động ra ca (Tự học từ lịch sử cũ)"
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                    }
                                 }
                                 .testTag("in_out_action_button")
                                 .padding(10.dp),
@@ -738,29 +747,93 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Secondary Button: Vào ca bù / Bù chấm công
-                    OutlinedButton(
-                        onClick = { showRetroactiveDialog = true },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue),
-                        border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .height(36.dp)
-                            .testTag("retroactive_checkin_button")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint = PrimaryBlue
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Vào ca bù / Bù chấm công",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
-                        )
+                        // Secondary Button: Vào ca bù / Bù chấm công
+                        OutlinedButton(
+                            onClick = { showRetroactiveDialog = true },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue),
+                            border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .height(36.dp)
+                                .testTag("retroactive_checkin_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = PrimaryBlue
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Vào ca bù / Bù chấm công",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryBlue
+                            )
+                        }
+                    }
+
+                    // Auto-checkout quick config card
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        onClick = { showAutoCheckoutSetupDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (autoCheckoutEnabled) DarkContainer.copy(alpha = 0.9f) else DarkContainer.copy(alpha = 0.5f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (autoCheckoutEnabled) AccentOrange.copy(alpha = 0.6f) else TextSecondary.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .testTag("auto_checkout_config_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "🤖",
+                                    fontSize = 16.sp
+                                )
+                                Column {
+                                    Text(
+                                        text = "Tự động ra ca / Hẹn giờ ra ca",
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (autoCheckoutEnabled) {
+                                            if (customCheckoutTime.isNotBlank()) "Đã hẹn: $customCheckoutTime (Tắt nhắc nhở)" else "Đã bật: Tự động học từ lịch sử ra ca cũ"
+                                        } else "Chưa bật (Chạm để hẹn giờ ra ca tự động)",
+                                        color = if (autoCheckoutEnabled) AccentOrange else TextSecondary,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = autoCheckoutEnabled,
+                                onCheckedChange = { enabled ->
+                                    autoCheckoutEnabled = enabled
+                                    notificationPrefs.edit().putBoolean("auto_checkout_enabled", enabled).apply()
+                                    if (enabled && customCheckoutTime.isBlank()) {
+                                        showAutoCheckoutSetupDialog = true
+                                    }
+                                },
+                                modifier = Modifier.scale(0.8f)
+                            )
+                        }
                     }
 
                     // Estimated earnings if working
@@ -1157,6 +1230,120 @@ fun HomeScreen(
                 )
                 Toast.makeText(context, "Đã bù chấm công ngày $dateStr thành công!", Toast.LENGTH_SHORT).show()
                 showRetroactiveDialog = false
+            }
+        )
+    }
+
+    if (showAutoCheckoutSetupDialog) {
+        val context = LocalContext.current
+        var localTimeText by remember { mutableStateOf(customCheckoutTime) }
+
+        AlertDialog(
+            onDismissRequest = { showAutoCheckoutSetupDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = AccentOrange,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "CÀI ĐẶT TỰ ĐỘNG RA CA",
+                    color = White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Bật tự động ra ca:",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = White
+                        )
+                        Switch(
+                            checked = autoCheckoutEnabled,
+                            onCheckedChange = {
+                                autoCheckoutEnabled = it
+                                notificationPrefs.edit().putBoolean("auto_checkout_enabled", it).apply()
+                            }
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = localTimeText,
+                        onValueChange = { localTimeText = it },
+                        label = { Text("Giờ ra ca dự kiến (vd: 17:30)", fontSize = 12.sp) },
+                        placeholder = { Text("Để trống để tự học lịch sử cũ", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White
+                        )
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(AccentOrange.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                            .border(1.dp, AccentOrange.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "💡 HƯỚNG DẪN TỰ ĐỘNG RA CA:",
+                                color = AccentOrange,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "• Nhập giờ cụ thể (vd 17:30 hoặc 19:30): Hệ thống sẽ hẹn giờ tự động bấm ra ca đúng thời điểm này.\n" +
+                                       "• ĐỂ TRỐNG: Hệ thống sẽ tự nhìn lại các ngày cũ để học thói quen ra ca của bạn và tự động ra ca.\n" +
+                                       "• Khi bật tự động ra ca, bạn sẽ KHÔNG bị làm phiền bởi thông báo nhắc nhở ra ca.",
+                                color = LightGray,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = localTimeText.trim()
+                        customCheckoutTime = trimmed
+                        notificationPrefs.edit()
+                            .putBoolean("auto_checkout_enabled", autoCheckoutEnabled)
+                            .putString("custom_checkout_time", trimmed)
+                            .apply()
+                        showAutoCheckoutSetupDialog = false
+                        val statusMsg = if (autoCheckoutEnabled) {
+                            if (trimmed.isNotBlank()) "Đã lưu hẹn giờ ra ca lúc $trimmed" else "Đã lưu tự động ra ca (tự học lịch sử)"
+                        } else "Đã tắt tự động ra ca"
+                        Toast.makeText(context, statusMsg, Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
+                ) {
+                    Text("Lưu cài đặt", color = White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAutoCheckoutSetupDialog = false }) {
+                    Text("Hủy", color = LightGray)
+                }
             }
         )
     }

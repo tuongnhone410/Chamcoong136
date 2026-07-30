@@ -988,6 +988,9 @@ fun SettingsScreen(
             var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
             var showMinutesPickerDialog by remember { mutableStateOf(false) }
 
+            var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
+            var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
+
             CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -1088,6 +1091,62 @@ fun SettingsScreen(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+
+                        // Cấu hình Tự động Ra Ca & Hẹn giờ Ra Ca
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "🤖 Tự động ra ca (Hẹn giờ)",
+                                    color = White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Tự động ra ca khi hết giờ làm. Hệ thống không gửi thông báo nhắc nhở ra ca phiền phức.",
+                                    color = LightGray,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = autoCheckoutEnabled,
+                                onCheckedChange = { isEnabled ->
+                                    autoCheckoutEnabled = isEnabled
+                                    notificationPrefs.edit().putBoolean("auto_checkout_enabled", isEnabled).apply()
+                                    Toast.makeText(context, if (isEnabled) "Đã bật tự động ra ca" else "Đã tắt tự động ra ca", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = White,
+                                    checkedTrackColor = AccentOrange,
+                                    uncheckedThumbColor = MediumGray,
+                                    uncheckedTrackColor = Color(0xFF1E1E1E)
+                                )
+                            )
+                        }
+
+                        if (autoCheckoutEnabled) {
+                            OutlinedTextField(
+                                value = customCheckoutTime,
+                                onValueChange = {
+                                    customCheckoutTime = it
+                                    notificationPrefs.edit().putString("custom_checkout_time", it.trim()).apply()
+                                },
+                                label = { Text("Giờ ra ca mặc định (vd: 17:30)", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("Để trống để tự động học từ lịch sử ra ca cũ", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = White,
+                                    unfocusedTextColor = White
+                                )
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Info card explaining the behavior
@@ -1100,15 +1159,15 @@ fun SettingsScreen(
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = "💡 Nguyên lý học máy thông minh:",
+                                    text = "💡 Nguyên lý học máy & Tự động ra ca:",
                                     color = NeonBlue,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca (Ca ngày hoặc Ca đêm).\n" +
-                                           "• Vào ngày thứ Hai chuyển tiếp hoặc khi đổi ca, hệ thống sẽ tự nhắc nhở cả 2 ca để bạn không quên, và sẽ học ngay lập tức sau lần chấm công đầu tiên của tuần mới.\n" +
-                                           "• Gửi thông báo trước giờ vào ca đúng $reminderMinutes phút theo cài đặt của bạn.",
+                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca và tự học giờ ra ca cũ của bạn.\n" +
+                                           "• Nếu bật Tự động ra ca và không nhập giờ cụ thể, ứng dụng sẽ nhìn lại giờ ra ca của các ngày cũ để tự động ra ca đúng thời gian mà không cần bấm thủ công.\n" +
+                                           "• Đồng thời hệ thống sẽ TẮT tín hiệu nhắc nhở ra ca để không làm phiền bạn.",
                                     color = LightGray,
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp
