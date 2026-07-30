@@ -872,27 +872,49 @@ fun HomeScreen(
                     calculateMonthlyChartData(selectedMonth, recentEntries)
                 }
                 
-                AlertDialog(
+                androidx.compose.ui.window.Dialog(
                     onDismissRequest = { showMonthlyChartDialog = false },
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .wrapContentHeight(),
+                        shape = RoundedCornerShape(20.dp),
+                        color = DarkContainer,
+                        border = BorderStroke(1.dp, CardBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(Icons.Default.BarChart, contentDescription = null, tint = PrimaryBlue)
-                            Text("Biểu Đồ Giờ Làm Trong Tháng", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.BarChart, contentDescription = null, tint = PrimaryBlue)
+                                Text(
+                                    "Biểu Đồ Giờ Làm Trong Tháng",
+                                    color = White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            MonthlyActivityChart(data = monthlyData)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { showMonthlyChartDialog = false }) {
+                                    Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
-                    },
-                    text = {
-                        MonthlyActivityChart(data = monthlyData)
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showMonthlyChartDialog = false }) {
-                            Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    containerColor = DarkContainer
-                )
+                    }
+                }
             }
 
             // LỊCH SỬ CHẤM CÔNG (ATTENDANCE HISTORY CARD)
