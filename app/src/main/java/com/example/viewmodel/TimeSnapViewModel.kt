@@ -208,6 +208,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         // 5. Check and migrate legacy AttendanceRecord logs (from local and remote databases)
                         migrateLegacyData(session.uid)
                         
+                        // 5.5. Deduplicate and normalize all records to guarantee 1 entry per day
+                        normalizeTimeEntryDates(session.uid)
+                        
                         // 6. Final sync: Upload current merged state to the server to ensure cloud is up to date
                         val finalEntries = repository.getEntries(session.uid).first()
                         val config = repository.getConfigDirect(session.uid) ?: UserConfig(userId = session.uid)
@@ -569,15 +572,49 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val remoteRecords = com.example.data.FirestoreService.getAttendanceLogsForUser(userId)
             if (remoteRecords.isEmpty()) return
 
-            val currentEntries = repository.getEntries(userId).first()
+            val currentEntries = repository.getEntries(userId).first().toMutableList()
             val config = repository.getConfigDirect(userId) ?: UserConfig(userId = userId)
 
-            for (log in remoteRecords) {
+            // Group remote records by normalized date and merge duplicates
+            val remoteRecordsGrouped = remoteRecords.groupBy { log ->
                 var formattedDate = com.example.data.SalaryCalculator.normalizeDateToDmy(log.dateString)
                 if (formattedDate.isBlank() && log.clockInTime > 0) {
                     formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(log.clockInTime))
                 }
-                if (formattedDate.isBlank()) continue
+                formattedDate
+            }
+
+            val mergedRemoteRecords = remoteRecordsGrouped.mapNotNull { (formattedDate, logs) ->
+                if (formattedDate.isBlank()) return@mapNotNull null
+                if (logs.size == 1) {
+                    logs.first().copy(dateString = formattedDate)
+                } else {
+                    val validClockIns = logs.map { it.clockInTime }.filter { it > 0 }
+                    val earliestClockIn = if (validClockIns.isNotEmpty()) validClockIns.minOrNull() ?: 0L else 0L
+                    
+                    val validClockOuts = logs.mapNotNull { it.clockOutTime }.filter { it > 0 }
+                    val latestClockOut = if (validClockOuts.isNotEmpty()) validClockOuts.maxOrNull() else null
+                    
+                    val nonNormalStatus = logs.map { it.status }.firstOrNull { 
+                        val u = it.trim().uppercase()
+                        u != "ACTIVE" && u != "NORMAL" && u.isNotEmpty() 
+                    }
+                    val finalStatus = nonNormalStatus ?: logs.first().status
+                    
+                    val combinedNotes = logs.map { it.notes }.filter { it.isNotBlank() }.distinct().joinToString("; ")
+                    
+                    logs.first().copy(
+                        dateString = formattedDate,
+                        clockInTime = earliestClockIn,
+                        clockOutTime = latestClockOut,
+                        status = finalStatus,
+                        notes = combinedNotes
+                    )
+                }
+            }
+
+            for (log in mergedRemoteRecords) {
+                val formattedDate = log.dateString
 
                 val existingEntry = currentEntries.find { entry ->
                     com.example.data.SalaryCalculator.normalizeDateToDmy(entry.date) == formattedDate || 
@@ -628,6 +665,10 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         )
                         val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, config)
                         repository.insertOrUpdate(calculated)
+                        val idx = currentEntries.indexOfFirst { it.id == existingEntry.id || it.date == existingEntry.date }
+                        if (idx >= 0) {
+                            currentEntries[idx] = calculated
+                        }
                     }
                 } else {
                     val cal = Calendar.getInstance()
@@ -656,8 +697,14 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     )
                     val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, config)
                     repository.insertOrUpdate(calculated)
+                    // Reload currentEntries from the database to ensure the newly generated primary key ID is loaded correctly
+                    currentEntries.clear()
+                    currentEntries.addAll(repository.getEntries(userId).first())
                 }
             }
+            // Run local deduplication/normalization to clean up any old duplicates
+            normalizeTimeEntryDates(userId)
+            
             val active = repository.getActiveEntry(userId)
             _activeWorkingEntry.value = active
             _triggerRefresh.value += 1
@@ -1185,21 +1232,37 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     fun deleteBulkEntries(selectedDatesList: List<String>) {
         val session = currentUserSession.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val entriesToDelete = mutableListOf<TimeEntry>()
             var restoredLeaves = 0
             for (dateStr in selectedDatesList) {
                 val existing = repository.getEntryByDate(session.uid, dateStr)
                 if (existing != null) {
+                    entriesToDelete.add(existing)
                     if (existing.dayType == "PAID_LEAVE") {
                         restoredLeaves++
                     }
-                    repository.delete(existing)
-                    deleteTimeEntryFromLegacyLog(existing)
                 }
             }
+            if (entriesToDelete.isEmpty()) return@launch
+
+            // 1. Delete from local database IMMEDIATELY so UI updates instantly
+            for (entry in entriesToDelete) {
+                repository.delete(entry)
+            }
+
             if (restoredLeaves > 0) {
                 val config = repository.getConfigDirect(session.uid)
                 if (config != null) {
                     repository.saveConfig(config.copy(phepNamConLai = config.phepNamConLai + restoredLeaves))
+                }
+            }
+
+            // 2. Perform Firestore deletions in PARALLEL in the background without blocking sequentially
+            kotlinx.coroutines.coroutineScope {
+                for (entry in entriesToDelete) {
+                    launch {
+                        deleteTimeEntryFromLegacyLog(entry)
+                    }
                 }
             }
             triggerSync()
@@ -1216,16 +1279,24 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val allEntries = repository.getEntriesInMonthDirect(session.uid, monthPattern, altMonthPattern)
             val phepToRestore = allEntries.count { it.dayType == "PAID_LEAVE" }
             
-            for (entry in allEntries) {
-                deleteTimeEntryFromLegacyLog(entry)
-            }
-            
+            if (allEntries.isEmpty()) return@launch
+
+            // 1. Delete from local database IMMEDIATELY so UI updates instantly
             repository.deleteEntriesInMonth(session.uid, monthPattern, altMonthPattern)
             
             if (phepToRestore > 0) {
                 val config = repository.getConfigDirect(session.uid)
                 if (config != null) {
                     repository.saveConfig(config.copy(phepNamConLai = config.phepNamConLai + phepToRestore))
+                }
+            }
+            
+            // 2. Perform Firestore deletions in PARALLEL in the background without blocking sequentially
+            kotlinx.coroutines.coroutineScope {
+                for (entry in allEntries) {
+                    launch {
+                        deleteTimeEntryFromLegacyLog(entry)
+                    }
                 }
             }
             triggerSync()

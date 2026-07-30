@@ -248,7 +248,19 @@ object FirestoreService {
                 .get()
                 .awaitTaskFirestore()
             snapshot?.documents?.mapNotNull { doc ->
-                doc.toAttendanceRecord(uid)
+                val record = doc.toAttendanceRecord(uid)
+                val correctDocId = formatDateForDocId(record.dateString)
+                if (doc.id != correctDocId) {
+                    // Delete the duplicate/legacy document ID so it is cleaned up from Firestore forever
+                    Log.d(TAG, "Deleting legacy incorrect Firestore document ID: ${doc.id} (correct ID is $correctDocId)")
+                    try {
+                        firestore.collection("users").document(uid).collection("attendance_logs").document(doc.id)
+                            .delete()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to delete legacy document ID ${doc.id}: ${e.message}")
+                    }
+                }
+                record
             }?.sortedByDescending { it.clockInTime } ?: emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching attendance logs for $uid: ${e.message}")
