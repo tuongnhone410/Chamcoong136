@@ -528,10 +528,7 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // If future day, do NOT render the standard working options - only allow PAID_LEAVE or UNPAID_LEAVE
-                            val isHoliday = day.dateString.endsWith("-01-01") || 
-                                            day.dateString.endsWith("-04-30") || 
-                                            day.dateString.endsWith("-05-01") || 
-                                            day.dateString.endsWith("-09-02")
+                            val isHoliday = com.example.data.SalaryCalculator.isHoliday(day.dateString)
                                             
                             val types = if (isFutureDate) {
                                 val list = mutableListOf(

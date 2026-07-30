@@ -87,15 +87,7 @@ object ExportUtils {
     }
 
     fun isSundayDate(dateStr: String): Boolean {
-        return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val date = sdf.parse(dateStr) ?: return false
-            val cal = Calendar.getInstance()
-            cal.time = date
-            cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
-        } catch (e: Exception) {
-            false
-        }
+        return com.example.data.SalaryCalculator.isSunday(dateStr)
     }
 
     fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
@@ -563,7 +555,7 @@ fun AttendanceRecord.toTimeEntry(): TimeEntry {
     return TimeEntry(
         id = this.id.toInt(),
         userId = this.uid,
-        date = this.dateString,
+        date = com.example.data.SalaryCalculator.normalizeDateToDmy(this.dateString),
         checkInTime = this.clockInTime,
         checkOutTime = rawOut,
         dayType = if (this.status.isBlank()) "NORMAL" else this.status,

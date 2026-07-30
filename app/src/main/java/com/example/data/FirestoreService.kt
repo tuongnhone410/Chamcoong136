@@ -124,14 +124,15 @@ object FirestoreService {
     // Convert date string "dd/MM/yyyy" -> "yyyy-MM-dd" for secure chronological ordering & document IDs
     fun formatDateForDocId(dateStr: String): String {
         return try {
-            val parts = dateStr.split("/")
+            val normalized = com.example.data.SalaryCalculator.normalizeDateToDmy(dateStr)
+            val parts = normalized.split("/")
             if (parts.size == 3) {
                 val dd = parts[0]
                 val mm = parts[1]
                 val yyyy = parts[2]
                 "$yyyy-$mm-$dd"
             } else {
-                dateStr.replace("/", "-")
+                normalized.replace("/", "-")
             }
         } catch (e: Exception) {
             dateStr.replace("/", "-")
@@ -173,11 +174,12 @@ object FirestoreService {
     suspend fun saveAttendanceRecord(record: AttendanceRecord) {
         if (isDemoUser(record.uid)) return
         val firestore = getDb() ?: return
-        val docId = formatDateForDocId(record.dateString)
+        val normalizedDateStr = com.example.data.SalaryCalculator.normalizeDateToDmy(record.dateString)
+        val docId = formatDateForDocId(normalizedDateStr)
         val map = mapOf(
             "id" to record.id,
             "uid" to record.uid,
-            "dateString" to record.dateString,
+            "dateString" to normalizedDateStr,
             "clockInTime" to record.clockInTime,
             "clockOutTime" to record.clockOutTime,
             "status" to record.status,
@@ -323,14 +325,11 @@ object FirestoreService {
                         
                         val ds = rec.dateString.trim()
                         val docId = doc.id
-                        val clockInDate = if (rec.clockInTime > 0) SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(rec.clockInTime)) else ""
                         val clockInDmy = if (rec.clockInTime > 0) SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(rec.clockInTime)) else ""
 
-                        val isToday = ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || docId == todayDocId || 
-                                      clockInDate == todayYmd || clockInDmy == todayDmy || ds.endsWith(todayYmd)
-                        
-                        val isYesterday = ds == yesterdayYmd || ds == yesterdayDmy || ds == yesterdayShortDmy || ds == yesterdayShortYmd || docId == yesterdayDocId ||
-                                      clockInDate == yesterdayYmd || clockInDmy == yesterdayDmy || ds.endsWith(yesterdayYmd)
+                        val normalizedDs = com.example.data.SalaryCalculator.normalizeDateToDmy(ds)
+                        val isToday = normalizedDs == todayDmy || docId == todayDocId || clockInDmy == todayDmy
+                        val isYesterday = normalizedDs == yesterdayDmy || docId == yesterdayDocId || clockInDmy == yesterdayDmy
 
                         if (isToday) {
                             val existing = todayRecords[uid]
@@ -878,10 +877,11 @@ fun DocumentSnapshot.toUserConfig(uid: String): UserConfig {
 
 fun DocumentSnapshot.toAttendanceRecord(uid: String): AttendanceRecord {
     val idVal = getLong("id") ?: 0L
+    val rawDate = getString("dateString") ?: ""
     return AttendanceRecord(
         id = idVal,
         uid = uid,
-        dateString = getString("dateString") ?: "",
+        dateString = com.example.data.SalaryCalculator.normalizeDateToDmy(rawDate),
         clockInTime = getLong("clockInTime") ?: 0L,
         clockOutTime = getLong("clockOutTime"),
         status = getString("status") ?: "Active",

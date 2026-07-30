@@ -774,13 +774,9 @@ fun EmployeeDetailView(
 
     Column(modifier = Modifier.fillMaxSize()) {
         val cal = Calendar.getInstance()
-        val todayYmd = String.format(Locale.US, "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
         val todayDmy = String.format(Locale.US, "%02d/%02d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
-        val todayShortDmy = String.format(Locale.US, "%d/%d/%04d", cal.get(Calendar.DAY_OF_MONTH), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
-        val todayShortYmd = String.format(Locale.US, "%04d-%d-%d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
         val todayRec = records.find { r ->
-            val ds = r.dateString.trim()
-            ds == todayYmd || ds == todayDmy || ds == todayShortDmy || ds == todayShortYmd || ds.endsWith(todayYmd)
+            com.example.data.SalaryCalculator.normalizeDateToDmy(r.dateString) == todayDmy
         }
         val shiftStatus = remember(todayRec) { getEmployeeShiftStatus(todayRec) }
 
@@ -913,7 +909,7 @@ fun EmployeeDetailView(
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId,
-                                            dateString = todayYmd,
+                                            dateString = todayDmy,
                                             clockInTime = now,
                                             status = "NORMAL"
                                         )
@@ -936,7 +932,7 @@ fun EmployeeDetailView(
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId,
-                                            dateString = todayYmd,
+                                            dateString = todayDmy,
                                             clockInTime = leaveTime,
                                             status = "PAID_LEAVE",
                                             notes = "Nghỉ phép có lương"
@@ -963,7 +959,7 @@ fun EmployeeDetailView(
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId,
-                                            dateString = todayYmd,
+                                            dateString = todayDmy,
                                             clockInTime = leaveTime,
                                             status = "UNAUTHORIZED_LEAVE",
                                             notes = "Nghỉ không phép"
