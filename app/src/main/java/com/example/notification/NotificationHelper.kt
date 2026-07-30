@@ -13,6 +13,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.MainActivity
 import com.example.R
+import com.example.data.model.TimeEntry
+import com.example.data.SalaryCalculator
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -82,6 +84,13 @@ object NotificationHelper {
 
     // Lên lịch nhắc Check-out nối đuôi động
     fun scheduleCheckOutReminder(context: Context, uid: String, delayMs: Long, shiftId: String) {
+        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+        if (!notificationsEnabled) {
+            android.util.Log.d("NotificationHelper", "Thông báo đã bị tắt. Không lên lịch nhắc check-out.")
+            return
+        }
+
         val data = Data.Builder()
             .putString("uid", uid)
             .putString("reminderType", "CHECK_OUT")
@@ -99,7 +108,50 @@ object NotificationHelper {
             ExistingWorkPolicy.REPLACE,
             workRequest
         )
-        android.util.Log.d("NotificationHelper", "Đã đặt lịch nhắc Check-out sau ${delayMs / 1000 / 60} phút (ca $shiftId)")
+        android.util.Log.d("NotificationHelper", "Đã đặt lịch nhắc Check-out sau ${delayMs / 1000 / 60} phút (${delayMs / 1000}s) cho ca $shiftId")
+    }
+
+    // Lên lịch nhắc Check-out dựa trên ca làm việc thực tế đang diễn ra
+    fun scheduleCheckOutReminderForActiveEntry(context: Context, uid: String, activeEntry: TimeEntry) {
+        if (!activeEntry.isWorking) return
+
+        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val notificationsEnabled = sharedPrefs.getBoolean("notifications_enabled", true)
+        if (!notificationsEnabled) return
+
+        val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
+        val checkInTime = activeEntry.checkInTime ?: System.currentTimeMillis()
+
+        val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInTime }
+        val endParts = shift.endTime.split(":")
+        val endHour = endParts.getOrNull(0)?.toIntOrNull() ?: 19
+        val endMinute = endParts.getOrNull(1)?.toIntOrNull() ?: 30
+
+        val targetCal = Calendar.getInstance().apply {
+            timeInMillis = checkInTime
+            set(Calendar.HOUR_OF_DAY, endHour)
+            set(Calendar.MINUTE, endMinute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        // Ca đêm hoặc giờ kết thúc đứng trước giờ check-in (ví dụ vào 19:30 kết thúc 07:30 ngày hôm sau)
+        if (shift.shiftType == "NIGHT" || targetCal.before(calCheckIn)) {
+            targetCal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        // Thêm 5 phút buffer sau khi hết ca làm việc để nhắc ra ca
+        targetCal.add(Calendar.MINUTE, 5)
+
+        val now = System.currentTimeMillis()
+        var delayMs = targetCal.timeInMillis - now
+
+        if (delayMs <= 0) {
+            // Đã quá giờ ra ca mà nhân viên chưa bấm ra ca -> Nhắc nhở ngay sau 2 giây!
+            delayMs = 2000L
+        }
+
+        scheduleCheckOutReminder(context, uid, delayMs, shift.shiftId)
     }
 
     // Hủy nhắc nhở Check-out (gọi khi nhân viên check-out thủ công trước giờ)

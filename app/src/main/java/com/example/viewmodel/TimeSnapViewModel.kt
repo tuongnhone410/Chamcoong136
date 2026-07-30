@@ -182,6 +182,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         // Update active working entry StateFlow immediately
                         val active = repository.getActiveEntry(session.uid)
                         _activeWorkingEntry.value = active
+                        if (active != null && active.isWorking) {
+                            com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(getApplication(), session.uid, active)
+                        }
                         
                         hasRestoredForSession[session.uid] = true
                         _cloudSyncStatus.value = "Đã đồng bộ"
@@ -337,28 +340,13 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
-                // Lên lịch nhắc Check-out nối đuôi động dựa trên ca làm việc
+                // Lên lịch nhắc Check-out nối đuôi động dựa trên ca làm việc thực tế
                 try {
-                    val shift = com.example.data.SalaryCalculator.SHIFTS[sId]
-                    if (shift != null) {
-                        val shiftDuration = try {
-                            val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US)
-                            val start = sdf.parse(shift.startTime)?.time ?: 0L
-                            val end = sdf.parse(shift.endTime)?.time ?: 0L
-                            var diff = end - start
-                            if (diff < 0) diff += 24 * 60 * 60 * 1000L
-                            diff
-                        } catch (e: Exception) {
-                            8 * 60 * 60 * 1000L
-                        }
-                        val delayMs = shiftDuration + 15 * 60 * 1000L // 15 phút buffer
-                        com.example.notification.NotificationHelper.scheduleCheckOutReminder(
-                            context = getApplication(),
-                            uid = session.uid,
-                            delayMs = delayMs,
-                            shiftId = sId
-                        )
-                    }
+                    com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(
+                        context = getApplication(),
+                        uid = session.uid,
+                        activeEntry = calculated
+                    )
                 } catch (e: Exception) {
                     android.util.Log.e("TimeSnapViewModel", "Failed to schedule checkout reminder: ${e.message}")
                 }

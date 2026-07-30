@@ -1013,7 +1013,11 @@ fun SettingsScreen(
                             checked = notificationsEnabled,
                             onCheckedChange = { isEnabled ->
                                 notificationsEnabled = isEnabled
-                                notificationPrefs.edit().putBoolean("notifications_enabled", isEnabled).apply()
+                                smartLearningEnabled = isEnabled
+                                notificationPrefs.edit()
+                                    .putBoolean("notifications_enabled", isEnabled)
+                                    .putBoolean("smart_learning_enabled", isEnabled)
+                                    .apply()
                                 
                                 val session = sessionState
                                 if (session != null) {
@@ -1036,47 +1040,6 @@ fun SettingsScreen(
                     }
 
                     if (notificationsEnabled) {
-                        Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Thuật toán học ca làm việc (AI)",
-                                    color = White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Tự động học thói quen đi ca ngày hoặc ca đêm của bạn từ lịch sử chấm công, tự động né ngày lễ và ngày Chủ Nhật.",
-                                    color = LightGray,
-                                    fontSize = 11.sp
-                                )
-                            }
-                            Switch(
-                                checked = smartLearningEnabled,
-                                onCheckedChange = { isEnabled ->
-                                    smartLearningEnabled = isEnabled
-                                    notificationPrefs.edit().putBoolean("smart_learning_enabled", isEnabled).apply()
-                                    
-                                    val session = sessionState
-                                    if (session != null) {
-                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
-                                    }
-                                    Toast.makeText(context, if (isEnabled) "Đã bật học máy thông minh" else "Đã tắt học máy thông minh", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = White,
-                                    checkedTrackColor = NeonBlue,
-                                    uncheckedThumbColor = MediumGray,
-                                    uncheckedTrackColor = Color(0xFF1E1E1E)
-                                )
-                            )
-                        }
-
                         Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
 
                         // Cấu hình thời gian nhắc chung trước giờ vào ca

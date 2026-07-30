@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.ArrowForwardIos
@@ -196,6 +198,12 @@ fun HomeScreen(
     viewModel: TimeSnapViewModel,
     onNavigateToLogin: () -> Unit
 ) {
+    val context = LocalContext.current
+    val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
+    var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
+    var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
+    var showReminderDialog by remember { mutableStateOf(false) }
+
     val keyboardController = LocalSoftwareKeyboardController.current
     val userSession by viewModel.currentUserSession.collectAsStateWithLifecycle()
     val activeEntry by viewModel.activeWorkingEntry.collectAsStateWithLifecycle()
@@ -262,11 +270,40 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        IconButton(onClick = { /* Notification click */ }) {
+                        IconButton(
+                            onClick = {
+                                if (!notificationsEnabled) {
+                                    notificationsEnabled = true
+                                    notificationPrefs.edit()
+                                        .putBoolean("notifications_enabled", true)
+                                        .putBoolean("smart_learning_enabled", true)
+                                        .apply()
+                                    userSession?.let { session ->
+                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                        activeEntry?.let { active ->
+                                            if (active.isWorking) {
+                                                com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(context, session.uid, active)
+                                            }
+                                        }
+                                    }
+                                    showReminderDialog = true
+                                } else {
+                                    notificationsEnabled = false
+                                    notificationPrefs.edit()
+                                        .putBoolean("notifications_enabled", false)
+                                        .apply()
+                                    userSession?.let { session ->
+                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                                    }
+                                    Toast.makeText(context, "Đã tắt nhắc nhở chấm công (Im lặng)", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Thông báo",
-                                tint = TextSecondary,
+                                imageVector = if (notificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
+                                contentDescription = if (notificationsEnabled) "Nhắc nhở đang bật" else "Nhắc nhở im lặng",
+                                tint = if (notificationsEnabled) AccentOrange else TextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -1121,6 +1158,186 @@ fun HomeScreen(
                 Toast.makeText(context, "Đã bù chấm công ngày $dateStr thành công!", Toast.LENGTH_SHORT).show()
                 showRetroactiveDialog = false
             }
+        )
+    }
+
+    if (showReminderDialog) {
+        var minutesText by remember { mutableStateOf(reminderMinutes) }
+        var isCustomError by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showReminderDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.NotificationsActive,
+                    contentDescription = null,
+                    tint = AccentOrange,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG",
+                    color = White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Cài đặt thời gian gửi thông báo nhắc nhở trước khi vào ca làm việc.",
+                        color = LightGray,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Surface(
+                        color = Color(0xFF1E293B),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Thuật toán học ca làm việc (AI) đã được tự động bật kèm nhắc nhở.",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Chọn thời gian nhắc trước ca:",
+                        color = White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("5", "10", "15", "30", "60").forEach { min ->
+                            val isSelected = minutesText == min
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    minutesText = min
+                                    isCustomError = false
+                                },
+                                label = { Text("${min}p", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryBlue,
+                                    selectedLabelColor = White,
+                                    containerColor = Color(0xFF1E1E1E),
+                                    labelColor = LightGray
+                                )
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = minutesText,
+                        onValueChange = { newValue ->
+                            if (newValue.all { it.isDigit() } && newValue.length <= 3) {
+                                minutesText = newValue
+                                val valInt = newValue.toIntOrNull()
+                                isCustomError = valInt == null || valInt <= 0 || valInt > 240
+                            }
+                        },
+                        label = { Text("Số phút (1 - 240)", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = White, fontSize = 15.sp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = PrimaryBlue,
+                            unfocusedBorderColor = MediumGray,
+                            cursorColor = PrimaryBlue
+                        ),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+
+                    if (isCustomError && minutesText.isNotEmpty()) {
+                        Text(
+                            text = "Vui lòng nhập số phút từ 1 đến 240",
+                            color = AccentOrange,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val minutesVal = minutesText.trim().toIntOrNull()
+                        if (minutesVal != null && minutesVal in 1..240) {
+                            reminderMinutes = minutesText.trim()
+                            notificationsEnabled = true
+                            notificationPrefs.edit()
+                                .putBoolean("notifications_enabled", true)
+                                .putBoolean("smart_learning_enabled", true)
+                                .putString("reminder_minutes_before", reminderMinutes)
+                                .apply()
+
+                            userSession?.let { session ->
+                                com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                activeEntry?.let { active ->
+                                    if (active.isWorking) {
+                                        com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(context, session.uid, active)
+                                    }
+                                }
+                            }
+
+                            Toast.makeText(context, "Đã lưu nhắc nhở trước $reminderMinutes phút", Toast.LENGTH_SHORT).show()
+                            showReminderDialog = false
+                        } else {
+                            isCustomError = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                ) {
+                    Text("Lưu cài đặt", color = White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        notificationsEnabled = false
+                        notificationPrefs.edit()
+                            .putBoolean("notifications_enabled", false)
+                            .apply()
+                        userSession?.let { session ->
+                            com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                            androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                        }
+                        Toast.makeText(context, "Đã tắt nhắc nhở (Im lặng)", Toast.LENGTH_SHORT).show()
+                        showReminderDialog = false
+                    },
+                    border = BorderStroke(1.dp, MediumGray)
+                ) {
+                    Text("Tắt (Im lặng)", color = LightGray)
+                }
+            },
+            containerColor = Color(0xFF121212),
+            shape = RoundedCornerShape(16.dp)
         )
     }
 }
