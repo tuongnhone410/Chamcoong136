@@ -1138,21 +1138,38 @@ fun SettingsScreen(
                         }
 
                         if (autoCheckoutEnabled) {
+                            var timeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
                             OutlinedTextField(
-                                value = customCheckoutTime,
-                                onValueChange = { input ->
-                                    val digitsOnly = input.filter { it.isDigit() }
-                                    if (digitsOnly.length <= 4) {
-                                        val formatted = when {
-                                            digitsOnly.length >= 3 -> "${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2)}"
-                                            else -> digitsOnly
+                                value = timeTf,
+                                onValueChange = { newVal ->
+                                    val digits = newVal.text.filter { it.isDigit() }.take(4)
+                                    val formatted = when {
+                                        digits.length >= 3 -> {
+                                            var hours = digits.substring(0, 2)
+                                            val h = hours.toIntOrNull() ?: 0
+                                            if (h > 24) hours = "24"
+                                            var minutes = digits.substring(2)
+                                            if (hours == "24" && minutes.isNotEmpty()) {
+                                                minutes = "00".take(minutes.length)
+                                            } else {
+                                                val m = minutes.toIntOrNull() ?: 0
+                                                if (m > 59) minutes = "59"
+                                            }
+                                            "$hours:$minutes"
                                         }
-                                        customCheckoutTime = formatted
-                                        notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
+                                        digits.length == 2 -> {
+                                            val h = digits.toIntOrNull() ?: 0
+                                            if (h > 24) "24" else digits
+                                        }
+                                        else -> digits
                                     }
+                                    val newTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                    timeTf = newTf
+                                    customCheckoutTime = formatted
+                                    notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
                                 },
-                                label = { Text("Giờ ra ca [HH:mm] (vd: 17:30)", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("17:30 (Để trống để tự học)", fontSize = 11.sp) },
+                                label = { Text("Giờ ra ca", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
@@ -1163,33 +1180,7 @@ fun SettingsScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
 
-                        // Info card explaining the behavior
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(NeonBlue.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                                .border(1.dp, NeonBlue.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                                .padding(12.dp)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = "💡 Nguyên lý học máy & Tự động ra ca:",
-                                    color = NeonBlue,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "• Thống kê 12-14 ngày làm việc gần nhất để nhận diện thói quen đi ca và tự học giờ ra ca cũ của bạn.\n" +
-                                           "• Nếu bật Tự động ra ca và không nhập giờ cụ thể, ứng dụng sẽ nhìn lại giờ ra ca của các ngày cũ để tự động ra ca đúng thời gian mà không cần bấm thủ công.\n" +
-                                           "• Đồng thời hệ thống sẽ TẮT tín hiệu nhắc nhở ra ca để không làm phiền bạn.",
-                                    color = LightGray,
-                                    fontSize = 11.sp,
-                                    lineHeight = 16.sp
-                                )
-                            }
-                        }
                     }
                 }
             }

@@ -20,7 +20,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LibraryAddCheck
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -117,14 +118,14 @@ fun HistoryScreen(
                                 .testTag("toggle_multi_select_mode")
                         ) {
                             Icon(
-                                imageVector = if (isMultiSelectMode) Icons.Default.Group else Icons.Default.EditCalendar,
+                                imageVector = if (isMultiSelectMode) Icons.Default.Close else Icons.Default.LibraryAddCheck,
                                 contentDescription = "Mode Icon",
                                 tint = NeonBlue,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isMultiSelectMode) "Chọn nhiều" else "Chọn đơn ngày",
+                                text = if (isMultiSelectMode) "Hủy chọn" else "Chọn nhiều",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = White
@@ -1369,7 +1370,7 @@ fun DayGridCell(
                             
                             val df = DecimalFormat("#.#")
                             Text(
-                                text = "${df.format(totalHrs)}h ${if (isNightShift) "🌙" else "☀️"}",
+                                text = "${df.format(totalHrs)}h",
                                 color = if (isNightShift) NightPurple else AccentGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold

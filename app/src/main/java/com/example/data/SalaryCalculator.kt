@@ -140,7 +140,7 @@ object SalaryCalculator {
         val upper = dayType.uppercase(Locale.ROOT)
         return upper == "PAID_LEAVE" || upper == "UNPAID_LEAVE" || upper == "UNAUTHORIZED_LEAVE" || upper == "HOLIDAY_LEAVE" ||
                upper == "PAIDLEAVE" || upper == "UNPAIDLEAVE" || upper == "UNAUTHORIZEDLEAVE" || upper == "HOLIDAYLEAVE" ||
-               upper == "PAID" || upper == "UNPAID" || upper == "UNAUTHORIZED" || upper == "HOLIDAY" ||
+               upper == "PAID" || upper == "UNPAID" || upper == "UNAUTHORIZED" ||
                upper == "NP" || upper == "PHEP" || upper == "KP" || upper == "KHONGPHEP" || upper == "ABSENT" ||
                upper.contains("LEAVE") || upper.contains("PHÉP") || upper.contains("PHEP") || upper.contains("NGHỈ") || upper.contains("NGHI")
     }

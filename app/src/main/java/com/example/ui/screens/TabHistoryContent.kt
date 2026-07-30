@@ -399,7 +399,7 @@ fun SingleDayEntryDialog(
                         
                         RadioButton(
                             selected = selectedStatus == "PaidLeave" || selectedStatus == "PAID_LEAVE",
-                            onClick = { selectedStatus = "PaidLeave" }
+                            onClick = { selectedStatus = "PAID_LEAVE" }
                         )
                         Text("Nghỉ có lương", color = Color.White, fontSize = 13.sp)
                     }
@@ -431,8 +431,8 @@ fun SingleDayEntryDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = selectedStatus == "PaidHolidayLeave",
-                            onClick = { selectedStatus = "PaidHolidayLeave" }
+                            selected = selectedStatus == "PaidHolidayLeave" || selectedStatus == "HOLIDAY_LEAVE",
+                            onClick = { selectedStatus = "HOLIDAY_LEAVE" }
                         )
                         Text("Nghỉ lễ QDNN có lương (Cty cho nghỉ)", color = Color(0xFF2ECC71), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
@@ -441,7 +441,15 @@ fun SingleDayEntryDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Conditionally display hour input only for actual work shifts
-                if (selectedStatus == "Completed" || selectedStatus == "Active") {
+                val isWorkingStatus = selectedStatus != "PaidLeave" && 
+                                     selectedStatus != "PAID_LEAVE" && 
+                                     selectedStatus != "UnpaidLeave" && 
+                                     selectedStatus != "UNPAID_LEAVE" && 
+                                     selectedStatus != "UNAUTHORIZED_LEAVE" && 
+                                     selectedStatus != "PaidHolidayLeave" && 
+                                     selectedStatus != "HOLIDAY_LEAVE"
+
+                if (isWorkingStatus) {
                     Text("Giờ Vào Ca", color = Color.LightGray)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         createTextField(inHour, { 
@@ -547,26 +555,39 @@ fun SingleDayEntryDialog(
                                     coutMillis = cout.timeInMillis
                                 }
 
-                                val finalStatus = if (selectedStatus == "PaidLeave" || selectedStatus == "PaidHolidayLeave") {
-                                    selectedStatus
-                                } else {
-                                    if (coutMillis == null) "Active" else "Completed"
+                                val finalStatus = when (selectedStatus) {
+                                    "PaidLeave", "PAID_LEAVE" -> "PAID_LEAVE"
+                                    "UnpaidLeave", "UNPAID_LEAVE" -> "UNPAID_LEAVE"
+                                    "UNAUTHORIZED_LEAVE", "KP" -> "UNAUTHORIZED_LEAVE"
+                                    "PaidHolidayLeave", "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE"
+                                    else -> {
+                                        if (coutMillis == null) "Active" else "Completed"
+                                    }
                                 }
 
-                                val finalCin = if (finalStatus == "PaidLeave" || finalStatus == "PaidHolidayLeave") {
+                                val isLeave = finalStatus == "PAID_LEAVE" || 
+                                              finalStatus == "UNPAID_LEAVE" || 
+                                              finalStatus == "UNAUTHORIZED_LEAVE" || 
+                                              finalStatus == "HOLIDAY_LEAVE"
+
+                                val finalCin = if (isLeave) {
                                     cin.apply { 
                                         set(Calendar.HOUR_OF_DAY, 8)
                                         set(Calendar.MINUTE, 0)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
                                     }.timeInMillis
                                 } else {
                                     cin.timeInMillis
                                 }
                                 
-                                val finalCout = if (finalStatus == "PaidLeave" || finalStatus == "PaidHolidayLeave") {
+                                val finalCout = if (isLeave) {
                                     Calendar.getInstance().apply {
                                         time = date
                                         set(Calendar.HOUR_OF_DAY, 17)
                                         set(Calendar.MINUTE, 0)
+                                        set(Calendar.SECOND, 0)
+                                        set(Calendar.MILLISECOND, 0)
                                     }.timeInMillis
                                 } else {
                                     coutMillis

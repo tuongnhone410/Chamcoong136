@@ -14,6 +14,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
@@ -33,8 +36,6 @@ import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -58,6 +59,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -468,50 +470,7 @@ fun HomeScreen(
                 }
             }
 
-            // 3 QUICK STATS HORIZONTAL CARDS
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val totalHrs = (summaryState?.standardHours ?: 0.0) + 
-                               (summaryState?.otDayHours ?: 0.0) + 
-                               (summaryState?.otNightHours ?: 0.0) +
-                               (summaryState?.chuNhatHours ?: 0.0) +
-                               (summaryState?.otLeHours ?: 0.0)
-                val fmtHrs = DecimalFormat("#.##").format(totalHrs)
-                val realSalary = summaryState?.luongThucNhan ?: 0.0
-                val formattedSalary = DecimalFormat("#,###").format(realSalary)
-                val workingDays = summaryState?.workingDays ?: 0
-
-                // Card 1: Tổng giờ làm
-                QuickStatCard(
-                    icon = Icons.Default.Schedule,
-                    value = "${fmtHrs} giờ",
-                    label = "Tổng giờ làm",
-                    iconTint = PrimaryBlue,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Card 2: Ngày công
-                QuickStatCard(
-                    icon = Icons.Default.CalendarMonth,
-                    value = "${workingDays} ngày",
-                    label = "Ngày công",
-                    iconTint = NightPurple,
-                    modifier = Modifier.weight(1f)
-                )
-
-                // Card 3: Thu nhập
-                QuickStatCard(
-                    icon = Icons.Default.LocalAtm,
-                    value = "${formattedSalary} đ",
-                    label = "Thu nhập",
-                    iconTint = SuccessGreen,
-                    modifier = Modifier.weight(1.1f)
-                )
-            }
+            Spacer(modifier = Modifier.height(10.dp))
 
             // CARD LƯƠNG (SALARY CARD WITH SUBTLE GREEN GLOW BORDER)
             Card(
@@ -593,6 +552,9 @@ fun HomeScreen(
                                   (summaryState?.otLeHours ?: 0.0)
                     val fmtOtStr = DecimalFormat("#.#").format(totalOt) + " giờ"
 
+                    val totalHrs = (summaryState?.standardHours ?: 0.0) + totalOt
+                    val fmtHrsStr = DecimalFormat("#.##").format(totalHrs) + " giờ"
+
                     val lcb = configState?.luongCoBan ?: 6000000.0
                     val baseHrRate = lcb / 26.0 / 8.0
                     val todayCoeff = getCoeff(configState)
@@ -616,6 +578,12 @@ fun HomeScreen(
                             horizontalAlignment = Alignment.Start
                         )
                         SalaryMetricColumn(
+                            label = "Tổng giờ",
+                            value = fmtHrsStr,
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        )
+                        SalaryMetricColumn(
                             label = "OT tích lũy",
                             value = fmtOtStr,
                             modifier = Modifier.weight(1f),
@@ -624,7 +592,7 @@ fun HomeScreen(
                         SalaryMetricColumn(
                             label = hrLabel,
                             value = fmtHrRateStr,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1.1f),
                             horizontalAlignment = Alignment.End
                         )
                     }
@@ -646,58 +614,68 @@ fun HomeScreen(
                     .padding(bottom = 20.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Status Badge
+                    val clockTimeDisplay = if (liveHMString.isNotEmpty()) liveHMString else "03:44"
+
+                    // Status Badge & Clock in a balanced horizontal row
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier
-                            .background(
-                                if (isWorking) DangerRed.copy(alpha = 0.12f) else PrimaryBlue.copy(alpha = 0.12f),
-                                RoundedCornerShape(20.dp)
-                            )
-                            .padding(horizontal = 12.dp, vertical = 5.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (isWorking) DangerRed else PrimaryBlue)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        // Left: Status Badge & Subtitle
+                        Column(
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(
+                                        if (isWorking) DangerRed.copy(alpha = 0.12f) else PrimaryBlue.copy(alpha = 0.12f),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isWorking) DangerRed else PrimaryBlue)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isWorking) "ĐANG TRONG CA" else "ĐANG NGOÀI CA",
+                                    color = if (isWorking) DangerRed else PrimaryBlue,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (isWorking) (if (runningTimeText.isNotEmpty()) runningTimeText else "Đang tính giờ ca làm...") else "Bắt đầu làm việc",
+                                color = if (isWorking) AccentOrange else TextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Right: Big Clock showing HH:mm without seconds
                         Text(
-                            text = if (isWorking) "ĐANG TRONG CA" else "ĐANG NGOÀI CA",
-                            color = if (isWorking) DangerRed else PrimaryBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
+                            text = clockTimeDisplay,
+                            color = TextPrimary,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.End,
+                            letterSpacing = 1.5.sp
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
-                    // Big Clock showing HH:mm without seconds
-                    val clockTimeDisplay = if (liveHMString.isNotEmpty()) liveHMString else "03:44"
-                    Text(
-                        text = clockTimeDisplay,
-                        color = TextPrimary,
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = TextAlign.Center,
-                        letterSpacing = 2.sp
-                    )
-
-                    Text(
-                        text = if (isWorking) (if (runningTimeText.isNotEmpty()) runningTimeText else "Đang tính giờ ca làm...") else "Bắt đầu làm việc",
-                        color = if (isWorking) AccentOrange else TextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 18.dp)
-                    )
-
-                    // Hero Round Fingerprint Button
+                    // Hero Round Fingerprint Button centered in the middle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center,
@@ -742,97 +720,6 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Black
                                 )
                             }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Secondary Button: Vào ca bù / Bù chấm công
-                        OutlinedButton(
-                            onClick = { showRetroactiveDialog = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlue),
-                            border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.4f)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .testTag("retroactive_checkin_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp),
-                                tint = PrimaryBlue
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Vào ca bù / Bù chấm công",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PrimaryBlue
-                            )
-                        }
-                    }
-
-                    // Auto-checkout quick config card
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        onClick = { showAutoCheckoutSetupDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (autoCheckoutEnabled) DarkContainer.copy(alpha = 0.9f) else DarkContainer.copy(alpha = 0.5f),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (autoCheckoutEnabled) AccentOrange.copy(alpha = 0.6f) else TextSecondary.copy(alpha = 0.2f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth(0.92f)
-                            .testTag("auto_checkout_config_card")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = "🤖",
-                                    fontSize = 16.sp
-                                )
-                                Column {
-                                    Text(
-                                        text = "Tự động ra ca / Hẹn giờ ra ca",
-                                        color = TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = if (autoCheckoutEnabled) {
-                                            if (customCheckoutTime.isNotBlank()) "Đã hẹn: $customCheckoutTime (Tắt nhắc nhở)" else "Đã bật: Tự động học từ lịch sử ra ca cũ"
-                                        } else "Chưa bật (Chạm để hẹn giờ ra ca tự động)",
-                                        color = if (autoCheckoutEnabled) AccentOrange else TextSecondary,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                            Switch(
-                                checked = autoCheckoutEnabled,
-                                onCheckedChange = { enabled ->
-                                    autoCheckoutEnabled = enabled
-                                    notificationPrefs.edit().putBoolean("auto_checkout_enabled", enabled).apply()
-                                    if (enabled && customCheckoutTime.isBlank()) {
-                                        showAutoCheckoutSetupDialog = true
-                                    }
-                                },
-                                modifier = Modifier.scale(0.8f)
-                            )
                         }
                     }
 
@@ -924,68 +811,88 @@ fun HomeScreen(
                 }
             }
 
-            // BIỂU ĐỒ (7-DAY ACTIVITY CHART CARD)
+            // State for Dialog
+            var showMonthlyChartDialog by remember { mutableStateOf(false) }
+
+            // BIỂU ĐỒ (MONTHLY ACTIVITY CHART CARD)
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkContainer),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, CardBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 20.dp)
+                    .clickable { showMonthlyChartDialog = true }
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "Biểu đồ hoạt động 7 ngày gần nhất",
-                            color = TextPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 8.dp)
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .background(DarkBackground, RoundedCornerShape(8.dp))
-                                .border(1.dp, CardBorder, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        Surface(
+                            color = PrimaryBlue.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.3f))
                         ) {
-                            Text(
-                                text = "Giờ làm việc",
-                                color = TextSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
+                                imageVector = Icons.Default.BarChart,
                                 contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(16.dp)
+                                tint = PrimaryBlue,
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Biểu đồ hoạt động tháng",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Xem chi tiết giờ làm việc",
+                                color = TextSecondary,
+                                fontSize = 12.sp
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val last7DaysData = remember(recentEntries) {
-                        calculateRecent7Days(recentEntries)
-                    }
-
-                    TimeSnap7DayBarChart(data = last7DaysData)
                 }
+            }
+
+            // --- MONTHLY WORK HOURS POPUP DIALOG ---
+            if (showMonthlyChartDialog) {
+                val monthlyData = remember(recentEntries, selectedMonth) {
+                    calculateMonthlyChartData(selectedMonth, recentEntries)
+                }
+                
+                AlertDialog(
+                    onDismissRequest = { showMonthlyChartDialog = false },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.BarChart, contentDescription = null, tint = PrimaryBlue)
+                            Text("Biểu Đồ Giờ Làm Trong Tháng", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    text = {
+                        MonthlyActivityChart(data = monthlyData)
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showMonthlyChartDialog = false }) {
+                            Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = DarkContainer
+                )
             }
 
             // LỊCH SỬ CHẤM CÔNG (ATTENDANCE HISTORY CARD)
@@ -1141,12 +1048,6 @@ fun HomeScreen(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = if (isNightShift) Icons.Default.NightsStay else Icons.Default.WbSunny,
-                                                    contentDescription = null,
-                                                    tint = if (isNightShift) Color(0xFFC084FC) else Color(0xFFFB923C),
-                                                    modifier = Modifier.size(11.dp)
-                                                )
                                                 Text(
                                                     text = if (isNightShift) "Ca đêm" else "Ca ngày",
                                                     color = if (isNightShift) Color(0xFFE9D5FF) else Color(0xFFFFEDD5),
@@ -1236,7 +1137,7 @@ fun HomeScreen(
 
     if (showAutoCheckoutSetupDialog) {
         val context = LocalContext.current
-        var localTimeText by remember { mutableStateOf(customCheckoutTime) }
+        var localTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
 
         AlertDialog(
             onDismissRequest = { showAutoCheckoutSetupDialog = false },
@@ -1282,18 +1183,33 @@ fun HomeScreen(
                     }
 
                     OutlinedTextField(
-                        value = localTimeText,
-                        onValueChange = { input ->
-                            val digitsOnly = input.filter { it.isDigit() }
-                            if (digitsOnly.length <= 4) {
-                                localTimeText = when {
-                                    digitsOnly.length >= 3 -> "${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2)}"
-                                    else -> digitsOnly
+                        value = localTimeTf,
+                        onValueChange = { newVal ->
+                            val digits = newVal.text.filter { it.isDigit() }.take(4)
+                            val formatted = when {
+                                digits.length >= 3 -> {
+                                    var hours = digits.substring(0, 2)
+                                    val h = hours.toIntOrNull() ?: 0
+                                    if (h > 24) hours = "24"
+                                    var minutes = digits.substring(2)
+                                    if (hours == "24" && minutes.isNotEmpty()) {
+                                        minutes = "00".take(minutes.length)
+                                    } else {
+                                        val m = minutes.toIntOrNull() ?: 0
+                                        if (m > 59) minutes = "59"
+                                    }
+                                    "$hours:$minutes"
                                 }
+                                digits.length == 2 -> {
+                                    val h = digits.toIntOrNull() ?: 0
+                                    if (h > 24) "24" else digits
+                                }
+                                else -> digits
                             }
+                            localTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                         },
-                        label = { Text("Giờ ra ca [HH:mm] (vd: 17:30)", fontSize = 12.sp) },
-                        placeholder = { Text("17:30 (Để trống để tự học)", fontSize = 11.sp) },
+                        label = { Text("Giờ ra ca", fontSize = 12.sp) },
+                        placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
@@ -1303,36 +1219,13 @@ fun HomeScreen(
                         )
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(AccentOrange.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-                            .border(1.dp, AccentOrange.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                            .padding(10.dp)
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "💡 HƯỚNG DẪN TỰ ĐỘNG RA CA:",
-                                color = AccentOrange,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "• Nhập giờ cụ thể (vd 17:30 hoặc 19:30): Hệ thống sẽ hẹn giờ tự động bấm ra ca đúng thời điểm này.\n" +
-                                       "• ĐỂ TRỐNG: Hệ thống sẽ tự nhìn lại các ngày cũ để học thói quen ra ca của bạn và tự động ra ca.\n" +
-                                       "• Khi bật tự động ra ca, bạn sẽ KHÔNG bị làm phiền bởi thông báo nhắc nhở ra ca.",
-                                color = LightGray,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp
-                            )
-                        }
-                    }
+
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val trimmed = localTimeText.trim()
+                        val trimmed = localTimeTf.text.trim()
                         customCheckoutTime = trimmed
                         notificationPrefs.edit()
                             .putBoolean("auto_checkout_enabled", autoCheckoutEnabled)
@@ -1736,6 +1629,159 @@ private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> 
             0.0
         }
         DayChartPoint(label, hours, dateStr)
+    }
+}
+
+private fun calculateMonthlyChartData(selectedMonth: String, entries: List<TimeEntry>): List<DayChartPoint> {
+    val sdfMonth = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+    val date = try { sdfMonth.parse(selectedMonth) ?: Date() } catch(e: Exception) { Date() }
+    val cal = Calendar.getInstance()
+    cal.time = date
+    val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val list = ArrayList<DayChartPoint>()
+    val parts = selectedMonth.split("-")
+    val year = if (parts.size == 2) parts[0] else "2026"
+    val month = if (parts.size == 2) parts[1] else "01"
+
+    for (day in 1..maxDay) {
+        val dateStr1 = String.format(Locale.US, "%02d/%s/%s", day, month, year)
+        val dateStr2 = String.format(Locale.US, "%s-%s-%02d", year, month, day)
+
+        val entity = entries.find { it.date == dateStr1 || it.date == dateStr2 }
+        val hours = if (entity != null) {
+            if (entity.checkInTime != null && entity.checkOutTime != null) {
+                val elapsed = entity.checkOutTime - entity.checkInTime
+                val actual = elapsed / 3600000.0
+                if (actual <= 8.5) {
+                    actual.coerceAtMost(8.0)
+                } else {
+                    actual
+                }
+            } else {
+                (entity.workDay * 8.0) + entity.otHours
+            }
+        } else {
+            0.0
+        }
+        list.add(DayChartPoint(day.toString(), hours, if (entity != null) entity.date else dateStr1))
+    }
+    return list
+}
+
+@Composable
+fun MonthlyActivityChart(data: List<DayChartPoint>) {
+    val workedPoints = remember(data) {
+        data.filter { it.hours > 0.0 }
+    }
+
+    if (workedPoints.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.BarChart,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Không có dữ liệu giờ làm trong tháng.",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val hoursList = data.map { it.hours }
+            val maxHours = (hoursList.maxOrNull() ?: 8.0).coerceAtLeast(1.0)
+            
+            val scrollState = rememberScrollState()
+            LaunchedEffect(scrollState.maxValue) {
+                scrollState.scrollTo(scrollState.maxValue)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .horizontalScroll(scrollState)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                data.forEach { pt ->
+                    val hrs = pt.hours
+                    val barHeightFraction = (hrs / maxHours).coerceIn(0.01, 1.0).toFloat()
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(32.dp)
+                    ) {
+                        if (hrs > 0.0) {
+                            Text(
+                                text = String.format(Locale.US, "%.1f", hrs),
+                                color = White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .width(12.dp)
+                                .weight(1f, fill = false)
+                                .fillMaxHeight(barHeightFraction)
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = if (hrs > 8.0) {
+                                            listOf(AccentGreen, AccentGreen.copy(alpha = 0.2f))
+                                        } else {
+                                            listOf(NeonBlue, NeonBlue.copy(alpha = 0.2f))
+                                        }
+                                    ),
+                                    shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = pt.label,
+                            color = if (hrs > 0.0) Color.LightGray else Color.Gray.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            fontWeight = if (hrs > 0.0) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val avg = if (workedPoints.isNotEmpty()) workedPoints.map { it.hours }.average() else 0.0
+            val total = hoursList.sum()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Trung bình/ngày", color = Color.Gray, fontSize = 10.sp)
+                    Text(String.format(Locale.US, "%.1f giờ", avg), color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Tổng số giờ làm", color = Color.Gray, fontSize = 10.sp)
+                    Text(String.format(Locale.US, "%.1f giờ", total), color = SuccessGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 

@@ -30,6 +30,7 @@ import com.example.util.ExportUtils
 import com.example.util.toTimeEntry
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -1202,7 +1203,13 @@ fun EmployeeDetailView(
                 ) {
                     item {
                         // Attendance Summary Board
-                        AttendanceSummaryBoard(stats = monthStats, totalRecordCount = filteredRecords.size)
+                        AttendanceSummaryBoard(
+                            stats = monthStats,
+                            totalRecordCount = filteredRecords.size,
+                            filteredRecords = filteredRecords,
+                            employee = employee,
+                            onShowCalendar = { showCalendarDialog = true }
+                        )
                     }
                     
                     item {
@@ -1272,6 +1279,22 @@ fun EmployeeDetailView(
                     
                     val focusRequesters = remember { List(7) { FocusRequester() } }
 
+                    val dVal = dayStr.text.trim().padStart(2, '0')
+                    val mVal = monthStr.text.trim().padStart(2, '0')
+                    val yVal = yearStr.text.trim()
+                    val dialogDateStr = "$dVal/$mVal/$yVal"
+                    val isDayHoliday = com.example.data.SalaryCalculator.isHoliday(dialogDateStr)
+
+                    LaunchedEffect(isDayHoliday) {
+                        if (isDayHoliday) {
+                            recordType = "HOLIDAY_LEAVE"
+                        } else {
+                            if (recordType == "HOLIDAY_LEAVE") {
+                                recordType = "NORMAL"
+                            }
+                        }
+                    }
+
                     AlertDialog(
                         onDismissRequest = { showAddAttendanceDialog = false },
                         title = { Text("Thêm / Nhập ngày công", color = White) },
@@ -1340,13 +1363,19 @@ fun EmployeeDetailView(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        listOf(
-                                            "NORMAL" to "Đi làm",
-                                            "PAID_LEAVE" to "Phép năm",
-                                            "UNPAID_LEAVE" to "Nghỉ KL",
-                                            "UNAUTHORIZED_LEAVE" to "Nghỉ KP",
-                                            "HOLIDAY_LEAVE" to "Nghỉ lễ"
-                                        ).forEach { (type, label) ->
+                                        val types = remember(isDayHoliday) {
+                                            val list = mutableListOf(
+                                                "NORMAL" to "Đi làm",
+                                                "PAID_LEAVE" to "Phép năm",
+                                                "UNPAID_LEAVE" to "Nghỉ KL",
+                                                "UNAUTHORIZED_LEAVE" to "Nghỉ KP"
+                                            )
+                                            if (isDayHoliday) {
+                                                list.add("HOLIDAY_LEAVE" to "Nghỉ lễ")
+                                            }
+                                            list
+                                        }
+                                        types.forEach { (type, label) ->
                                             val isSelected = recordType == type
                                             val chipBg = when {
                                                 !isSelected -> DarkContainer
@@ -1517,13 +1546,22 @@ fun EmployeeDetailView(
                                     val outHStr = checkOutHour.text.trim()
                                     val outMStr = checkOutMin.text.trim()
 
-                                    val fullIn = if (recordType == "NORMAL" && inH.isNotBlank() && inM.isNotBlank()) {
+                                    val isLeave = recordType == "PAID_LEAVE" || 
+                                                  recordType == "UNPAID_LEAVE" || 
+                                                  recordType == "UNAUTHORIZED_LEAVE" || 
+                                                  recordType == "HOLIDAY_LEAVE"
+
+                                    val fullIn = if (isLeave) {
+                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr 08:00")?.time ?: 0L
+                                    } else if (recordType == "NORMAL" && inH.isNotBlank() && inM.isNotBlank()) {
                                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
                                     } else {
                                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr 08:00")?.time ?: System.currentTimeMillis()
                                     }
                                     
-                                    var fullOut = if (recordType == "NORMAL" && outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
+                                    var fullOut = if (isLeave) {
+                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr 17:00")?.time
+                                    } else if (recordType == "NORMAL" && outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
                                         val outH = outHStr.padStart(2, '0')
                                         val outM = outMStr.padStart(2, '0')
                                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
@@ -1578,7 +1616,17 @@ fun EmployeeDetailView(
 }
 
 @Composable
-fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
+fun AttendanceSummaryBoard(
+    stats: AttendanceStats,
+    totalRecordCount: Int = 0,
+    filteredRecords: List<AttendanceRecord> = emptyList(),
+    employee: UserConfig,
+    onShowCalendar: () -> Unit
+) {
+    var showLeavesDetailDialog by remember { mutableStateOf(false) }
+    var showHoursChartDialog by remember { mutableStateOf(false) }
+    var showLateDetailsDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1642,7 +1690,8 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     unit = "ngày",
                     icon = Icons.Default.WorkHistory,
                     accentColor = SuccessGreen,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    onClick = onShowCalendar
                 )
                 SummaryItem(
                     label = "Tổng giờ",
@@ -1650,7 +1699,8 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     unit = "giờ",
                     icon = Icons.Default.Timer,
                     accentColor = PrimaryBlue,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    onClick = { showHoursChartDialog = true }
                 )
             }
 
@@ -1664,7 +1714,8 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     unit = "lần",
                     icon = Icons.Default.Schedule,
                     accentColor = if (stats.lateArrivals > 0) Color(0xFFF59E0B) else TextSecondary,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    onClick = { showLateDetailsDialog = true }
                 )
                 SummaryItem(
                     label = "Nghỉ phép",
@@ -1672,7 +1723,8 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
                     unit = "ngày",
                     icon = Icons.Default.EventBusy,
                     accentColor = Color(0xFFA855F7),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    onClick = { showLeavesDetailDialog = true }
                 )
             }
 
@@ -1700,6 +1752,380 @@ fun AttendanceSummaryBoard(stats: AttendanceStats, totalRecordCount: Int = 0) {
             }
         }
     }
+
+    // --- LEAVES DETAIL DIALOG ---
+    if (showLeavesDetailDialog) {
+        val leaveRecords = remember(filteredRecords) {
+            filteredRecords.filter { com.example.data.SalaryCalculator.isLeaveType(it.status) }
+                .sortedByDescending { 
+                    try {
+                        SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it.dateString)?.time ?: 0L
+                    } catch (e: Exception) {
+                        0L
+                    }
+                }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showLeavesDetailDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.EventBusy, contentDescription = null, tint = Color(0xFFA855F7))
+                    Text("Danh Sách Ngày Nghỉ Phép", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (leaveRecords.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.SentimentSatisfied, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Không có ngày nghỉ phép nào trong tháng.", color = Color.Gray, fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(leaveRecords) { r ->
+                            val statusUpper = r.status.uppercase(Locale.ROOT)
+                            val typeLabel = when {
+                                statusUpper == "PAID_LEAVE" || statusUpper == "PAID" || statusUpper == "NP" || statusUpper == "PHEP" -> "Phép năm"
+                                statusUpper == "UNAUTHORIZED_LEAVE" || statusUpper == "KP" -> "Nghỉ không phép"
+                                statusUpper == "UNPAID_LEAVE" || statusUpper == "UNPAID" -> "Nghỉ không lương"
+                                statusUpper == "HOLIDAY_LEAVE" || statusUpper == "HOLIDAY" || statusUpper.contains("LỄ") -> "Nghỉ lễ"
+                                else -> "Nghỉ phép"
+                            }
+                            val badgeColor = when {
+                                typeLabel == "Phép năm" -> Color(0xFFF2C94C)
+                                typeLabel == "Nghỉ không phép" -> Color(0xFFEB5757)
+                                typeLabel == "Nghỉ không lương" -> Color(0xFFFF9800)
+                                typeLabel == "Nghỉ lễ" -> Color(0xFFBB86FC)
+                                else -> Color(0xFFA855F7)
+                            }
+
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = r.dateString,
+                                            color = White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        if (!r.notes.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Lý do: ${r.notes}",
+                                                color = TextSecondary,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        color = badgeColor.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.4f))
+                                    ) {
+                                        Text(
+                                            text = typeLabel,
+                                            color = badgeColor,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLeavesDetailDialog = false }) {
+                    Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    // --- HOURS WORKED CHART DIALOG ---
+    if (showHoursChartDialog) {
+        AlertDialog(
+            onDismissRequest = { showHoursChartDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Timer, contentDescription = null, tint = PrimaryBlue)
+                    Text("Biểu Đồ Giờ Làm Trong Tháng", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                MonthlyWorkHoursChart(records = filteredRecords)
+            },
+            confirmButton = {
+                TextButton(onClick = { showHoursChartDialog = false }) {
+                    Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    // --- LATE DETAILS DIALOG ---
+    if (showLateDetailsDialog) {
+        val lateRecords = remember(filteredRecords, employee) {
+            filteredRecords.filter { r ->
+                val isLeave = com.example.data.SalaryCalculator.isLeaveType(r.status)
+                if (!isLeave && r.clockInTime > 0) {
+                    com.example.data.SalaryCalculator.calculateSingleEntry(r.toTimeEntry(), employee).lateMinutes > 0
+                } else {
+                    false
+                }
+            }.sortedByDescending { 
+                try {
+                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it.dateString)?.time ?: 0L
+                } catch (e: Exception) {
+                    0L
+                }
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showLateDetailsDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFFF59E0B))
+                    Text("Chi Tiết Đi Trễ", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (lateRecords.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tuyệt vời! Nhân viên không đi trễ lần nào.", color = SuccessGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 350.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(lateRecords) { r ->
+                            val calc = com.example.data.SalaryCalculator.calculateSingleEntry(r.toTimeEntry(), employee)
+                            val lateMins = calc.lateMinutes
+                            val inTimeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(r.clockInTime))
+
+                            val formattedLate = if (lateMins < 60) {
+                                "$lateMins phút"
+                            } else {
+                                val h = lateMins / 60
+                                val m = lateMins % 60
+                                if (m == 0) "$h giờ" else "$h giờ $m phút"
+                            }
+
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.04f)),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = r.dateString,
+                                            color = White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Giờ vào: $inTimeStr",
+                                            color = TextSecondary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    Surface(
+                                        color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f))
+                                    ) {
+                                        Text(
+                                            text = "Trễ $formattedLate",
+                                            color = Color(0xFFF59E0B),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLateDetailsDialog = false }) {
+                    Text("Đóng", color = NeonBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+}
+
+@Composable
+fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
+    val workedRecords = remember(records) {
+        records.filter { it.clockInTime > 0 && it.clockOutTime != null }
+            .sortedBy { 
+                try {
+                    SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it.dateString)?.time ?: 0L
+                } catch (e: Exception) {
+                    0L
+                }
+            }
+    }
+
+    if (workedRecords.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.BarChart, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Không có dữ liệu giờ làm trong tháng.", color = Color.Gray, fontSize = 13.sp)
+            }
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val hoursList = workedRecords.map { r ->
+                (r.clockOutTime!! - r.clockInTime) / 3600000.0
+            }
+            val maxHours = (hoursList.maxOrNull() ?: 8.0).coerceAtLeast(1.0)
+
+            Text("Giờ làm hàng ngày (Vuốt để xem toàn bộ):", color = Color.Gray, fontSize = 11.sp, modifier = Modifier.padding(bottom = 12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                workedRecords.forEach { record ->
+                    val hrs = (record.clockOutTime!! - record.clockInTime) / 3600000.0
+                    val barHeightFraction = (hrs / maxHours).coerceIn(0.01, 1.0).toFloat()
+                    
+                    val dayNum = try {
+                        val parts = record.dateString.split("/")
+                        parts.firstOrNull() ?: record.dateString
+                    } catch (e: Exception) {
+                        record.dateString
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(36.dp)
+                    ) {
+                        Text(
+                            text = String.format(Locale.US, "%.1f", hrs),
+                            color = White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(14.dp)
+                                .weight(1f, fill = false)
+                                .fillMaxHeight(barHeightFraction)
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = listOf(NeonBlue, NeonBlue.copy(alpha = 0.2f))
+                                    ),
+                                    shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                                )
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = dayNum,
+                            color = Color.LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            val avg = hoursList.average()
+            val total = hoursList.sum()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Trung bình/ngày", color = Color.Gray, fontSize = 11.sp)
+                    Text(String.format(Locale.US, "%.1f giờ", avg), color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Tổng số giờ làm", color = Color.Gray, fontSize = 11.sp)
+                    Text(String.format(Locale.US, "%.1f giờ", total), color = SuccessGreen, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1709,10 +2135,13 @@ fun SummaryItem(
     unit: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     accentColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+        ),
         color = Color.White.copy(alpha = 0.04f),
         shape = RoundedCornerShape(14.dp),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
@@ -2193,7 +2622,7 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
         statusUpper.contains("PAID") || statusUpper == "NP" || statusUpper == "PHEP" || statusUpper.contains("PHÉP") -> "🟡 Phép năm" to Color(0xFFF2C94C)
         statusUpper.contains("UNAUTHORIZED") || statusUpper == "KP" || statusUpper.contains("KHONGPHEP") || statusUpper.contains("KHÔNG PHÉP") -> "🔴 Nghỉ không phép" to Color(0xFFEB5757)
         statusUpper.contains("UNPAID") || statusUpper.contains("KHÔNG LƯƠNG") || statusUpper.contains("KHONG LUONG") -> "🟠 Nghỉ không lương" to Color(0xFFFF9800)
-        statusUpper.contains("HOLIDAY") || statusUpper.contains("LỄ") || statusUpper.contains("LE") -> "🟣 Nghỉ lễ" to Color(0xFFBB86FC)
+        statusUpper == "HOLIDAY_LEAVE" || statusUpper == "HOLIDAY LEAVE" || statusUpper.contains("NGHỈ LỄ") || statusUpper.contains("NGHI LE") -> "🟣 Nghỉ lễ" to Color(0xFFBB86FC)
         else -> null
     }
 
@@ -2321,7 +2750,7 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                             )
                         }
                     } else {
-                        val shiftLabel = if (isNightShift) "🌙 Ca đêm" else "☀️ Ca ngày"
+                        val shiftLabel = if (isNightShift) "Ca đêm" else "Ca ngày"
                         val shiftBg = if (isNightShift) Color(0xFF6366F1).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
                         val shiftTextCol = if (isNightShift) Color(0xFFA5B4FC) else Color(0xFFFCD34D)
 
