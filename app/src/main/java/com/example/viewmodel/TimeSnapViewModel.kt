@@ -136,6 +136,40 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
+        // Realtime UserConfig sync listener from Firestore
+        viewModelScope.launch(Dispatchers.IO) {
+            var realtimeConfigJob: kotlinx.coroutines.Job? = null
+            currentUserSession.collect { session ->
+                realtimeConfigJob?.cancel()
+                if (session != null && !session.uid.startsWith("demo")) {
+                    realtimeConfigJob = viewModelScope.launch(Dispatchers.IO) {
+                        com.example.data.FirestoreService.getUserConfigFlow(session.uid).collect { remoteConfig ->
+                            if (remoteConfig != null) {
+                                android.util.Log.d("TimeSnapViewModel", "Realtime user config update received from server for ${session.uid}")
+                                repository.saveConfig(remoteConfig)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Realtime AttendanceLogs sync listener from Firestore
+        viewModelScope.launch(Dispatchers.IO) {
+            var realtimeLogsJob: kotlinx.coroutines.Job? = null
+            currentUserSession.collect { session ->
+                realtimeLogsJob?.cancel()
+                if (session != null && !session.uid.startsWith("demo")) {
+                    realtimeLogsJob = viewModelScope.launch(Dispatchers.IO) {
+                        com.example.data.FirestoreService.getAttendanceLogsFlow(session.uid).collect { _ ->
+                            android.util.Log.d("TimeSnapViewModel", "Realtime attendance logs update received from server for ${session.uid}")
+                            syncAttendanceLogsFromFirestore(session.uid)
+                        }
+                    }
+                }
+            }
+        }
+
         // Automatic iCloud/Server Data Restore check on Login (survives app re-install)
         viewModelScope.launch(Dispatchers.IO) {
             var lastUid: String? = null
@@ -566,19 +600,32 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
                 val remoteClockOut = log.clockOutTime
                 val remoteClockIn = log.clockInTime
-                val remoteIsWorking = (remoteClockOut == null || remoteClockOut == 0L) && (remoteClockIn > 0L)
+                val remoteStatus = log.status.trim()
+                val mappedDayType = when (remoteStatus) {
+                    "PAID_LEAVE", "NP", "PHEP", "Nghỉ phép", "Nghỉ phép có lương" -> "PAID_LEAVE"
+                    "UNPAID_LEAVE", "Nghỉ không lương" -> "UNPAID_LEAVE"
+                    "UNAUTHORIZED_LEAVE", "KP", "Nghỉ không phép", "Nghỉ KP", "Không phép", "UnauthorizedLeave", "ABSENT" -> "UNAUTHORIZED_LEAVE"
+                    "HOLIDAY_LEAVE", "Nghỉ lễ" -> "HOLIDAY_LEAVE"
+                    "SUNDAY" -> "SUNDAY"
+                    else -> null
+                }
+                val isLeaveType = mappedDayType == "PAID_LEAVE" || mappedDayType == "UNPAID_LEAVE" || mappedDayType == "UNAUTHORIZED_LEAVE" || mappedDayType == "HOLIDAY_LEAVE"
+                val remoteIsWorking = if (isLeaveType) false else ((remoteClockOut == null || remoteClockOut == 0L) && (remoteClockIn > 0L))
 
                 if (existingEntry != null) {
+                    val finalDayType = mappedDayType ?: existingEntry.dayType
                     val needsUpdate = (existingEntry.checkOutTime != remoteClockOut) ||
                                       (existingEntry.isWorking != remoteIsWorking) ||
+                                      (existingEntry.dayType != finalDayType) ||
                                       (remoteClockIn > 0L && existingEntry.checkInTime != remoteClockIn)
 
                     if (needsUpdate) {
-                        android.util.Log.d("TimeSnapViewModel", "Updating local TimeEntry for $formattedDate from Firestore (isWorking: ${existingEntry.isWorking} -> $remoteIsWorking, checkOut: ${existingEntry.checkOutTime} -> $remoteClockOut)")
+                        android.util.Log.d("TimeSnapViewModel", "Updating local TimeEntry for $formattedDate from Firestore (dayType: ${existingEntry.dayType} -> $finalDayType, isWorking: ${existingEntry.isWorking} -> $remoteIsWorking)")
                         val updated = existingEntry.copy(
                             checkInTime = if (remoteClockIn > 0L) remoteClockIn else existingEntry.checkInTime,
-                            checkOutTime = remoteClockOut,
+                            checkOutTime = if (isLeaveType) null else remoteClockOut,
                             isWorking = remoteIsWorking,
+                            dayType = finalDayType,
                             note = if (log.notes.isNotBlank()) log.notes else existingEntry.note
                         )
                         val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, config)
@@ -598,13 +645,13 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         e.printStackTrace()
                     }
 
-                    val dayType = if (isSunday) "SUNDAY" else "NORMAL"
+                    val dayType = mappedDayType ?: if (isSunday) "SUNDAY" else "NORMAL"
                     val newEntry = TimeEntry(
                         id = 0,
                         userId = userId,
                         date = formattedDate,
                         checkInTime = if (remoteClockIn > 0L) remoteClockIn else null,
-                        checkOutTime = remoteClockOut,
+                        checkOutTime = if (isLeaveType) null else remoteClockOut,
                         isWorking = remoteIsWorking,
                         dayType = dayType,
                         note = log.notes.takeIf { it.isNotBlank() }
@@ -917,7 +964,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
             // ENFORCE RULE: Future dates cannot be normal working days. Only leaves allowed.
             if (isFuture) {
-                if (dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "HOLIDAY_LEAVE") {
+                if (dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "UNAUTHORIZED_LEAVE" && dayType != "HOLIDAY_LEAVE") {
                     val config = repository.getConfigDirect(session.uid)
                     val phepConLai = config?.phepNamConLai ?: 0
                     dayType = if (phepConLai > 0) "PAID_LEAVE" else "UNPAID_LEAVE"
@@ -944,7 +991,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 null
             }
 
-            val isWorking = (checkOutMs == null && dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "HOLIDAY_LEAVE")
+            val isWorking = (checkOutMs == null && dayType != "PAID_LEAVE" && dayType != "UNPAID_LEAVE" && dayType != "UNAUTHORIZED_LEAVE" && dayType != "HOLIDAY_LEAVE")
 
             // Ensure no duplicate active shifts across dates
             val priorActive = repository.getActiveEntry(session.uid)
@@ -986,7 +1033,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
-            val isLeave = finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "HOLIDAY_LEAVE"
+            val isLeave = finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "UNAUTHORIZED_LEAVE" || finalDayType == "HOLIDAY_LEAVE"
             val sId = if (isLeave) null else if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"
             val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null
 

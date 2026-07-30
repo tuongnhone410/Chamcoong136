@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -739,6 +740,7 @@ fun EmployeeDetailView(
 
     var selectedMonthYm by remember { mutableStateOf(currentMonthYm) }
     var isAllMonths by remember { mutableStateOf(false) }
+    var showCalendarDialog by remember { mutableStateOf(false) }
 
     fun isRecordInMonth(dateStr: String, monthYmd: String): Boolean {
         return com.example.util.ExportUtils.isRecordInMonth(dateStr, monthYmd)
@@ -908,23 +910,77 @@ fun EmployeeDetailView(
                     }
 
                     if (todayRec == null || todayRec.clockInTime == 0L) {
-                        Button(
-                            onClick = {
-                                val now = System.currentTimeMillis()
-                                adminViewModel.saveAttendanceRecord(
-                                    AttendanceRecord(
-                                        uid = employee.userId,
-                                        dateString = todayYmd,
-                                        clockInTime = now
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = {
+                                    val now = System.currentTimeMillis()
+                                    adminViewModel.saveAttendanceRecord(
+                                        AttendanceRecord(
+                                            uid = employee.userId,
+                                            dateString = todayYmd,
+                                            clockInTime = now,
+                                            status = "NORMAL"
+                                        )
                                     )
-                                )
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
-                        ) {
-                            Text("Vào ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                            ) {
+                                Text("Vào ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.set(Calendar.HOUR_OF_DAY, 8)
+                                    cal.set(Calendar.MINUTE, 0)
+                                    val leaveTime = cal.timeInMillis
+                                    adminViewModel.saveAttendanceRecord(
+                                        AttendanceRecord(
+                                            uid = employee.userId,
+                                            dateString = todayYmd,
+                                            clockInTime = leaveTime,
+                                            status = "PAID_LEAVE",
+                                            notes = "Nghỉ phép có lương"
+                                        )
+                                    )
+                                    if (employee.phepNamConLai > 0) {
+                                        adminViewModel.saveEmployeeConfig(employee.copy(phepNamConLai = (employee.phepNamConLai - 1).coerceAtLeast(0)))
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF2C94C))
+                            ) {
+                                Text("Nghỉ phép", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.set(Calendar.HOUR_OF_DAY, 8)
+                                    cal.set(Calendar.MINUTE, 0)
+                                    val leaveTime = cal.timeInMillis
+                                    adminViewModel.saveAttendanceRecord(
+                                        AttendanceRecord(
+                                            uid = employee.userId,
+                                            dateString = todayYmd,
+                                            clockInTime = leaveTime,
+                                            status = "UNAUTHORIZED_LEAVE",
+                                            notes = "Nghỉ không phép"
+                                        )
+                                    )
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEB5757))
+                            ) {
+                                Text("Không phép", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     } else if (todayRec.clockOutTime == null || todayRec.clockOutTime == 0L) {
                         Button(
@@ -1033,18 +1089,18 @@ fun EmployeeDetailView(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.clickable {
-                            if (isAllMonths) {
-                                isAllMonths = false
-                                selectedMonthYm = currentMonthYm
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                showCalendarDialog = true
                             }
-                        }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = null,
+                            contentDescription = "Xem lịch chấm công",
                             tint = NeonBlue,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Text(
                             text = displayMonthStr,
@@ -1054,45 +1110,79 @@ fun EmployeeDetailView(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        FilterChip(
-                            selected = isAllMonths,
-                            onClick = { isAllMonths = !isAllMonths },
-                            label = { Text("Tất cả", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonBlue,
-                                selectedLabelColor = White,
-                                containerColor = Color.Transparent,
-                                labelColor = Color.Gray
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
-                                selected = isAllMonths,
-                                borderColor = if (isAllMonths) NeonBlue else Color.Gray.copy(alpha = 0.3f),
-                                selectedBorderColor = NeonBlue
-                            ),
-                            modifier = Modifier.height(28.dp)
+                    IconButton(
+                        onClick = {
+                            isAllMonths = false
+                            try {
+                                val d = sdfYm.parse(selectedMonthYm) ?: Date()
+                                val c = Calendar.getInstance().apply { time = d }
+                                c.add(Calendar.MONTH, 1)
+                                selectedMonthYm = sdfYm.format(c.time)
+                            } catch (e: Exception) {
+                                selectedMonthYm = currentMonthYm
+                            }
+                        },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Tháng sau",
+                            tint = NeonBlue,
+                            modifier = Modifier.size(22.dp)
                         )
+                    }
+                }
+            }
+        }
 
-                        IconButton(
-                            onClick = {
-                                isAllMonths = false
-                                try {
-                                    val d = sdfYm.parse(selectedMonthYm) ?: Date()
-                                    val c = Calendar.getInstance().apply { time = d }
-                                    c.add(Calendar.MONTH, 1)
-                                    selectedMonthYm = sdfYm.format(c.time)
-                                } catch (e: Exception) {
-                                    selectedMonthYm = currentMonthYm
-                                }
-                            },
-                            modifier = Modifier.size(34.dp)
+        if (showCalendarDialog) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showCalendarDialog = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF121212)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.ChevronRight,
-                                contentDescription = "Tháng sau",
-                                tint = NeonBlue,
-                                modifier = Modifier.size(22.dp)
+                            Column {
+                                Text(
+                                    text = "Lịch chấm công - ${employee.hoVaTen}",
+                                    color = White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Chấm công & lịch sử theo ngày",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            IconButton(onClick = { showCalendarDialog = false }) {
+                                Icon(Icons.Default.Close, contentDescription = "Đóng", tint = White)
+                            }
+                        }
+
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            TabHistoryContent(
+                                userId = employee.userId,
+                                userConfig = employee,
+                                attendanceLogs = records,
+                                onRecordsChanged = {
+                                    adminViewModel.loadTodayAttendance()
+                                }
                             )
                         }
                     }
@@ -1180,6 +1270,9 @@ fun EmployeeDetailView(
                     var monthStr by remember { mutableStateOf(TextFieldValue(String.format("%02d", todayCal.get(Calendar.MONTH) + 1))) }
                     var yearStr by remember { mutableStateOf(TextFieldValue(String.format("%04d", todayCal.get(Calendar.YEAR)))) }
 
+                    var recordType by remember { mutableStateOf("NORMAL") } // "NORMAL", "PAID_LEAVE", "UNPAID_LEAVE", "HOLIDAY_LEAVE"
+                    var noteText by remember { mutableStateOf("") }
+
                     var checkInHour by remember { mutableStateOf(TextFieldValue("08")) }
                     var checkInMin by remember { mutableStateOf(TextFieldValue("00")) }
                     var checkOutHour by remember { mutableStateOf(TextFieldValue("17")) }
@@ -1189,11 +1282,11 @@ fun EmployeeDetailView(
 
                     AlertDialog(
                         onDismissRequest = { showAddAttendanceDialog = false },
-                        title = { Text("Thêm công thủ công", color = White) },
+                        title = { Text("Thêm / Nhập ngày công", color = White) },
                         text = {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 @Composable
                                 fun AutoJumpField(
@@ -1248,6 +1341,56 @@ fun EmployeeDetailView(
                                     )
                                 }
 
+                                // Record Type Selector
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Loại ngày:", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        listOf(
+                                            "NORMAL" to "Đi làm",
+                                            "PAID_LEAVE" to "Phép năm",
+                                            "UNPAID_LEAVE" to "Nghỉ KL",
+                                            "UNAUTHORIZED_LEAVE" to "Nghỉ KP",
+                                            "HOLIDAY_LEAVE" to "Nghỉ lễ"
+                                        ).forEach { (type, label) ->
+                                            val isSelected = recordType == type
+                                            val chipBg = when {
+                                                !isSelected -> DarkContainer
+                                                type == "PAID_LEAVE" -> Color(0xFFF2C94C)
+                                                type == "UNPAID_LEAVE" -> Color(0xFFFF9800)
+                                                type == "UNAUTHORIZED_LEAVE" -> Color(0xFFEB5757)
+                                                type == "HOLIDAY_LEAVE" -> Color(0xFFBB86FC)
+                                                else -> NeonBlue
+                                            }
+                                            val chipTextCol = if (isSelected && type == "PAID_LEAVE") Color.Black else White
+
+                                            Surface(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { recordType = type },
+                                                color = chipBg,
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, if (isSelected) chipBg else Color.Gray.copy(alpha = 0.5f))
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.padding(vertical = 8.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        color = chipTextCol,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // Date input: Ngày (dd/MM/yyyy)
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text("Ngày (dd/MM/yyyy):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1277,77 +1420,95 @@ fun EmployeeDetailView(
                                             value = yearStr,
                                             onValueChange = { yearStr = it },
                                             focusRequester = focusRequesters[2],
-                                            nextFocusRequester = focusRequesters[3],
+                                            nextFocusRequester = if (recordType == "NORMAL") focusRequesters[3] else null,
                                             maxLength = 4,
                                             modifier = Modifier.width(75.dp)
                                         )
                                     }
                                 }
 
-                                // Hour input: Giờ vào & Giờ ra
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    // Giờ vào (HH:mm)
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                // Hour input: Giờ vào & Giờ ra (ONLY IF NORMAL)
+                                if (recordType == "NORMAL") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
-                                        Text("Giờ vào (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        // Giờ vào (HH:mm)
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            AutoJumpField(
-                                                value = checkInHour,
-                                                onValueChange = { checkInHour = it },
-                                                focusRequester = focusRequesters[3],
-                                                nextFocusRequester = focusRequesters[4],
-                                                maxLength = 2,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Text(":", color = White, fontWeight = FontWeight.Bold)
-                                            AutoJumpField(
-                                                value = checkInMin,
-                                                onValueChange = { checkInMin = it },
-                                                focusRequester = focusRequesters[4],
-                                                nextFocusRequester = focusRequesters[5],
-                                                maxLength = 2,
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                            Text("Giờ vào (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                AutoJumpField(
+                                                    value = checkInHour,
+                                                    onValueChange = { checkInHour = it },
+                                                    focusRequester = focusRequesters[3],
+                                                    nextFocusRequester = focusRequesters[4],
+                                                    maxLength = 2,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(":", color = White, fontWeight = FontWeight.Bold)
+                                                AutoJumpField(
+                                                    value = checkInMin,
+                                                    onValueChange = { checkInMin = it },
+                                                    focusRequester = focusRequesters[4],
+                                                    nextFocusRequester = focusRequesters[5],
+                                                    maxLength = 2,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
-                                    }
 
-                                    // Giờ ra (HH:mm)
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text("Giờ ra (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        // Giờ ra (HH:mm)
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            AutoJumpField(
-                                                value = checkOutHour,
-                                                onValueChange = { checkOutHour = it },
-                                                focusRequester = focusRequesters[5],
-                                                nextFocusRequester = focusRequesters[6],
-                                                maxLength = 2,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Text(":", color = White, fontWeight = FontWeight.Bold)
-                                            AutoJumpField(
-                                                value = checkOutMin,
-                                                onValueChange = { checkOutMin = it },
-                                                focusRequester = focusRequesters[6],
-                                                nextFocusRequester = null,
-                                                maxLength = 2,
-                                                modifier = Modifier.weight(1f)
-                                            )
+                                            Text("Giờ ra (HH:mm):", color = LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                AutoJumpField(
+                                                    value = checkOutHour,
+                                                    onValueChange = { checkOutHour = it },
+                                                    focusRequester = focusRequesters[5],
+                                                    nextFocusRequester = focusRequesters[6],
+                                                    maxLength = 2,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(":", color = White, fontWeight = FontWeight.Bold)
+                                                AutoJumpField(
+                                                    value = checkOutMin,
+                                                    onValueChange = { checkOutMin = it },
+                                                    focusRequester = focusRequesters[6],
+                                                    nextFocusRequester = null,
+                                                    maxLength = 2,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
                                     }
+                                } else {
+                                    // Note for Leave
+                                    OutlinedTextField(
+                                        value = noteText,
+                                        onValueChange = { noteText = it },
+                                        label = { Text("Ghi chú nghỉ phép", fontSize = 12.sp) },
+                                        placeholder = { Text(if (recordType == "PAID_LEAVE") "Nghỉ phép có lương" else "Lý do nghỉ...", fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.Gray
+                                        )
+                                    )
                                 }
                             }
                         },
@@ -1357,17 +1518,20 @@ fun EmployeeDetailView(
                                     val d = dayStr.text.trim().padStart(2, '0')
                                     val m = monthStr.text.trim().padStart(2, '0')
                                     val y = yearStr.text.trim().padStart(4, '0')
-                                    
+                                    val dbDateStr = "$d/$m/$y"
+
                                     val inH = checkInHour.text.trim().padStart(2, '0')
                                     val inM = checkInMin.text.trim().padStart(2, '0')
                                     val outHStr = checkOutHour.text.trim()
                                     val outMStr = checkOutMin.text.trim()
 
-                                    // Target stored format is dd/MM/yyyy
-                                    val dbDateStr = "$d/$m/$y"
+                                    val fullIn = if (recordType == "NORMAL" && inH.isNotBlank() && inM.isNotBlank()) {
+                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
+                                    } else {
+                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr 08:00")?.time ?: System.currentTimeMillis()
+                                    }
                                     
-                                    val fullIn = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $inH:$inM")?.time ?: 0L
-                                    var fullOut = if (outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
+                                    var fullOut = if (recordType == "NORMAL" && outHStr.isNotEmpty() && outMStr.isNotEmpty()) {
                                         val outH = outHStr.padStart(2, '0')
                                         val outM = outMStr.padStart(2, '0')
                                         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).parse("$dbDateStr $outH:$outM")?.time
@@ -1377,14 +1541,30 @@ fun EmployeeDetailView(
                                     if (fullOut != null && fullOut <= fullIn) {
                                         fullOut += 24 * 3600 * 1000L
                                     }
+
+                                    val defaultNote = when (recordType) {
+                                        "PAID_LEAVE" -> "Nghỉ phép có lương"
+                                        "UNPAID_LEAVE" -> "Nghỉ không lương"
+                                        "UNAUTHORIZED_LEAVE" -> "Nghỉ không phép"
+                                        "HOLIDAY_LEAVE" -> "Nghỉ lễ"
+                                        else -> ""
+                                    }
+                                    val finalNote = if (noteText.isNotBlank()) noteText.trim() else defaultNote
+
                                     adminViewModel.saveAttendanceRecord(
                                         AttendanceRecord(
                                             uid = employee.userId, 
                                             dateString = dbDateStr, 
                                             clockInTime = fullIn, 
-                                            clockOutTime = fullOut
+                                            clockOutTime = fullOut,
+                                            status = recordType,
+                                            notes = finalNote
                                         )
                                     )
+
+                                    if (recordType == "PAID_LEAVE" && employee.phepNamConLai > 0) {
+                                        adminViewModel.saveEmployeeConfig(employee.copy(phepNamConLai = (employee.phepNamConLai - 1).coerceAtLeast(0)))
+                                    }
                                 } catch (e: Exception) {}
                                 showAddAttendanceDialog = false
                             }) { Text("Lưu") }
@@ -1635,6 +1815,7 @@ fun EmployeeConfigEdit(
     // Others
     var chuyenCan by remember { mutableStateOf(formatCurrency(employee.tienChuyenCanGoc)) }
     var phepNam by remember { mutableStateOf(employee.soNgayPhepNam.toString()) }
+    var phepNamConLai by remember { mutableStateOf(employee.phepNamConLai.toString()) }
     var breakHours by remember { mutableStateOf(employee.soGioNghiGiaiLao.toString()) }
     var tinhKhauTru by remember { mutableStateOf(employee.tinhKhauTruNghi) }
     var isAdmin by remember { mutableStateOf(employee.isAdmin) }
@@ -1728,7 +1909,14 @@ fun EmployeeConfigEdit(
         item {
             ConfigSection(title = "Cài đặt & Chế độ khác", icon = Icons.Default.AutoFixHigh) {
                 AdminInputField("Tiền chuyên cần", chuyenCan, onValueChange = { chuyenCan = it }, isNumeric = true)
-                AdminInputField("Số ngày phép năm", phepNam, onValueChange = { phepNam = it }, isNumeric = true)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("Số ngày phép năm (Tổng)", phepNam, onValueChange = { phepNam = it }, isNumeric = true)
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        AdminInputField("Số ngày phép còn lại", phepNamConLai, onValueChange = { phepNamConLai = it }, isNumeric = true)
+                    }
+                }
                 AdminInputField("Số giờ nghỉ giải lao", breakHours, onValueChange = { breakHours = it }, isNumeric = true)
                 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -1777,6 +1965,7 @@ fun EmployeeConfigEdit(
                         pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: 0.0,
                         tienChuyenCanGoc = chuyenCan.replace(".", "").toDoubleOrNull() ?: 0.0,
                         soNgayPhepNam = phepNam.toIntOrNull() ?: 12,
+                        phepNamConLai = phepNamConLai.toIntOrNull() ?: 0,
                         thuong = 0.0,
                         soGioNghiGiaiLao = breakHours.toDoubleOrNull() ?: 1.5,
                         tinhKhauTruNghi = tinhKhauTru,
@@ -2122,23 +2311,48 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val shiftLabel = if (isNightShift) "🌙 Ca đêm" else "☀️ Ca ngày"
-                    val shiftBg = if (isNightShift) Color(0xFF6366F1).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
-                    val shiftTextCol = if (isNightShift) Color(0xFFA5B4FC) else Color(0xFFFCD34D)
+                    val leaveBadge = when (record.status) {
+                        "PAID_LEAVE", "NP", "PHEP", "Nghỉ phép", "Nghỉ phép có lương" -> "🟡 Phép năm" to Color(0xFFF2C94C)
+                        "UNPAID_LEAVE", "Nghỉ không lương" -> "🟠 Nghỉ không lương" to Color(0xFFFF9800)
+                        "UNAUTHORIZED_LEAVE", "KP", "Nghỉ không phép", "Không phép", "Nghỉ KP" -> "🔴 Nghỉ không phép" to Color(0xFFEB5757)
+                        "HOLIDAY_LEAVE", "Nghỉ lễ" -> "🟣 Nghỉ lễ" to Color(0xFFBB86FC)
+                        else -> null
+                    }
 
-                    Surface(
-                        color = shiftBg,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, shiftTextCol.copy(alpha = 0.3f))
-                    ) {
-                        Text(
-                            text = shiftLabel,
-                            color = shiftTextCol,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
-                            maxLines = 1
-                        )
+                    if (leaveBadge != null) {
+                        Surface(
+                            color = leaveBadge.second.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, leaveBadge.second.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = leaveBadge.first,
+                                color = leaveBadge.second,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
+                                maxLines = 1
+                            )
+                        }
+                    } else {
+                        val shiftLabel = if (isNightShift) "🌙 Ca đêm" else "☀️ Ca ngày"
+                        val shiftBg = if (isNightShift) Color(0xFF6366F1).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
+                        val shiftTextCol = if (isNightShift) Color(0xFFA5B4FC) else Color(0xFFFCD34D)
+
+                        Surface(
+                            color = shiftBg,
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, shiftTextCol.copy(alpha = 0.3f))
+                        ) {
+                            Text(
+                                text = shiftLabel,
+                                color = shiftTextCol,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
+                                maxLines = 1
+                            )
+                        }
                     }
 
                     Surface(

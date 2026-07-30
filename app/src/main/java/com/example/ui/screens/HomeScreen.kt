@@ -1283,10 +1283,19 @@ fun HomeScreen(
 
                     OutlinedTextField(
                         value = localTimeText,
-                        onValueChange = { localTimeText = it },
-                        label = { Text("Giờ ra ca dự kiến (vd: 17:30)", fontSize = 12.sp) },
-                        placeholder = { Text("Để trống để tự học lịch sử cũ", fontSize = 11.sp) },
+                        onValueChange = { input ->
+                            val digitsOnly = input.filter { it.isDigit() }
+                            if (digitsOnly.length <= 4) {
+                                localTimeText = when {
+                                    digitsOnly.length >= 3 -> "${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2)}"
+                                    else -> digitsOnly
+                                }
+                            }
+                        },
+                        label = { Text("Giờ ra ca [HH:mm] (vd: 17:30)", fontSize = 12.sp) },
+                        placeholder = { Text("17:30 (Để trống để tự học)", fontSize = 11.sp) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = White,

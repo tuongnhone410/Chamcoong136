@@ -107,7 +107,7 @@ object SalaryCalculator {
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
     fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
-        if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE" || entry.dayType == "UNPAID_LEAVE") {
+        if (entry.dayType == "PAID_LEAVE" || entry.dayType == "HOLIDAY_LEAVE" || entry.dayType == "UNPAID_LEAVE" || entry.dayType == "UNAUTHORIZED_LEAVE") {
             val workD = when (entry.dayType) {
                 "PAID_LEAVE", "HOLIDAY_LEAVE" -> 1.0
                 else -> 0.0
@@ -339,7 +339,7 @@ object SalaryCalculator {
                 totalStandardHours += 8.0
                 continue
             }
-            if (e.dayType == "UNPAID_LEAVE") {
+            if (e.dayType == "UNPAID_LEAVE" || e.dayType == "UNAUTHORIZED_LEAVE") {
                 continue
             }
 
@@ -449,7 +449,7 @@ object SalaryCalculator {
 
         // 7. Calculate Chuyên cần (Diligence)
         val hasUnpaidOrAbsent = processedEntries.any { 
-            it.dayType == "UNPAID_LEAVE" && (earliestDate == null || it.date >= earliestDate)
+            (it.dayType == "UNPAID_LEAVE" || it.dayType == "UNAUTHORIZED_LEAVE") && (earliestDate == null || it.date >= earliestDate)
         } || (scheduledDaysSoFar > 0 && totalWorkDays < scheduledDaysSoFar)
 
         val chuyenCanValue = if (hasUnpaidOrAbsent) {

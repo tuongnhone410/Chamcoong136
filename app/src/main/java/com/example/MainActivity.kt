@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.data.DatabaseHelper.init(applicationContext)
         enableEdgeToEdge()
         
         setContent {

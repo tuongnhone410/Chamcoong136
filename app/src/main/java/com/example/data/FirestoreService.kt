@@ -44,7 +44,7 @@ object FirestoreService {
         return uid.startsWith("demo") || uid.contains("demo")
     }
 
-    fun getUserConfigFlow(uid: String): Flow<UserConfig?> = callbackFlow {
+    fun getUserConfigFlow(uid: String): Flow<com.example.data.model.UserConfig?> = callbackFlow {
         if (isDemoUser(uid)) {
             trySend(null)
             close()
@@ -56,22 +56,24 @@ object FirestoreService {
             close()
             return@callbackFlow
         }
-        val docRef = firestore.collection("users").document(uid).collection("config").document("salary_settings")
-        val listener = docRef.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                Log.e(TAG, "Error listening to UserConfig changes", error)
-                trySend(null)
-                close()
-                return@addSnapshotListener
+        val listener1 = firestore.collection("users").document(uid).collection("salary_config").document("settings")
+            .addSnapshotListener { snapshot, error ->
+                if (error == null && snapshot != null && snapshot.exists()) {
+                    val config = snapshot.toUserSalaryConfig(uid)
+                    trySend(config)
+                }
             }
-            if (snapshot != null && snapshot.exists()) {
-                val config = snapshot.toUserConfig(uid)
-                trySend(config)
-            } else {
-                trySend(null)
+        val listener2 = firestore.collection("users").document(uid).collection("config").document("salary_settings")
+            .addSnapshotListener { snapshot, error ->
+                if (error == null && snapshot != null && snapshot.exists()) {
+                    val config = snapshot.toUserSalaryConfig(uid)
+                    trySend(config)
+                }
             }
+        awaitClose {
+            listener1.remove()
+            listener2.remove()
         }
-        awaitClose { listener.remove() }
     }
 
     suspend fun saveUserConfig(config: UserConfig) {
@@ -682,6 +684,16 @@ object FirestoreService {
         firestore.collection("users").document(config.userId).collection("salary_config").document("settings")
             .set(map, SetOptions.merge())
             .awaitTaskFirestore()
+        try {
+            firestore.collection("users").document(config.userId).collection("config").document("salary_settings")
+                .set(map, SetOptions.merge())
+                .awaitTaskFirestore()
+            firestore.collection("users_salary").document(config.userId)
+                .set(map, SetOptions.merge())
+                .awaitTaskFirestore()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving legacy user salary paths: ${e.message}")
+        }
     }
 
     suspend fun fetchUserSalaryConfigFromFirestore(userId: String): com.example.data.model.UserConfig? {

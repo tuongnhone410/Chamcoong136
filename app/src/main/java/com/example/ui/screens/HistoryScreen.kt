@@ -536,7 +536,8 @@ fun HistoryScreen(
                             val types = if (isFutureDate) {
                                 val list = mutableListOf(
                                     Triple("PAID_LEAVE", "Có lương", AccentGreen),
-                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange)
+                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange),
+                                    Triple("UNAUTHORIZED_LEAVE", "Không phép", Color(0xFFEB5757))
                                 )
                                 if (isHoliday) {
                                     list.add(0, Triple("HOLIDAY_LEAVE", "Lễ có lương", AccentGreen))
@@ -546,7 +547,8 @@ fun HistoryScreen(
                                 val list = mutableListOf(
                                     Triple("NORMAL", "Đi làm", NeonBlue),
                                     Triple("PAID_LEAVE", "Có lương", AccentGreen),
-                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange)
+                                    Triple("UNPAID_LEAVE", "Không lương", AccentOrange),
+                                    Triple("UNAUTHORIZED_LEAVE", "Không phép", Color(0xFFEB5757))
                                 )
                                 if (isHoliday) {
                                     list.add(1, Triple("HOLIDAY_LEAVE", "Lễ có lương", AccentGreen))
@@ -1287,6 +1289,7 @@ fun DayGridCell(
         isSelected -> NeonBlue
         entry?.dayType == "PAID_LEAVE" -> NeonBlue
         entry?.dayType == "UNPAID_LEAVE" -> AccentOrange
+        entry?.dayType == "UNAUTHORIZED_LEAVE" -> Color(0xFFEB5757)
         entry?.isWorking == true -> AccentOrange
         isNightShift -> NightPurple
         entry != null -> AccentGreen
@@ -1297,6 +1300,7 @@ fun DayGridCell(
         isSelected -> NeonBlue.copy(alpha = 0.2f)
         entry?.dayType == "PAID_LEAVE" -> NeonBlue.copy(alpha = 0.15f)
         entry?.dayType == "UNPAID_LEAVE" -> AccentOrange.copy(alpha = 0.12f)
+        entry?.dayType == "UNAUTHORIZED_LEAVE" -> Color(0xFFEB5757).copy(alpha = 0.15f)
         entry?.isWorking == true -> AccentOrange.copy(alpha = 0.15f)
         isNightShift -> NightPurple.copy(alpha = 0.2f)
         entry != null -> AccentGreen.copy(alpha = 0.12f)
@@ -1340,6 +1344,14 @@ fun DayGridCell(
                         Text(
                             text = "VẮNG",
                             color = AccentOrange,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    "UNAUTHORIZED_LEAVE" -> {
+                        Text(
+                            text = "K.PHÉP",
+                            color = Color(0xFFEB5757),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold
                         )

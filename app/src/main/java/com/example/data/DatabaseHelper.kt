@@ -37,6 +37,13 @@ class DatabaseHelper private constructor(private val database: AppDatabase) {
             }
         }
 
+        fun getInstance(context: Context): DatabaseHelper {
+            if (INSTANCE == null) {
+                init(context)
+            }
+            return INSTANCE!!
+        }
+
         val instance: DatabaseHelper
             get() = INSTANCE ?: throw IllegalStateException("DatabaseHelper not initialized. Call init(context) in Application or MainActivity.")
     }

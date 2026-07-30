@@ -33,7 +33,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.data.AttendanceRecord
 import com.example.data.DatabaseHelper
-import com.example.data.UserConfig
+import com.example.data.model.UserConfig
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -45,8 +45,9 @@ fun TabHistoryContent(
     attendanceLogs: List<AttendanceRecord>,
     onRecordsChanged: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val dbHelper = DatabaseHelper.instance
+    val dbHelper = DatabaseHelper.getInstance(context)
 
     var currentMonth by remember { mutableStateOf(Calendar.getInstance()) }
     
@@ -173,10 +174,17 @@ fun TabHistoryContent(
                                     record != null -> {
                                         val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
                                         val isHoliday = com.example.data.SalaryCalculator.isHoliday(record.dateString)
+                                        val stUpper = record.status.uppercase(Locale.ROOT)
+                                        val isPaidLeave = stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP"
+                                        val isUnpaidLeave = stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID"
+                                        val isUnauthorizedLeave = stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP")
+                                        val isHolidayLeave = stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE"
                                         
                                         when {
-                                            record.status == "PaidLeave" -> Color(0xFFF2C94C).copy(alpha = 0.2f)
-                                            record.status == "PaidHolidayLeave" -> Color(0xFF9B51E0).copy(alpha = 0.2f)
+                                            isPaidLeave -> Color(0xFFF2C94C).copy(alpha = 0.2f)
+                                            isUnpaidLeave -> Color(0xFFFF9800).copy(alpha = 0.2f)
+                                            isUnauthorizedLeave -> Color(0xFFEB5757).copy(alpha = 0.2f)
+                                            isHolidayLeave -> Color(0xFF9B51E0).copy(alpha = 0.2f)
                                             isNight || isHoliday -> Color(0xFFFF9800).copy(alpha = 0.3f)
                                             else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
                                         }
@@ -204,13 +212,23 @@ fun TabHistoryContent(
                             fontWeight = FontWeight.Bold
                         )
                         if (record != null) {
-                            if (record.status == "PaidLeave") {
+                            val stUpper = record.status.uppercase(Locale.ROOT)
+                            val isPaidLeave = stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP"
+                            val isUnpaidLeave = stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID"
+                            val isUnauthorizedLeave = stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP")
+                            val isHolidayLeave = stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE"
+
+                            if (isPaidLeave) {
                                 Text(text = "Nghỉ phép\ncó lương", fontSize = 9.sp, color = Color(0xFFF2C94C), textAlign = TextAlign.Center, lineHeight = 10.sp)
-                            } else if (record.status == "PaidHolidayLeave") {
+                            } else if (isUnpaidLeave) {
+                                Text(text = "Nghỉ không\nlương", fontSize = 9.sp, color = Color(0xFFFF9800), textAlign = TextAlign.Center, lineHeight = 10.sp)
+                            } else if (isUnauthorizedLeave) {
+                                Text(text = "Nghỉ không\nphép", fontSize = 9.sp, color = Color(0xFFEB5757), textAlign = TextAlign.Center, lineHeight = 10.sp)
+                            } else if (isHolidayLeave) {
                                 Text(text = "Nghỉ lễ\ncó lương", fontSize = 9.sp, color = Color(0xFFBB6BD9), textAlign = TextAlign.Center, lineHeight = 10.sp)
                             } else {
                                 val inStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockInTime))
-                                val outStr = if (record.clockOutTime != null) {
+                                val outStr = if (record.clockOutTime != null && record.clockOutTime > 0L) {
                                     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockOutTime))
                                 } else "..."
                                 Text(text = "$inStr\n$outStr", fontSize = 9.sp, color = Color.LightGray, textAlign = TextAlign.Center)
@@ -367,22 +385,42 @@ fun SingleDayEntryDialog(
 
                 Text("Trạng thái công", color = Color.LightGray, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = selectedStatus == "Completed" || selectedStatus == "Active",
-                        onClick = { selectedStatus = "Completed" }
-                    )
-                    Text("Đi làm", color = Color.White, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    
-                    RadioButton(
-                        selected = selectedStatus == "PaidLeave",
-                        onClick = { selectedStatus = "PaidLeave" }
-                    )
-                    Text("Nghỉ có lương", color = Color.White, fontSize = 13.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedStatus == "Completed" || selectedStatus == "Active" || selectedStatus == "NORMAL",
+                            onClick = { selectedStatus = "Completed" }
+                        )
+                        Text("Đi làm", color = Color.White, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        RadioButton(
+                            selected = selectedStatus == "PaidLeave" || selectedStatus == "PAID_LEAVE",
+                            onClick = { selectedStatus = "PaidLeave" }
+                        )
+                        Text("Nghỉ có lương", color = Color.White, fontSize = 13.sp)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedStatus == "UnpaidLeave" || selectedStatus == "UNPAID_LEAVE",
+                            onClick = { selectedStatus = "UNPAID_LEAVE" }
+                        )
+                        Text("Nghỉ không lương", color = Color(0xFFFF9800), fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        
+                        RadioButton(
+                            selected = selectedStatus == "UNAUTHORIZED_LEAVE" || selectedStatus == "KP",
+                            onClick = { selectedStatus = "UNAUTHORIZED_LEAVE" }
+                        )
+                        Text("Nghỉ không phép", color = Color(0xFFEB5757), fontSize = 13.sp)
+                    }
                 }
 
                 val isDayHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)

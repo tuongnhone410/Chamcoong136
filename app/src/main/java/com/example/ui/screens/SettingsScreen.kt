@@ -241,6 +241,7 @@ fun SettingsScreen(
 
     var tienChuyenCanGoc by remember { mutableStateOf("") }
     var soNgayPhepNam by remember { mutableStateOf("") }
+    var phepNamConLai by remember { mutableStateOf("") }
 
     // 12 Allowances
     var pcKyThuat by remember { mutableStateOf("") }
@@ -287,6 +288,7 @@ fun SettingsScreen(
 
             tienChuyenCanGoc = c.tienChuyenCanGoc.toLong().toString()
             soNgayPhepNam = c.soNgayPhepNam.toString()
+            phepNamConLai = c.phepNamConLai.toString()
 
             pcKyThuat = c.pcKyThuat.toLong().toString()
             pcTrachNhiem = c.pcTrachNhiem.toLong().toString()
@@ -364,6 +366,7 @@ fun SettingsScreen(
                 heSoOtDem = heSoOtDem.toDoubleOrNull() ?: 0.0,
                 tienChuyenCanGoc = sCc.toDoubleOrNull() ?: 0.0,
                 soNgayPhepNam = soNgayPhepNam.toIntOrNull() ?: 0,
+                phepNamConLai = phepNamConLai.toIntOrNull() ?: 0,
                 pcKyThuat = pcKyThuat.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcTrachNhiem = pcTrachNhiem.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcChucVu = pcChucVu.replace(".", "").toDoubleOrNull() ?: 0.0,
@@ -733,6 +736,11 @@ fun SettingsScreen(
                         label = "Số ngày phép cho phép/năm",
                         value = soNgayPhepNam,
                         onValueChange = { soNgayPhepNam = it.filter { c -> c.isDigit() }; saveChanges() }
+                    )
+                    ConfigInputField(
+                        label = "Số ngày phép còn lại (Hiện có)",
+                        value = phepNamConLai,
+                        onValueChange = { phepNamConLai = it.filter { c -> c.isDigit() }; saveChanges() }
                     )
                 }
             }
@@ -1132,13 +1140,21 @@ fun SettingsScreen(
                         if (autoCheckoutEnabled) {
                             OutlinedTextField(
                                 value = customCheckoutTime,
-                                onValueChange = {
-                                    customCheckoutTime = it
-                                    notificationPrefs.edit().putString("custom_checkout_time", it.trim()).apply()
+                                onValueChange = { input ->
+                                    val digitsOnly = input.filter { it.isDigit() }
+                                    if (digitsOnly.length <= 4) {
+                                        val formatted = when {
+                                            digitsOnly.length >= 3 -> "${digitsOnly.substring(0, 2)}:${digitsOnly.substring(2)}"
+                                            else -> digitsOnly
+                                        }
+                                        customCheckoutTime = formatted
+                                        notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
+                                    }
                                 },
-                                label = { Text("Giờ ra ca mặc định (vd: 17:30)", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("Để trống để tự động học từ lịch sử ra ca cũ", fontSize = 11.sp) },
+                                label = { Text("Giờ ra ca [HH:mm] (vd: 17:30)", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("17:30 (Để trống để tự học)", fontSize = 11.sp) },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = White,
