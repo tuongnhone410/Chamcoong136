@@ -573,40 +573,38 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val config = repository.getConfigDirect(userId) ?: UserConfig(userId = userId)
 
             for (log in remoteRecords) {
-                var formattedDate = log.dateString.trim()
-                try {
-                    if (formattedDate.contains("-")) {
-                        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
-                        val date = parser.parse(formattedDate)
-                        if (date != null) {
-                            formattedDate = formatter.format(date)
-                        }
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("TimeSnapViewModel", "Failed to parse log date: ${log.dateString}", e)
-                }
-
+                var formattedDate = com.example.data.SalaryCalculator.normalizeDateToDmy(log.dateString)
                 if (formattedDate.isBlank() && log.clockInTime > 0) {
                     formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(log.clockInTime))
                 }
                 if (formattedDate.isBlank()) continue
 
                 val existingEntry = currentEntries.find { entry ->
-                    entry.date == formattedDate || 
+                    com.example.data.SalaryCalculator.normalizeDateToDmy(entry.date) == formattedDate || 
                     (entry.checkInTime != null && log.clockInTime > 0 && 
                      SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(entry.checkInTime)) == formattedDate)
                 }
 
                 val remoteClockOut = log.clockOutTime
                 val remoteClockIn = log.clockInTime
-                val remoteStatus = log.status.trim()
-                val mappedDayType = when (remoteStatus) {
-                    "PAID_LEAVE", "NP", "PHEP", "Nghỉ phép", "Nghỉ phép có lương" -> "PAID_LEAVE"
-                    "UNPAID_LEAVE", "Nghỉ không lương" -> "UNPAID_LEAVE"
-                    "UNAUTHORIZED_LEAVE", "KP", "Nghỉ không phép", "Nghỉ KP", "Không phép", "UnauthorizedLeave", "ABSENT" -> "UNAUTHORIZED_LEAVE"
-                    "HOLIDAY_LEAVE", "Nghỉ lễ" -> "HOLIDAY_LEAVE"
-                    "SUNDAY" -> "SUNDAY"
+                val remoteStatusUpper = log.status.trim().uppercase(Locale.ROOT)
+                val mappedDayType = when {
+                    remoteStatusUpper == "PAID_LEAVE" || remoteStatusUpper == "NP" || remoteStatusUpper == "PHEP" || 
+                    remoteStatusUpper.contains("PHÉP") || remoteStatusUpper.contains("PHEP") -> "PAID_LEAVE"
+                    
+                    remoteStatusUpper == "UNPAID_LEAVE" || remoteStatusUpper.contains("KHÔNG LƯƠNG") || 
+                    remoteStatusUpper.contains("KHONG LUONG") -> "UNPAID_LEAVE"
+                    
+                    remoteStatusUpper == "UNAUTHORIZED_LEAVE" || remoteStatusUpper == "KP" || 
+                    remoteStatusUpper.contains("KHÔNG PHÉP") || remoteStatusUpper.contains("KHONG PHEP") || 
+                    remoteStatusUpper.contains("KHONGPHEP") || remoteStatusUpper == "ABSENT" -> "UNAUTHORIZED_LEAVE"
+                    
+                    remoteStatusUpper == "HOLIDAY_LEAVE" || remoteStatusUpper.contains("LỄ") || 
+                    remoteStatusUpper.contains("LE") -> "HOLIDAY_LEAVE"
+                    
+                    remoteStatusUpper == "SUNDAY" || remoteStatusUpper.contains("CHỦ NHẬT") || 
+                    remoteStatusUpper.contains("CHU NHAT") -> "SUNDAY"
+                    
                     else -> null
                 }
                 val isLeaveType = mappedDayType == "PAID_LEAVE" || mappedDayType == "UNPAID_LEAVE" || mappedDayType == "UNAUTHORIZED_LEAVE" || mappedDayType == "HOLIDAY_LEAVE"
@@ -671,30 +669,46 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     private suspend fun normalizeTimeEntryDates(userId: String) {
         try {
             val entries = repository.getEntries(userId).first()
+            val config = repository.getConfigDirect(userId) ?: UserConfig(userId = userId)
+            val grouped = entries.groupBy { com.example.data.SalaryCalculator.normalizeDateToDmy(it.date) }
+            
             var updatedCount = 0
-            for (entry in entries) {
-                if (entry.date.contains("-")) {
-                    val dateStr = entry.date
-                    try {
-                        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                        val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
-                        val date = parser.parse(dateStr)
-                        if (date != null) {
-                            val formattedDate = formatter.format(date)
-                            val updatedEntry = entry.copy(date = formattedDate)
-                            // Recalculate metrics just in case
-                            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updatedEntry, userConfig.value)
-                            repository.insertOrUpdate(calculated)
-                            updatedCount++
-                            android.util.Log.d("TimeSnapViewModel", "Normalized TimeEntry date from $dateStr to $formattedDate")
+            var deletedCount = 0
+            
+            for ((normalizedDate, group) in grouped) {
+                if (group.size > 1) {
+                    // Sort to pick the best entry: 1. Both clockIn and clockOut, 2. Only clockIn, 3. Highest ID
+                    val bestToKeep = group.maxWithOrNull(compareBy<TimeEntry> {
+                        if (it.checkInTime != null && it.checkOutTime != null) 2 
+                        else if (it.checkInTime != null) 1 
+                        else 0
+                    }.thenBy { it.id })!!
+                    
+                    for (entry in group) {
+                        if (entry.id != bestToKeep.id) {
+                            repository.delete(entry)
+                            deletedCount++
                         }
-                    } catch (e: Exception) {
-                        android.util.Log.e("TimeSnapViewModel", "Failed to normalize date format for: $dateStr", e)
+                    }
+                    
+                    if (bestToKeep.date != normalizedDate) {
+                        val updated = bestToKeep.copy(date = normalizedDate)
+                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, config)
+                        repository.insertOrUpdate(calculated)
+                        updatedCount++
+                    }
+                } else {
+                    val entry = group.first()
+                    if (entry.date != normalizedDate) {
+                        val updated = entry.copy(date = normalizedDate)
+                        val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, config)
+                        repository.insertOrUpdate(calculated)
+                        updatedCount++
                     }
                 }
             }
-            if (updatedCount > 0) {
-                android.util.Log.d("TimeSnapViewModel", "Successfully normalized $updatedCount TimeEntry records to dd/MM/yyyy")
+            if (deletedCount > 0 || updatedCount > 0) {
+                android.util.Log.d("TimeSnapViewModel", "Deduplicated and normalized entries: deleted $deletedCount, updated $updatedCount")
             }
         } catch (e: Exception) {
             android.util.Log.e("TimeSnapViewModel", "Error normalizing TimeEntry dates", e)
@@ -708,7 +722,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             
             // 1. Get existing new entries to avoid duplicates
             val currentEntries = repository.getEntries(userId).first()
-            val existingDates = currentEntries.map { it.date }.toSet()
+            val existingDates = currentEntries.map { com.example.data.SalaryCalculator.normalizeDateToDmy(it.date) }.toSet()
             
             val legacyRecordsToMigrate = mutableListOf<com.example.data.AttendanceRecord>()
 
@@ -748,21 +762,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 android.util.Log.d("TimeSnapViewModel", "Total unique legacy records to migrate: ${legacyRecordsToMigrate.size}")
                 var migratedCount = 0
                 for (log in legacyRecordsToMigrate) {
-                    // Convert dateString to dd/MM/yyyy
-                    val dateStr = log.dateString
-                    var formattedDate = dateStr
-                    try {
-                        if (dateStr.contains("-")) {
-                            val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.US)
-                            val date = parser.parse(dateStr)
-                            if (date != null) {
-                                formattedDate = formatter.format(date)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("TimeSnapViewModel", "Failed to parse legacy date: $dateStr", e)
-                    }
+                    val formattedDate = com.example.data.SalaryCalculator.normalizeDateToDmy(log.dateString)
 
                     // Only migrate if we don't already have an entry for this formattedDate
                     if (!existingDates.contains(formattedDate)) {

@@ -102,6 +102,39 @@ object SalaryCalculator {
         return cal.timeInMillis
     }
 
+    fun normalizeDateToDmy(dateStr: String): String {
+        val s = dateStr.trim()
+        if (s.contains("-")) {
+            val parts = s.split("-")
+            if (parts.size == 3) {
+                return if (parts[0].length == 4) {
+                    // yyyy-MM-dd -> dd/MM/yyyy
+                    val dd = parts[2].padStart(2, '0')
+                    val mm = parts[1].padStart(2, '0')
+                    val yyyy = parts[0]
+                    "$dd/$mm/$yyyy"
+                } else if (parts[2].length == 4) {
+                    // dd-MM-yyyy -> dd/MM/yyyy
+                    val dd = parts[0].padStart(2, '0')
+                    val mm = parts[1].padStart(2, '0')
+                    val yyyy = parts[2]
+                    "$dd/$mm/$yyyy"
+                } else {
+                    s.replace("-", "/")
+                }
+            }
+        } else if (s.contains("/")) {
+            val parts = s.split("/")
+            if (parts.size == 3) {
+                val dd = parts[0].padStart(2, '0')
+                val mm = parts[1].padStart(2, '0')
+                val yyyy = parts[2]
+                return "$dd/$mm/$yyyy"
+            }
+        }
+        return s.replace("-", "/")
+    }
+
     fun isLeaveType(dayType: String?): Boolean {
         if (dayType.isNullOrBlank()) return false
         val upper = dayType.uppercase(Locale.ROOT)

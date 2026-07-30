@@ -768,7 +768,7 @@ fun EmployeeDetailView(
         val totalHrs = filteredRecords.sumOf { r ->
             if (r.clockOutTime != null) (r.clockOutTime - r.clockInTime) / 3600000.0 else 0.0
         }
-        val leaves = filteredRecords.count { it.status.uppercase() == "PHEP" || it.status.uppercase().contains("LEAVE") }
+        val leaves = filteredRecords.count { com.example.data.SalaryCalculator.isLeaveType(it.status) }
         AttendanceStats(workDays, leaves, totalHrs, lateCount)
     }
 
