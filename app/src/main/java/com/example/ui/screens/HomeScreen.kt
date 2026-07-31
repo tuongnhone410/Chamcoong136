@@ -59,8 +59,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -307,9 +308,9 @@ fun HomeScreen(
                                 else -> TextSecondary
                             }
                             val bellDesc = when {
-                                notificationsEnabled -> "Rung 2 bên: Nhắc nhở đang bật"
-                                autoClockInOutEnabled -> "Rung 1 bên: Tự động đang bật"
-                                else -> "Gạch chéo: Đã tắt tất cả"
+                                notificationsEnabled -> "Chuông 2 bên: Đang bật nhắc nhở"
+                                autoClockInOutEnabled -> "Chuông 1 bên: Đang bật tự động"
+                                else -> "Gạch chéo: Đã tắt"
                             }
                             
                             Box(contentAlignment = Alignment.Center) {
@@ -319,7 +320,7 @@ fun HomeScreen(
                                     tint = bellTint,
                                     modifier = Modifier.size(20.dp)
                                 )
-                                // Draw one vibration arc for auto mode
+                                // Draw one vibration arc for auto mode (Rung 1 bên)
                                 if (autoClockInOutEnabled && !notificationsEnabled) {
                                     androidx.compose.foundation.Canvas(modifier = Modifier.size(24.dp)) {
                                         val color = bellTint
@@ -1301,11 +1302,24 @@ fun HomeScreen(
         var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
         var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
         
-        var autoCheckInEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_check_in_enabled", false)) }
+        var autoClockInOutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_clock_in_out_enabled", false)) }
         var customCheckInTime by remember { mutableStateOf(notificationPrefs.getString("custom_check_in_time", "") ?: "") }
-
-        var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
         var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
+
+        var estimatedInTime by remember { mutableStateOf("Đang tính...") }
+        var estimatedOutTime by remember { mutableStateOf("Đang tính...") }
+
+        LaunchedEffect(Unit) {
+            userSession?.let { session ->
+                val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                estimatedInTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(inMs))
+                
+                // Giả lập một ca active để ước tính giờ ra
+                val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = System.currentTimeMillis())
+                val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                estimatedOutTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(outMs))
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showNotificationConfigDialog = false },
@@ -1320,7 +1334,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "CẤU HÌNH NHẮC NHỞ & TỰ ĐỘNG",
+                        text = "CẤU HÌNH NHẮC NHỞ",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = White
@@ -1340,173 +1354,213 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Bật thông báo nhắc nhở", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(text = "Nhắc nhở check-in / check-out trước ca.", color = LightGray, fontSize = 11.sp)
-                        }
+                        Text(text = "Thông báo nhắc nhở", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Switch(
                             checked = notificationsEnabled,
                             onCheckedChange = { isEnabled ->
                                 notificationsEnabled = isEnabled
-                                notificationPrefs.edit().putBoolean("notifications_enabled", isEnabled).apply()
+                                val editor = notificationPrefs.edit()
+                                    .putBoolean("notifications_enabled", isEnabled)
+                                    .putBoolean("smart_learning_enabled", isEnabled)
+                                
+                                if (isEnabled) {
+                                    autoClockInOutEnabled = false
+                                    editor.putBoolean("auto_clock_in_out_enabled", false)
+                                    editor.putBoolean("auto_check_in_enabled", false)
+                                    editor.putBoolean("auto_checkout_enabled", false)
+                                }
+                                editor.apply()
+                                
                                 userSession?.let { session ->
                                     if (isEnabled) {
                                         com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                        com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
                                     } else {
                                         com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
                                         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
                                     }
                                 }
                             },
-                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = White,
+                                checkedTrackColor = AccentOrange
+                            )
                         )
                     }
 
                     if (notificationsEnabled) {
-                        OutlinedTextField(
-                            value = reminderMinutes,
-                            onValueChange = { newVal ->
-                                val filtered = newVal.filter { it.isDigit() }
-                                reminderMinutes = filtered
-                                notificationPrefs.edit().putString("reminder_minutes_before", filtered).apply()
-                                userSession?.let { session ->
-                                    com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
-                                }
-                            },
-                            label = { Text("Số phút nhắc nhở trước ca", fontSize = 11.sp, color = LightGray) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { showReminderDialog = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Số phút nhắc trước ca", color = LightGray, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(text = "$reminderMinutes phút", color = White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = LightGray, modifier = Modifier.size(16.dp))
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
 
-                    // 2. Tự động Vào Ca
+                    // 2. Tự động Vào/Ra Ca
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "🤖 Tự động vào ca (Hẹn giờ)", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(text = "Tự động chấm công và thông báo '[hh:mm] Tôi đã tự động chấm công'.", color = LightGray, fontSize = 11.sp)
-                        }
+                        Text(text = "🤖 Tự động vào/ra ca", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         Switch(
-                            checked = autoCheckInEnabled,
+                            checked = autoClockInOutEnabled,
                             onCheckedChange = { isEnabled ->
-                                autoCheckInEnabled = isEnabled
-                                notificationPrefs.edit().putBoolean("auto_check_in_enabled", isEnabled).apply()
-                                userSession?.let { session ->
-                                    if (isEnabled) {
-                                        CoroutineScope(Dispatchers.IO).launch {
-                                            val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
-                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
-                                        }
-                                    } else {
-                                        com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
-                                    }
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
-                        )
-                    }
-
-                    if (autoCheckInEnabled) {
-                        var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime)) }
-                        OutlinedTextField(
-                            value = inTimeTf,
-                            onValueChange = { newVal ->
-                                val digits = newVal.text.filter { it.isDigit() }.take(4)
-                                val formatted = when {
-                                    digits.length >= 3 -> {
-                                        var hours = digits.substring(0, 2)
-                                        if ((hours.toIntOrNull() ?: 0) > 24) hours = "24"
-                                        var minutes = digits.substring(2)
-                                        if (hours == "24") minutes = "00" else if ((minutes.toIntOrNull() ?: 0) > 59) minutes = "59"
-                                        "$hours:$minutes"
-                                    }
-                                    digits.length == 2 -> if ((digits.toIntOrNull() ?: 0) > 24) "24" else digits
-                                    else -> digits
-                                }
-                                inTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
-                                customCheckInTime = formatted
-                                notificationPrefs.edit().putString("custom_check_in_time", formatted).apply()
-                                userSession?.let { session ->
-                                    CoroutineScope(Dispatchers.IO).launch {
-                                        val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
-                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
-                                    }
-                                }
-                            },
-                            label = { Text("Giờ vào ca (tuỳ chọn)", fontSize = 11.sp, color = LightGray) },
-                            placeholder = { Text("Để trống để tự học (07:30)", fontSize = 10.sp) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
-
-                    // 3. Tự động Ra Ca
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "🤖 Tự động ra ca (Hẹn giờ)", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            Text(text = "Tự động ra ca và thông báo số giờ làm.", color = LightGray, fontSize = 11.sp)
-                        }
-                        Switch(
-                            checked = autoCheckoutEnabled,
-                            onCheckedChange = { isEnabled ->
-                                autoCheckoutEnabled = isEnabled
-                                val editor = notificationPrefs.edit().putBoolean("auto_checkout_enabled", isEnabled)
+                                autoClockInOutEnabled = isEnabled
+                                val editor = notificationPrefs.edit()
+                                    .putBoolean("auto_clock_in_out_enabled", isEnabled)
+                                    .putBoolean("auto_check_in_enabled", isEnabled)
+                                    .putBoolean("auto_checkout_enabled", isEnabled)
+                                
                                 if (isEnabled) {
                                     notificationsEnabled = false
                                     editor.putBoolean("notifications_enabled", false)
                                     userSession?.let { session ->
                                         com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                            
+                                            // Nếu đang làm việc, đặt lịch ra ca tự động luôn
+                                            val currentActive = viewModel.activeWorkingEntry.value
+                                            if (currentActive != null && currentActive.isWorking) {
+                                                val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, currentActive)
+                                                com.example.notification.NotificationHelper.scheduleAutoCheckOut(context, session.uid, outMs)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    userSession?.let { session ->
+                                        com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
+                                        com.example.notification.NotificationHelper.cancelAutoCheckOut(context, session.uid)
                                     }
                                 }
                                 editor.apply()
                             },
-                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = White,
+                                checkedTrackColor = AccentOrange
+                            )
                         )
                     }
 
-                    if (autoCheckoutEnabled) {
-                        var outTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
-                        OutlinedTextField(
-                            value = outTimeTf,
-                            onValueChange = { newVal ->
-                                val digits = newVal.text.filter { it.isDigit() }.take(4)
-                                val formatted = when {
-                                    digits.length >= 3 -> {
-                                        var hours = digits.substring(0, 2)
-                                        if ((hours.toIntOrNull() ?: 0) > 24) hours = "24"
-                                        var minutes = digits.substring(2)
-                                        if (hours == "24") minutes = "00" else if ((minutes.toIntOrNull() ?: 0) > 59) minutes = "59"
-                                        "$hours:$minutes"
+                    if (autoClockInOutEnabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime, selection = TextRange(customCheckInTime.length))) }
+                            OutlinedTextField(
+                                value = inTimeTf,
+                                onValueChange = { newVal ->
+                                    val raw = newVal.text
+                                    if (raw.isEmpty()) {
+                                        inTimeTf = newVal
+                                        customCheckInTime = ""
+                                        notificationPrefs.edit().putString("custom_check_in_time", "").apply()
+                                        return@OutlinedTextField
                                     }
-                                    digits.length == 2 -> if ((digits.toIntOrNull() ?: 0) > 24) "24" else digits
-                                    else -> digits
-                                }
-                                outTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
-                                customCheckoutTime = formatted
-                                notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
-                            },
-                            label = { Text("Giờ ra ca (tuỳ chọn)", fontSize = 11.sp, color = LightGray) },
-                            placeholder = { Text("Để trống để tự học hoặc tính 11h45p", fontSize = 10.sp) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
-                        )
+                                    val digits = raw.filter { it.isDigit() }.take(4)
+                                    val formatted = when {
+                                        digits.length >= 3 -> {
+                                            var hours = digits.substring(0, 2)
+                                            val h = hours.toIntOrNull() ?: 0
+                                            if (h > 24) hours = "24"
+                                            var minutes = digits.substring(2)
+                                            if (hours == "24" && minutes.isNotEmpty()) {
+                                                minutes = "00".take(minutes.length)
+                                            } else {
+                                                val m = minutes.toIntOrNull() ?: 0
+                                                if (m > 59) minutes = "59"
+                                            }
+                                            "$hours:$minutes"
+                                        }
+                                        digits.length == 2 -> {
+                                            val h = digits.toIntOrNull() ?: 0
+                                            if (h > 24) "24" else digits
+                                        }
+                                        else -> digits
+                                    }
+                                    inTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                    customCheckInTime = formatted
+                                    notificationPrefs.edit().putString("custom_check_in_time", formatted).apply()
+                                    userSession?.let { session ->
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                        }
+                                    }
+                                },
+                                label = { Text("Giờ vào ca", fontSize = 11.sp, color = LightGray) },
+                                placeholder = { Text("Dự kiến: $estimatedInTime (Tự học)", fontSize = 10.sp) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                            )
+
+                            var outTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime, selection = TextRange(customCheckoutTime.length))) }
+                            OutlinedTextField(
+                                value = outTimeTf,
+                                onValueChange = { newVal ->
+                                    val raw = newVal.text
+                                    if (raw.isEmpty()) {
+                                        outTimeTf = newVal
+                                        customCheckoutTime = ""
+                                        notificationPrefs.edit().putString("custom_checkout_time", "").apply()
+                                        return@OutlinedTextField
+                                    }
+                                    val digits = raw.filter { it.isDigit() }.take(4)
+                                    val formatted = when {
+                                        digits.length >= 3 -> {
+                                            var hours = digits.substring(0, 2)
+                                            val h = hours.toIntOrNull() ?: 0
+                                            if (h > 24) hours = "24"
+                                            var minutes = digits.substring(2)
+                                            if (hours == "24" && minutes.isNotEmpty()) {
+                                                minutes = "00".take(minutes.length)
+                                            } else {
+                                                val m = minutes.toIntOrNull() ?: 0
+                                                if (m > 59) minutes = "59"
+                                            }
+                                            "$hours:$minutes"
+                                        }
+                                        digits.length == 2 -> {
+                                            val h = digits.toIntOrNull() ?: 0
+                                            if (h > 24) "24" else digits
+                                        }
+                                        else -> digits
+                                    }
+                                    outTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                    customCheckoutTime = formatted
+                                    notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
+                                },
+                                label = { Text("Giờ ra ca", fontSize = 11.sp, color = LightGray) },
+                                placeholder = { Text("Dự kiến: $estimatedOutTime (Tự học)", fontSize = 10.sp) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                            )
+
+                            Text(
+                                text = "💡 Hệ thống sẽ tự động nhận diện chu kỳ so le ca ngày/đêm của bạn từ lịch sử chấm công để thiết lập giờ tương ứng.",
+                                color = LightGray.copy(alpha = 0.7f),
+                                fontSize = 11.sp,
+                                fontStyle = FontStyle.Italic,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                        }
                     }
                 }
             },

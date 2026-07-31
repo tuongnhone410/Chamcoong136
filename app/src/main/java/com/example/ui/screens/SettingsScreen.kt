@@ -1002,26 +1002,18 @@ fun SettingsScreen(
 
             CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // 1. Bật thông báo nhắc nhở (Độc lập)
+                    // 1. Bật thông báo nhắc nhở
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Bật thông báo nhắc nhở",
-                                color = White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Gửi thông báo nhắc nhở check-in khi vào ca và check-out khi ra ca.",
-                                color = LightGray,
-                                fontSize = 11.sp
-                            )
-                        }
+                        Text(
+                            text = "Thông báo nhắc nhở",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Switch(
                             checked = notificationsEnabled,
                             onCheckedChange = { isEnabled ->
@@ -1049,7 +1041,7 @@ fun SettingsScreen(
                                         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
                                     }
                                 }
-                                Toast.makeText(context, if (isEnabled) "Đã bật nhắc nhở (Đã tắt tự động)" else "Đã tắt nhắc nhở chấm công", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEnabled) "Đã bật nhắc nhở (Đã tắt tự động)" else "Đã tắt nhắc nhở", Toast.LENGTH_SHORT).show()
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
@@ -1061,77 +1053,55 @@ fun SettingsScreen(
                     }
 
                     if (notificationsEnabled) {
-                        Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
-
-                        // Cấu hình thời gian nhắc chung trước giờ vào ca
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    showMinutesPickerDialog = true
-                                }
-                                .padding(vertical = 8.dp),
+                                .clickable { showMinutesPickerDialog = true }
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Số phút nhắc nhở trước ca",
-                                    color = White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Gửi thông báo nhắc nhở trước giờ vào ca (phút).",
-                                    color = LightGray,
-                                    fontSize = 11.sp
-                                )
-                            }
+                            Text(
+                                text = "Số phút nhắc nhở trước ca",
+                                color = LightGray,
+                                fontSize = 13.sp
+                            )
                             
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
                                     text = "$reminderMinutes phút",
                                     color = NeonBlue,
-                                    fontSize = 16.sp,
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Icon(
                                     imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = "Edit Reminder Minutes",
+                                    contentDescription = null,
                                     tint = LightGray,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
 
-                    // 2. Tự động Vào/Ra Ca (Gộp lại)
+                    // 2. Tự động Vào/Ra Ca
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "🤖 Tự động vào/ra ca (Hẹn giờ)",
-                                color = White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Tự động vào ca và ra ca theo giờ tùy chỉnh hoặc học theo lịch sử. Tự động vô hiệu hoá thông báo nhắc nhở.",
-                                color = LightGray,
-                                fontSize = 11.sp
-                            )
-                        }
+                        Text(
+                            text = "🤖 Tự động vào/ra ca (Hẹn giờ)",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Switch(
                             checked = autoClockInOutEnabled,
                             onCheckedChange = { isEnabled ->
@@ -1152,16 +1122,24 @@ fun SettingsScreen(
                                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                                             val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
                                             com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+
+                                            // Nếu đang làm việc, đặt lịch ra ca tự động luôn
+                                            val currentActive = viewModel.repository.getActiveEntry(session.uid)
+                                            if (currentActive != null && currentActive.isWorking) {
+                                                val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, currentActive)
+                                                com.example.notification.NotificationHelper.scheduleAutoCheckOut(context, session.uid, outMs)
+                                            }
                                         }
                                     }
                                 } else {
                                     val session = sessionState
                                     if (session != null) {
                                         com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
+                                        com.example.notification.NotificationHelper.cancelAutoCheckOut(context, session.uid)
                                     }
                                 }
                                 editor.apply()
-                                Toast.makeText(context, if (isEnabled) "Đã bật tự động (Đã tắt nhắc nhở)" else "Đã tắt tự động vào/ra ca", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEnabled) "Đã bật tự động (Đã tắt nhắc nhở)" else "Đã tắt tự động", Toast.LENGTH_SHORT).show()
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
@@ -1173,7 +1151,7 @@ fun SettingsScreen(
                     }
 
                     if (autoClockInOutEnabled) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             // Input Giờ Vào
                             var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime, selection = TextRange(customCheckInTime.length))) }
                             OutlinedTextField(
@@ -1218,15 +1196,12 @@ fun SettingsScreen(
                                         }
                                     }
                                 },
-                                label = { Text("Giờ vào ca (tuỳ chọn)", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("Để trống để tự học theo lịch sử (mặc định 07:30)", fontSize = 11.sp) },
+                                label = { Text("Giờ vào ca", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = White,
-                                    unfocusedTextColor = White
-                                )
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
 
                             // Input Giờ Ra
@@ -1266,20 +1241,17 @@ fun SettingsScreen(
                                     customCheckoutTime = formatted
                                     notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
                                 },
-                                label = { Text("Giờ ra ca (tuỳ chọn)", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("Để trống để tự học hoặc tự tính 11h45p", fontSize = 11.sp) },
+                                label = { Text("Giờ ra ca", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = White,
-                                    unfocusedTextColor = White
-                                )
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
 
                             Text(
-                                text = "💡 Nếu bạn để trống giờ vào, ra ca thì hệ thống sẽ đọc dữ liệu từ lịch sử để tự động chấm công.",
-                                color = LightGray,
+                                text = "💡 Nếu để trống giờ vào/ra, hệ thống sẽ tự học từ lịch sử.",
+                                color = LightGray.copy(alpha = 0.7f),
                                 fontSize = 11.sp,
                                 fontStyle = FontStyle.Italic,
                                 modifier = Modifier.padding(horizontal = 4.dp)
