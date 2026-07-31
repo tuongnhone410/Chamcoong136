@@ -207,13 +207,22 @@ fun HomeScreen(
     val context = LocalContext.current
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
     var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
+    var autoClockInOutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_clock_in_out_enabled", false)) }
     var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
     var showReminderDialog by remember { mutableStateOf(false) }
 
+    var showNotificationConfigDialog by remember { mutableStateOf(false) }
+    var showAutoCheckoutSetupDialog by remember { mutableStateOf(false) }
     var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
     var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
-    var showAutoCheckoutSetupDialog by remember { mutableStateOf(false) }
-    var showNotificationConfigDialog by remember { mutableStateOf(false) }
+
+    // Refresh settings when returning to screen or dialog closes
+    LaunchedEffect(showNotificationConfigDialog) {
+        notificationsEnabled = notificationPrefs.getBoolean("notifications_enabled", true)
+        autoClockInOutEnabled = notificationPrefs.getBoolean("auto_clock_in_out_enabled", false)
+        autoCheckoutEnabled = notificationPrefs.getBoolean("auto_checkout_enabled", false)
+        customCheckoutTime = notificationPrefs.getString("custom_checkout_time", "") ?: ""
+    }
     val scope = rememberCoroutineScope()
 
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -287,12 +296,47 @@ fun HomeScreen(
                                 showNotificationConfigDialog = true
                             }
                         ) {
-                            Icon(
-                                imageVector = if (notificationsEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsOff,
-                                contentDescription = if (notificationsEnabled) "Nhắc nhở đang bật" else "Nhắc nhở im lặng",
-                                tint = if (notificationsEnabled) AccentOrange else TextSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            val bellIcon = when {
+                                notificationsEnabled -> Icons.Default.NotificationsActive
+                                autoClockInOutEnabled -> Icons.Default.Notifications
+                                else -> Icons.Default.NotificationsOff
+                            }
+                            val bellTint = when {
+                                notificationsEnabled -> AccentOrange
+                                autoClockInOutEnabled -> NeonBlue
+                                else -> TextSecondary
+                            }
+                            val bellDesc = when {
+                                notificationsEnabled -> "Rung 2 bên: Nhắc nhở đang bật"
+                                autoClockInOutEnabled -> "Rung 1 bên: Tự động đang bật"
+                                else -> "Gạch chéo: Đã tắt tất cả"
+                            }
+                            
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = bellIcon,
+                                    contentDescription = bellDesc,
+                                    tint = bellTint,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                // Draw one vibration arc for auto mode
+                                if (autoClockInOutEnabled && !notificationsEnabled) {
+                                    androidx.compose.foundation.Canvas(modifier = Modifier.size(24.dp)) {
+                                        val color = bellTint
+                                        val strokeWidth = 1.5.dp.toPx()
+                                        // Right side arc
+                                        drawArc(
+                                            color = color,
+                                            startAngle = -45f,
+                                            sweepAngle = 90f,
+                                            useCenter = false,
+                                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                                            topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.75f, size.height * 0.25f),
+                                            size = androidx.compose.ui.geometry.Size(size.width * 0.3f, size.height * 0.5f)
+                                        )
+                                    }
+                                }
+                            }
                         }
                         
                         val userFullName = configState?.hoVaTen ?: userSession?.displayName ?: "TRƯƠNG VĂN KHOA"

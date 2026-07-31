@@ -996,11 +996,9 @@ fun SettingsScreen(
             var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
             var showMinutesPickerDialog by remember { mutableStateOf(false) }
 
-            var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
-            var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
-
-            var autoCheckInEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_check_in_enabled", false)) }
+            var autoClockInOutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_clock_in_out_enabled", false)) }
             var customCheckInTime by remember { mutableStateOf(notificationPrefs.getString("custom_check_in_time", "") ?: "") }
+            var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
 
             CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1029,21 +1027,29 @@ fun SettingsScreen(
                             onCheckedChange = { isEnabled ->
                                 notificationsEnabled = isEnabled
                                 smartLearningEnabled = isEnabled
-                                notificationPrefs.edit()
+                                val editor = notificationPrefs.edit()
                                     .putBoolean("notifications_enabled", isEnabled)
                                     .putBoolean("smart_learning_enabled", isEnabled)
-                                    .apply()
+                                
+                                if (isEnabled) {
+                                    autoClockInOutEnabled = false
+                                    editor.putBoolean("auto_clock_in_out_enabled", false)
+                                    editor.putBoolean("auto_check_in_enabled", false)
+                                    editor.putBoolean("auto_checkout_enabled", false)
+                                }
+                                editor.apply()
                                 
                                 val session = sessionState
                                 if (session != null) {
                                     if (isEnabled) {
                                         com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                        com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
                                     } else {
                                         com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
                                         androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
                                     }
                                 }
-                                Toast.makeText(context, if (isEnabled) "Đã bật nhắc nhở chấm công" else "Đã tắt nhắc nhở chấm công", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isEnabled) "Đã bật nhắc nhở (Đã tắt tự động)" else "Đã tắt nhắc nhở chấm công", Toast.LENGTH_SHORT).show()
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
@@ -1106,7 +1112,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
 
-                    // 1.5. Tự động Vào Ca (Hẹn giờ)
+                    // 2. Tự động Vào/Ra Ca (Gộp lại)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1114,35 +1120,48 @@ fun SettingsScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "🤖 Tự động vào ca (Hẹn giờ)",
+                                text = "🤖 Tự động vào/ra ca (Hẹn giờ)",
                                 color = White,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Tự động vào ca theo giờ tùy chỉnh hoặc học theo lịch sử. Thông báo: '[hh:mm] Tôi đã tự động chấm công cho bạn'.",
+                                text = "Tự động vào ca và ra ca theo giờ tùy chỉnh hoặc học theo lịch sử. Tự động vô hiệu hoá thông báo nhắc nhở.",
                                 color = LightGray,
                                 fontSize = 11.sp
                             )
                         }
                         Switch(
-                            checked = autoCheckInEnabled,
+                            checked = autoClockInOutEnabled,
                             onCheckedChange = { isEnabled ->
-                                autoCheckInEnabled = isEnabled
-                                notificationPrefs.edit().putBoolean("auto_check_in_enabled", isEnabled).apply()
-                                val session = sessionState
-                                if (session != null) {
-                                    if (isEnabled) {
+                                autoClockInOutEnabled = isEnabled
+                                val editor = notificationPrefs.edit()
+                                    .putBoolean("auto_clock_in_out_enabled", isEnabled)
+                                    .putBoolean("auto_check_in_enabled", isEnabled)
+                                    .putBoolean("auto_checkout_enabled", isEnabled)
+                                
+                                if (isEnabled) {
+                                    notificationsEnabled = false
+                                    editor.putBoolean("notifications_enabled", false)
+                                    val session = sessionState
+                                    if (session != null) {
+                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                                        
                                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                                             val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
                                             com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
                                         }
-                                    } else {
+                                    }
+                                } else {
+                                    val session = sessionState
+                                    if (session != null) {
                                         com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
                                     }
                                 }
-                                Toast.makeText(context, if (isEnabled) "Đã bật tự động vào ca" else "Đã tắt tự động vào ca", Toast.LENGTH_SHORT).show()
+                                editor.apply()
+                                Toast.makeText(context, if (isEnabled) "Đã bật tự động (Đã tắt nhắc nhở)" else "Đã tắt tự động vào/ra ca", Toast.LENGTH_SHORT).show()
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
@@ -1153,13 +1172,21 @@ fun SettingsScreen(
                         )
                     }
 
-                    if (autoCheckInEnabled) {
-                        var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime)) }
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (autoClockInOutEnabled) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // Input Giờ Vào
+                            var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime, selection = TextRange(customCheckInTime.length))) }
                             OutlinedTextField(
                                 value = inTimeTf,
                                 onValueChange = { newVal ->
-                                    val digits = newVal.text.filter { it.isDigit() }.take(4)
+                                    val raw = newVal.text
+                                    if (raw.isEmpty()) {
+                                        inTimeTf = newVal
+                                        customCheckInTime = ""
+                                        notificationPrefs.edit().putString("custom_check_in_time", "").apply()
+                                        return@OutlinedTextField
+                                    }
+                                    val digits = raw.filter { it.isDigit() }.take(4)
                                     val formatted = when {
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
@@ -1180,8 +1207,7 @@ fun SettingsScreen(
                                         }
                                         else -> digits
                                     }
-                                    val newTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
-                                    inTimeTf = newTf
+                                    inTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                                     customCheckInTime = formatted
                                     notificationPrefs.edit().putString("custom_check_in_time", formatted).apply()
                                     val session = sessionState
@@ -1202,68 +1228,20 @@ fun SettingsScreen(
                                     unfocusedTextColor = White
                                 )
                             )
-                            Text(
-                                text = "💡 Nếu để trống, hệ thống sẽ tự học giờ vào ca từ lịch sử chấm công các ngày trước.",
-                                color = LightGray,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
-
-                    // 2. Tự động Ra Ca (Độc lập, khi bật sẽ tự động tắt thông báo nhắc nhở)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "🤖 Tự động ra ca (Hẹn giờ)",
-                                color = White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Tự động ra ca khi hết giờ làm. Tự động vô hiệu hoá thông báo nhắc nhở để không làm phiền.",
-                                color = LightGray,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = autoCheckoutEnabled,
-                            onCheckedChange = { isEnabled ->
-                                autoCheckoutEnabled = isEnabled
-                                val editor = notificationPrefs.edit().putBoolean("auto_checkout_enabled", isEnabled)
-                                if (isEnabled) {
-                                    notificationsEnabled = false
-                                    editor.putBoolean("notifications_enabled", false)
-                                    val session = sessionState
-                                    if (session != null) {
-                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
-                                    }
-                                }
-                                editor.apply()
-                                Toast.makeText(context, if (isEnabled) "Đã bật tự động ra ca (Đã tắt thông báo nhắc nhở)" else "Đã tắt tự động ra ca", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = White,
-                                checkedTrackColor = AccentOrange,
-                                uncheckedThumbColor = MediumGray,
-                                uncheckedTrackColor = Color(0xFF1E1E1E)
-                            )
-                        )
-                    }
-
-                    if (autoCheckoutEnabled) {
-                        var timeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // Input Giờ Ra
+                            var outTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime, selection = TextRange(customCheckoutTime.length))) }
                             OutlinedTextField(
-                                value = timeTf,
+                                value = outTimeTf,
                                 onValueChange = { newVal ->
-                                    val digits = newVal.text.filter { it.isDigit() }.take(4)
+                                    val raw = newVal.text
+                                    if (raw.isEmpty()) {
+                                        outTimeTf = newVal
+                                        customCheckoutTime = ""
+                                        notificationPrefs.edit().putString("custom_checkout_time", "").apply()
+                                        return@OutlinedTextField
+                                    }
+                                    val digits = raw.filter { it.isDigit() }.take(4)
                                     val formatted = when {
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
@@ -1284,8 +1262,7 @@ fun SettingsScreen(
                                         }
                                         else -> digits
                                     }
-                                    val newTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
-                                    timeTf = newTf
+                                    outTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                                     customCheckoutTime = formatted
                                     notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
                                 },
@@ -1299,10 +1276,13 @@ fun SettingsScreen(
                                     unfocusedTextColor = White
                                 )
                             )
+
                             Text(
-                                text = "💡 Nhân viên mới chưa có lịch sử: Nếu để trống, hệ thống sẽ tự động hẹn giờ ra ca sau 11 tiếng 45 phút (12 tiếng trừ 15 phút) kể từ lúc bấm vào ca.",
+                                text = "💡 Nếu bạn để trống giờ vào, ra ca thì hệ thống sẽ đọc dữ liệu từ lịch sử để tự động chấm công.",
                                 color = LightGray,
-                                fontSize = 10.sp
+                                fontSize = 11.sp,
+                                fontStyle = FontStyle.Italic,
+                                modifier = Modifier.padding(horizontal = 4.dp)
                             )
                         }
                     }
