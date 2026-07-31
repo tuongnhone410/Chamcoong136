@@ -1207,8 +1207,6 @@ fun HomeScreen(
 
     if (showAutoCheckoutSetupDialog) {
         val context = LocalContext.current
-        val keyboardController = LocalSoftwareKeyboardController.current
-        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         var localTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
 
         AlertDialog(
@@ -1231,6 +1229,8 @@ fun HomeScreen(
                 )
             },
             text = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -1299,6 +1299,8 @@ fun HomeScreen(
                 }
             },
             confirmButton = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
                 Button(
                     onClick = {
                         keyboardController?.hide()
@@ -1329,8 +1331,6 @@ fun HomeScreen(
     }
 
     if (showNotificationConfigDialog) {
-        val keyboardController = LocalSoftwareKeyboardController.current
-        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
         var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
         var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
@@ -1375,6 +1375,8 @@ fun HomeScreen(
                 }
             },
             text = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1670,6 +1672,8 @@ fun HomeScreen(
                 }
             },
             confirmButton = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
                 Button(
                     onClick = {
                         keyboardController?.hide()
@@ -2371,8 +2375,6 @@ fun RetroactiveCheckInDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val todaySdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     val todayStr = remember { todaySdf.format(Date()) }
     val calYesterday = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) } }
@@ -2410,6 +2412,8 @@ fun RetroactiveCheckInDialog(
             }
         },
         text = {
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2657,8 +2661,12 @@ fun RetroactiveCheckInDialog(
             }
         },
         confirmButton = {
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
             Button(
                 onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
                     val inH = inHourText.text.toIntOrNull()
                     val inM = inMinText.text.toIntOrNull()
                     if (inH == null || inH !in 0..23 || inM == null || inM !in 0..59) {

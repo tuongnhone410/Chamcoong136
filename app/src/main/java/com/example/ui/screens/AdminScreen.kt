@@ -347,12 +347,12 @@ fun AdminScreen(
     if (showAddEmployeeDialog) {
         var newName by remember { mutableStateOf("") }
         var newMsnv by remember { mutableStateOf("") }
-        val keyboardController = LocalSoftwareKeyboardController.current
-        val focusManager = LocalFocusManager.current
         AlertDialog(
             onDismissRequest = { showAddEmployeeDialog = false },
             title = { Text("Thêm Nhân Viên", color = White) },
             text = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = LocalFocusManager.current
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = newName,
@@ -381,7 +381,11 @@ fun AdminScreen(
                 }
             },
             confirmButton = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = LocalFocusManager.current
                 Button(onClick = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
                     val uid = "offline_" + UUID.randomUUID().toString().take(8)
                     adminViewModel.saveEmployeeConfig(UserConfig(userId = uid, hoVaTen = newName, maNhanVien = newMsnv))
                     showAddEmployeeDialog = false
@@ -398,13 +402,13 @@ fun AdminScreen(
 
     if (showBatchExportDialog) {
         var exportMonth by remember { mutableStateOf(SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())) }
-        val keyboardController = LocalSoftwareKeyboardController.current
-        val focusManager = LocalFocusManager.current
         
         AlertDialog(
             onDismissRequest = { if (!isExportingByVM) showBatchExportDialog = false },
             title = { Text("Xuất Phiếu Lương Hàng Loạt", color = White) },
             text = {
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val focusManager = LocalFocusManager.current
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (isExportingByVM) {
                         Text("Đang tổng hợp và xuất dữ liệu... ${(exportProgressByVM * 100).toInt()}%", color = White)
@@ -3168,6 +3172,8 @@ fun SendAdminNotificationDialog(
             }
         },
         text = {
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3296,6 +3302,8 @@ fun SendAdminNotificationDialog(
             }
         },
         confirmButton = {
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             Button(
                 onClick = {
                     keyboardController?.hide()
