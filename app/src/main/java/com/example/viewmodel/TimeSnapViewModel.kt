@@ -1,6 +1,7 @@
 package com.example.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.glance.appwidget.updateAll
@@ -184,6 +185,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     try {
                         com.example.notification.NotificationHelper.createNotificationChannel(getApplication())
                         com.example.notification.NotificationHelper.scheduleNextCheckInReminder(getApplication(), session.uid)
+                        loadLocalCachedNotifications(session.uid)
+                        fetchAdminNotifications()
                     } catch (e: Exception) {
                         android.util.Log.e("TimeSnapViewModel", "Failed to init notifications: ${e.message}")
                     }
@@ -1455,6 +1458,131 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             isCurrentSelectedMonth = isCurrentSelectedMonth,
             holidayDatesInMonth = holidayDatesInMonth
         )
+    }
+
+    // Notification Center Management & Persistent Local Caching
+    private val _adminNotifications = MutableStateFlow<List<com.example.data.model.AdminNotification>>(emptyList())
+    val adminNotifications: StateFlow<List<com.example.data.model.AdminNotification>> = _adminNotifications.asStateFlow()
+
+    private val _readNotificationIds = MutableStateFlow<Set<String>>(emptySet())
+    val readNotificationIds: StateFlow<Set<String>> = _readNotificationIds.asStateFlow()
+
+    private val _isRefreshingNotifications = MutableStateFlow(false)
+    val isRefreshingNotifications: StateFlow<Boolean> = _isRefreshingNotifications.asStateFlow()
+
+    val unreadNotificationCount: StateFlow<Int> = combine(_adminNotifications, _readNotificationIds) { list, readSet ->
+        list.count { it.id !in readSet }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    private fun getNotifPrefs() = getApplication<Application>().getSharedPreferences("admin_notif_prefs_v2", Context.MODE_PRIVATE)
+
+    private fun loadLocalCachedNotifications(uid: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val prefs = getNotifPrefs()
+            val readSet = prefs.getStringSet("read_ids_$uid", emptySet()) ?: emptySet()
+            _readNotificationIds.value = readSet
+
+            val cachedJson = prefs.getString("cached_notifs_$uid", "") ?: ""
+            if (cachedJson.isNotBlank()) {
+                try {
+                    val array = org.json.JSONArray(cachedJson)
+                    val list = mutableListOf<com.example.data.model.AdminNotification>()
+                    for (i in 0 until array.length()) {
+                        val obj = array.getJSONObject(i)
+                        list.add(
+                            com.example.data.model.AdminNotification(
+                                id = obj.optString("id"),
+                                targetUid = obj.optString("targetUid", "ALL"),
+                                targetName = obj.optString("targetName", "Tất cả"),
+                                title = obj.optString("title"),
+                                message = obj.optString("message"),
+                                type = obj.optString("type", "GENERAL"),
+                                createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                                sentBy = obj.optString("sentBy", "Admin")
+                            )
+                        )
+                    }
+                    _adminNotifications.value = list.sortedByDescending { it.createdAt }
+                } catch (e: Exception) {
+                    android.util.Log.e("TimeSnapViewModel", "Lỗi đọc cache thông báo local", e)
+                }
+            }
+        }
+    }
+
+    private fun saveLocalCachedNotifications(uid: String, list: List<com.example.data.model.AdminNotification>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val prefs = getNotifPrefs()
+                val array = org.json.JSONArray()
+                list.forEach { notif ->
+                    val obj = org.json.JSONObject()
+                    obj.put("id", notif.id)
+                    obj.put("targetUid", notif.targetUid)
+                    obj.put("targetName", notif.targetName)
+                    obj.put("title", notif.title)
+                    obj.put("message", notif.message)
+                    obj.put("type", notif.type)
+                    obj.put("createdAt", notif.createdAt)
+                    obj.put("sentBy", notif.sentBy)
+                    array.put(obj)
+                }
+                prefs.edit().putString("cached_notifs_$uid", array.toString()).apply()
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Lỗi lưu cache thông báo local", e)
+            }
+        }
+    }
+
+    fun fetchAdminNotifications() {
+        val uid = currentUserSession.value?.uid ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isRefreshingNotifications.value = true
+            try {
+                val serverNotifs = com.example.data.FirestoreService.getUnreadAdminNotifications(uid, 0L)
+                
+                val currentLocal = _adminNotifications.value
+                val notifMap = mutableMapOf<String, com.example.data.model.AdminNotification>()
+                currentLocal.forEach { notifMap[it.id] = it }
+                serverNotifs.forEach { notifMap[it.id] = it }
+
+                val mergedList = notifMap.values.sortedByDescending { it.createdAt }
+                _adminNotifications.value = mergedList
+                saveLocalCachedNotifications(uid, mergedList)
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Lỗi tải thông báo từ server", e)
+            } finally {
+                _isRefreshingNotifications.value = false
+            }
+        }
+    }
+
+    fun markNotificationAsRead(id: String) {
+        val uid = currentUserSession.value?.uid ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = _readNotificationIds.value.toMutableSet()
+            updated.add(id)
+            _readNotificationIds.value = updated
+            getNotifPrefs().edit().putStringSet("read_ids_$uid", updated).apply()
+        }
+    }
+
+    fun markAllNotificationsAsRead() {
+        val uid = currentUserSession.value?.uid ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val allIds = _adminNotifications.value.map { it.id }.toSet()
+            _readNotificationIds.value = allIds
+            getNotifPrefs().edit().putStringSet("read_ids_$uid", allIds).apply()
+        }
+    }
+
+    fun deleteNotificationLocally(id: String) {
+        val uid = currentUserSession.value?.uid ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val newList = _adminNotifications.value.filter { it.id != id }
+            _adminNotifications.value = newList
+            saveLocalCachedNotifications(uid, newList)
+        }
     }
 
 }

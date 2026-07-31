@@ -203,7 +203,8 @@ fun SalaryMetricColumn(
 @Composable
 fun HomeScreen(
     viewModel: TimeSnapViewModel,
-    onNavigateToLogin: () -> Unit
+    onNavigateToLogin: () -> Unit,
+    onNavigateToNotifications: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
@@ -234,6 +235,7 @@ fun HomeScreen(
     val recentEntries by viewModel.monthTimeEntries.collectAsStateWithLifecycle()
     val configState by viewModel.userConfig.collectAsStateWithLifecycle()
     val selectedMonth by viewModel.currentSelectedMonth.collectAsStateWithLifecycle()
+    val unreadNotifCount by viewModel.unreadNotificationCount.collectAsStateWithLifecycle()
 
     var liveTimeString by remember { mutableStateOf("") }
     var liveHMString by remember { mutableStateOf("") }
@@ -292,6 +294,36 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
+                        // Icon Trung tâm thông báo có đếm cờ chưa đọc
+                        IconButton(
+                            onClick = onNavigateToNotifications,
+                            modifier = Modifier.testTag("btn_top_notif_center")
+                        ) {
+                            BadgedBox(
+                                badge = {
+                                    if (unreadNotifCount > 0) {
+                                        Badge(
+                                            containerColor = AccentOrange,
+                                            contentColor = White
+                                        ) {
+                                            Text(
+                                                text = if (unreadNotifCount > 99) "99+" else "$unreadNotifCount",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (unreadNotifCount > 0) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                                    contentDescription = "Trung tâm thông báo",
+                                    tint = if (unreadNotifCount > 0) NeonBlue else TextSecondary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
                         IconButton(
                             onClick = {
                                 showNotificationConfigDialog = true
@@ -1574,6 +1606,32 @@ fun HomeScreen(
                                 modifier = Modifier.padding(horizontal = 4.dp)
                             )
                         }
+                    }
+
+                    HorizontalDivider(color = CardBorder)
+
+                    // Nút mở Trung tâm thông báo
+                    Button(
+                        onClick = {
+                            showNotificationConfigDialog = false
+                            onNavigateToNotifications()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryBlue,
+                            contentColor = White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_dialog_open_notif_center")
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Xem Lịch Sử Tin Nhắn (${unreadNotifCount} chưa đọc)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             },

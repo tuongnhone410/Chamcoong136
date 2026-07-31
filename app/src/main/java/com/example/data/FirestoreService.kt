@@ -7,6 +7,7 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -692,8 +693,14 @@ object FirestoreService {
     }
 
     suspend fun sendAdminNotification(notif: com.example.data.model.AdminNotification): Boolean {
-        // Tự động dọn dẹp các thông báo cũ quá 12h trước khi gửi thông báo mới
-        cleanupExpiredNotifications(notif.targetUid)
+        // Tự động dọn dẹp các thông báo cũ trong Background Coroutine để không chặn/làm chậm quá trình gửi
+        try {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                cleanupExpiredNotifications(notif.targetUid)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi kích hoạt dọn dẹp ngầm: ${e.message}")
+        }
 
         var anySuccess = false
         val firestore = getDb() ?: return false
@@ -710,29 +717,54 @@ object FirestoreService {
             "sentBy" to notif.sentBy
         )
 
-        // 1. Nếu gửi cho cá nhân 1 nhân viên -> Lưu vào subcollection của nhân viên đó
+        // 1. Lưu vào kho chung admin_notifications/{notifId} (Tăng timeout lên 10s)
+        try {
+            val res = kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                firestore.collection("admin_notifications").document(notifId)
+                    .set(map).awaitTaskFirestore()
+                true
+            }
+            if (res == true) anySuccess = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi lưu admin_notifications: ${e.message}")
+        }
+
+        // 2. Nếu gửi cho cá nhân 1 nhân viên -> Lưu vào subcollection của nhân viên đó
         if (notif.targetUid != "ALL" && notif.targetUid.isNotBlank()) {
             try {
-                kotlinx.coroutines.withTimeoutOrNull(5000L) {
+                val resUser = kotlinx.coroutines.withTimeoutOrNull(10000L) {
                     firestore.collection("users").document(notif.targetUid)
                         .collection("notifications").document(notifId)
                         .set(map).awaitTaskFirestore()
+                    true
                 }
-                anySuccess = true
+                if (resUser == true) anySuccess = true
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi lưu thông báo cho nhân viên: ${e.message}")
             }
         }
 
-        // 2. Lưu vào kho chung admin_notifications/{notifId} (Chỉ 1 bản ghi duy nhất ~0.2KB cho tất cả người dùng, tiết kiệm dung lượng Server tối đa)
+        // 3. Đường dẫn dự phòng 3: app_config/admin_notifications/items/{notifId}
         try {
-            kotlinx.coroutines.withTimeoutOrNull(5000L) {
-                firestore.collection("admin_notifications").document(notifId)
+            val resAppConfig = kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                firestore.collection("app_config").document("admin_notifications")
+                    .collection("items").document(notifId)
                     .set(map).awaitTaskFirestore()
+                true
             }
-            anySuccess = true
+            if (resAppConfig == true) anySuccess = true
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi lưu admin_notifications: ${e.message}")
+            Log.e(TAG, "Lỗi lưu app_config backup: ${e.message}")
+        }
+
+        // Nếu Firestore khả dụng, ghi dữ liệu offline/stage thành công
+        if (!anySuccess) {
+            try {
+                firestore.collection("admin_notifications").document(notifId).set(map)
+                anySuccess = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi lưu offline fallback: ${e.message}")
+            }
         }
 
         return anySuccess

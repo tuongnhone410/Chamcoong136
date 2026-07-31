@@ -529,7 +529,13 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("home") {
-                HomeScreen(viewModel = viewModel, onNavigateToLogin = {})
+                HomeScreen(
+                    viewModel = viewModel,
+                    onNavigateToLogin = {},
+                    onNavigateToNotifications = {
+                        tabNavController.navigate("notifications")
+                    }
+                )
             }
             composable("history") {
                 HistoryScreen(viewModel = viewModel)
@@ -554,6 +560,14 @@ fun MainTabScreenContainer(viewModel: TimeSnapViewModel) {
                         tabNavController.popBackStack()
                     }
                 })
+            }
+            composable("notifications") {
+                NotificationCenterScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        tabNavController.popBackStack()
+                    }
+                )
             }
         }
     }
