@@ -258,23 +258,37 @@ object NotificationHelper {
                     if (sameDay.isNotEmpty()) sameDay else entries.take(7)
                 }
 
-                val validCheckoutTimes = targetEntries.mapNotNull { it.checkOutTime }
+                // Lọc bỏ các ngày ra ca bất thường (< 4 tiếng làm việc)
+                val validEntries = targetEntries.filter { entry ->
+                    val ci = entry.checkInTime
+                    val co = entry.checkOutTime
+                    if (ci == null || co == null) false
+                    else {
+                        val duration = co - ci
+                        duration >= 4 * 3600 * 1000L // Ít nhất 4 tiếng làm việc
+                    }
+                }
+
+                val validCheckoutTimes = validEntries.mapNotNull { it.checkOutTime }
                 if (validCheckoutTimes.isNotEmpty()) {
                     val isCurrentNight = calCheckIn.get(Calendar.HOUR_OF_DAY) >= 15
                     val filteredTimes = validCheckoutTimes.filter { time ->
                         val c = Calendar.getInstance().apply { timeInMillis = time }
                         val hour = c.get(Calendar.HOUR_OF_DAY)
-                        if (isCurrentNight) (hour in 4..11) else (hour in 15..23)
+                        if (isCurrentNight) (hour in 3..11) else (hour in 15..23)
                     }.ifEmpty { validCheckoutTimes }
 
-                    var totalMins = 0L
-                    for (coTime in filteredTimes) {
+                    // Thuật toán Trung vị (Median) để loại bỏ hoàn toàn các ngày ra ca lệch chuẩn
+                    val minsList = filteredTimes.map { coTime ->
                         val calCO = Calendar.getInstance().apply { timeInMillis = coTime }
-                        totalMins += calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
+                        calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
+                    }.sorted()
+
+                    if (minsList.isNotEmpty()) {
+                        val medianMins = minsList[minsList.size / 2]
+                        targetHour = medianMins / 60
+                        targetMin = medianMins % 60
                     }
-                    val avgMins = (totalMins / filteredTimes.size).toInt()
-                    targetHour = avgMins / 60
-                    targetMin = avgMins % 60
                 }
             }
         } catch (e: Exception) {}
@@ -352,14 +366,17 @@ object NotificationHelper {
                         isNight == isRecentNight
                     }.ifEmpty { validCheckInTimes }
 
-                    var totalMins = 0L
-                    for (ciTime in filteredTimes) {
+                    // Thuật toán Trung vị (Median) để loại bỏ hoàn toàn giờ vào ca bất thường
+                    val minsList = filteredTimes.map { ciTime ->
                         val c = Calendar.getInstance().apply { timeInMillis = ciTime }
-                        totalMins += c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+                        c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+                    }.sorted()
+
+                    if (minsList.isNotEmpty()) {
+                        val medianMins = minsList[minsList.size / 2]
+                        targetHour = medianMins / 60
+                        targetMin = medianMins % 60
                     }
-                    val avgMins = (totalMins / filteredTimes.size).toInt()
-                    targetHour = avgMins / 60
-                    targetMin = avgMins % 60
                 }
             }
         } catch (e: Exception) {}

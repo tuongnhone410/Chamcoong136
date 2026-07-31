@@ -3274,16 +3274,14 @@ fun SendAdminNotificationDialog(
                     value = message,
                     onValueChange = { message = it },
                     placeholder = { Text("Nhập nội dung chi tiết...", color = LightGray, fontSize = 12.sp) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = White,
                         unfocusedTextColor = White,
                         focusedBorderColor = NeonBlue,
                         unfocusedBorderColor = Color.Gray
                     ),
-                    maxLines = 4,
+                    singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = {
