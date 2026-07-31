@@ -124,6 +124,9 @@ class MainActivity : ComponentActivity() {
                 var devCloudCode by remember { mutableStateOf(0L) }
 
                 LaunchedEffect(sessionState) {
+                    sessionState?.uid?.let { uid ->
+                        com.example.notification.NotificationHelper.scheduleAdminNotificationSync(context, uid)
+                    }
                     val email = sessionState?.email ?: ""
                     if (email.trim().lowercase() == "khoatubexxx@gmail.com") {
                         try {

@@ -26,19 +26,35 @@ class AutoCheckOutWorker(
             val database = AppDatabase.getInstance(context)
             val active = database.timeEntryDao().getActiveEntry(uid)
 
-            if (active != null && active.isWorking) {
-                val checkoutMs = if (scheduledTimeMs > 0) scheduledTimeMs else System.currentTimeMillis()
+            if (active != null && active.isWorking && active.checkOutTime == null) {
+                var checkoutMs = if (scheduledTimeMs > 0) scheduledTimeMs else System.currentTimeMillis()
+                val checkInMs = active.checkInTime ?: System.currentTimeMillis()
+
+                // Xung đột 2: Nếu thời gian ra ca dự kiến nhỏ hơn hoặc bằng thời gian vào ca (do người dùng sửa tay/chấm muộn)
+                if (checkoutMs <= checkInMs) {
+                    android.util.Log.w("AutoCheckOutWorker", "Xung đột thời gian: checkoutMs ($checkoutMs) <= checkInMs ($checkInMs). Tự động điều chỉnh ra ca sau 1 giờ.")
+                    checkoutMs = checkInMs + 60 * 60 * 1000L
+                }
+
                 val cal = Calendar.getInstance().apply { timeInMillis = checkoutMs }
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
 
-                val sId = if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
-                val sType = if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
+                val inTime = active.checkInTime ?: System.currentTimeMillis()
+                val inCal = Calendar.getInstance().apply { timeInMillis = inTime }
+                val inHour = inCal.get(Calendar.HOUR_OF_DAY)
+
+                val isNight = active.shiftId == "ca_dem" || active.shiftType == "NIGHT" || active.dayType == "NIGHT" || inHour >= 15 || inHour < 6
+
+                val sId = if (isNight) "ca_dem" else if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
+                val dayType = if (isNight) "NIGHT" else active.dayType
 
                 val updated = active.copy(
                     checkOutTime = checkoutMs,
                     isWorking = false,
                     shiftId = sId,
                     shiftType = sType,
+                    dayType = dayType,
                     note = if (active.note.isNullOrBlank()) "🤖 Tự động ra ca theo lịch hẹn" else "${active.note} (🤖 Tự động ra ca)"
                 )
 
@@ -63,7 +79,6 @@ class AutoCheckOutWorker(
                     android.util.Log.e("AutoCheckOutWorker", "Lỗi đồng bộ Firestore sau khi tự động ra ca: ${e.message}")
                 }
 
-                val checkInMs = active.checkInTime ?: checkoutMs
                 val workedMs = checkoutMs - checkInMs
                 val workedHours = workedMs / (1000.0 * 60 * 60)
                 val formattedHours = String.format(Locale.getDefault(), "%.1f", workedHours).removeSuffix(".0")

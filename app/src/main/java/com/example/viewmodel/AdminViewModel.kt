@@ -70,6 +70,29 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun sendNotificationToEmployee(
+        targetUid: String,
+        targetName: String,
+        title: String,
+        message: String,
+        type: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            val notif = com.example.data.model.AdminNotification(
+                targetUid = targetUid,
+                targetName = targetName,
+                title = title,
+                message = message,
+                type = type,
+                createdAt = System.currentTimeMillis(),
+                sentBy = "Admin"
+            )
+            val success = FirestoreService.sendAdminNotification(notif)
+            onResult(success)
+        }
+    }
+
     fun loadTodayAttendance() {
         viewModelScope.launch {
             try {

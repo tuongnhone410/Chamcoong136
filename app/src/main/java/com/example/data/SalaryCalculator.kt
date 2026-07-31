@@ -67,11 +67,14 @@ object SalaryCalculator {
         if (shiftId != null && SHIFTS.containsKey(shiftId)) {
             return SHIFTS[shiftId]!!
         }
+        if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") {
+            return SHIFTS["ca_dem"]!!
+        }
         // Fallback: detect based on old data or check-in time
         val inTime = entry.checkInTime ?: return SHIFTS["ca1"]!!
         val cal = Calendar.getInstance().apply { timeInMillis = inTime }
         val hour = cal.get(Calendar.HOUR_OF_DAY)
-        if (hour >= 18 || hour < 6) {
+        if (hour >= 15 || hour < 6) {
             return SHIFTS["ca_dem"]!!
         }
         val outTime = entry.checkOutTime

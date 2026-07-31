@@ -80,6 +80,7 @@ fun AdminScreen(
     var showBatchEditDialog by remember { mutableStateOf(false) }
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
+    var showSendNotifDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
     val exportSuccessCount by adminViewModel.exportSuccessCount.collectAsStateWithLifecycle()
@@ -148,6 +149,9 @@ fun AdminScreen(
                                 Icon(Icons.Default.FileDownload, contentDescription = "Xuất phiếu lương cá nhân", tint = NeonBlue)
                             }
                         } else {
+                            IconButton(onClick = { showSendNotifDialog = true }) {
+                                Icon(Icons.Default.Campaign, contentDescription = "Gửi thông báo", tint = White)
+                            }
                             IconButton(onClick = { showBatchExportDialog = true }) {
                                 Icon(Icons.Default.FileDownload, contentDescription = "Xuất hàng loạt", tint = White)
                             }
@@ -306,6 +310,37 @@ fun AdminScreen(
                 TextButton(onClick = { showSingleDeleteConfirm = false }) { Text("Hủy") }
             },
             containerColor = DarkContainer
+        )
+    }
+
+    if (showSendNotifDialog) {
+        SendAdminNotificationDialog(
+            employees = employees,
+            onDismiss = { showSendNotifDialog = false },
+            onSend = { targetUid, targetName, title, message, type ->
+                adminViewModel.sendNotificationToEmployee(
+                    targetUid = targetUid,
+                    targetName = targetName,
+                    title = title,
+                    message = message,
+                    type = type
+                ) { success ->
+                    if (success) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "📢 Đã phát thông báo! Hệ thống sẽ tự đẩy đến thiết bị người dùng ngay khi có kết nối Mạng/Wi-Fi.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "❌ Lỗi gửi thông báo. Vui lòng kiểm tra kết nối mạng.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    showSendNotifDialog = false
+                }
+            }
         )
     }
 
@@ -3096,4 +3131,173 @@ fun EmployeePayslipView(
             }
         }
     }
+}
+
+@Composable
+fun SendAdminNotificationDialog(
+    employees: List<UserConfig>,
+    onDismiss: () -> Unit,
+    onSend: (targetUid: String, targetName: String, title: String, message: String, type: String) -> Unit
+) {
+    var selectedTargetUid by remember { mutableStateOf("ALL") }
+    var selectedTargetName by remember { mutableStateOf("Tất cả nhân viên") }
+    var title by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    var notifType by remember { mutableStateOf("SHIFT_REMINDER") }
+    var isExpandedEmpDropdown by remember { mutableStateOf(false) }
+    var isExpandedTypeDropdown by remember { mutableStateOf(false) }
+
+    val typeOptions = listOf(
+        "SHIFT_REMINDER" to "⏰ Nhắc nhở ca làm việc",
+        "SHIFT_CHANGE" to "🔄 Xác nhận thay đổi ca làm việc",
+        "AUTO_TIME_APPROVED" to "✅ Giờ tự động đã phê duyệt",
+        "GENERAL" to "📢 Thông báo chung"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkContainer,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Campaign, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Gửi thông báo đến nhân viên", color = White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Thông báo sẽ tự động phát tới thiết bị nhân viên ngay khi thiết bị kết nối Mạng / Wi-Fi mà không cần mở ứng dụng.",
+                    color = LightGray,
+                    fontSize = 12.sp
+                )
+
+                Text("Người nhận:", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Box {
+                    OutlinedButton(
+                        onClick = { isExpandedEmpDropdown = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = White),
+                        border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.5f))
+                    ) {
+                        Text(selectedTargetName, color = White, maxLines = 1)
+                    }
+                    DropdownMenu(
+                        expanded = isExpandedEmpDropdown,
+                        onDismissRequest = { isExpandedEmpDropdown = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("🌐 Tất cả nhân viên (Gửi hàng loạt)") },
+                            onClick = {
+                                selectedTargetUid = "ALL"
+                                selectedTargetName = "Tất cả nhân viên"
+                                isExpandedEmpDropdown = false
+                            }
+                        )
+                        employees.forEach { emp ->
+                            DropdownMenuItem(
+                                text = { Text("${emp.hoVaTen} (${emp.maNhanVien})") },
+                                onClick = {
+                                    selectedTargetUid = emp.userId
+                                    selectedTargetName = emp.hoVaTen
+                                    isExpandedEmpDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text("Loại thông báo:", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Box {
+                    OutlinedButton(
+                        onClick = { isExpandedTypeDropdown = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = White),
+                        border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.5f))
+                    ) {
+                        val currentLabel = typeOptions.find { it.first == notifType }?.second ?: "Thông báo chung"
+                        Text(currentLabel, color = White)
+                    }
+                    DropdownMenu(
+                        expanded = isExpandedTypeDropdown,
+                        onDismissRequest = { isExpandedTypeDropdown = false }
+                    ) {
+                        typeOptions.forEach { (typeKey, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    notifType = typeKey
+                                    if (title.isBlank()) {
+                                        title = when (typeKey) {
+                                            "SHIFT_REMINDER" -> "Nhắc nhở ca làm việc"
+                                            "SHIFT_CHANGE" -> "Xác nhận thay đổi ca làm việc"
+                                            "AUTO_TIME_APPROVED" -> "Xác nhận giờ tự động được duyệt"
+                                            else -> "Thông báo từ Ban Quản Lý"
+                                        }
+                                    }
+                                    isExpandedTypeDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text("Tiêu đề thông báo:", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    placeholder = { Text("Nhập tiêu đề...", color = LightGray, fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = White,
+                        unfocusedTextColor = White,
+                        focusedBorderColor = NeonBlue,
+                        unfocusedBorderColor = Color.Gray
+                    ),
+                    singleLine = true
+                )
+
+                Text("Nội dung thông báo:", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    placeholder = { Text("Nhập nội dung chi tiết...", color = LightGray, fontSize = 12.sp) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = White,
+                        unfocusedTextColor = White,
+                        focusedBorderColor = NeonBlue,
+                        unfocusedBorderColor = Color.Gray
+                    ),
+                    maxLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalTitle = title.ifBlank { "📢 Thông báo từ Admin" }
+                    if (message.isNotBlank()) {
+                        onSend(selectedTargetUid, selectedTargetName, finalTitle, message, notifType)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                enabled = message.isNotBlank()
+            ) {
+                Text("Gửi Ngay", color = White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Hủy", color = LightGray)
+            }
+        }
+    )
 }

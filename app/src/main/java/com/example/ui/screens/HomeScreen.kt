@@ -1494,10 +1494,12 @@ fun HomeScreen(
                                     inTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                                     customCheckInTime = formatted
                                     notificationPrefs.edit().putString("custom_check_in_time", formatted).apply()
-                                    userSession?.let { session ->
-                                        CoroutineScope(Dispatchers.IO).launch {
-                                            val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
-                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                    if (formatted.length == 5 || formatted.isEmpty()) {
+                                        userSession?.let { session ->
+                                            CoroutineScope(Dispatchers.IO).launch {
+                                                val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                            }
                                         }
                                     }
                                 },
@@ -1544,6 +1546,17 @@ fun HomeScreen(
                                     outTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                                     customCheckoutTime = formatted
                                     notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
+                                    if (formatted.length == 5 || formatted.isEmpty()) {
+                                        userSession?.let { session ->
+                                            CoroutineScope(Dispatchers.IO).launch {
+                                                val currentActive = viewModel.activeWorkingEntry.value
+                                                if (currentActive != null && currentActive.isWorking) {
+                                                    val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, currentActive)
+                                                    com.example.notification.NotificationHelper.scheduleAutoCheckOut(context, session.uid, targetMs)
+                                                }
+                                            }
+                                        }
+                                    }
                                 },
                                 label = { Text("Giờ ra ca", fontSize = 11.sp, color = LightGray) },
                                 placeholder = { Text("Dự kiến: $estimatedOutTime (Tự học)", fontSize = 10.sp) },

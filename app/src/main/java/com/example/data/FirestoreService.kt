@@ -642,6 +642,66 @@ object FirestoreService {
         return PublishedVersionResult(0L, "Lỗi tải bản", "", false, finalError)
     }
 
+    suspend fun sendAdminNotification(notif: com.example.data.model.AdminNotification): Boolean {
+        return try {
+            val firestore = getDb() ?: return false
+            val docRef = if (notif.id.isNotBlank()) {
+                firestore.collection("admin_notifications").document(notif.id)
+            } else {
+                firestore.collection("admin_notifications").document()
+            }
+            val map = mapOf(
+                "id" to docRef.id,
+                "targetUid" to notif.targetUid,
+                "targetName" to notif.targetName,
+                "title" to notif.title,
+                "message" to notif.message,
+                "type" to notif.type,
+                "createdAt" to notif.createdAt,
+                "sentBy" to notif.sentBy
+            )
+            docRef.set(map).awaitTaskFirestore()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi gửi thông báo Admin: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun getUnreadAdminNotifications(uid: String, lastTimestamp: Long): List<com.example.data.model.AdminNotification> {
+        return try {
+            val firestore = getDb() ?: return emptyList()
+            val result = mutableListOf<com.example.data.model.AdminNotification>()
+            
+            val snapshot = firestore.collection("admin_notifications")
+                .whereGreaterThan("createdAt", lastTimestamp)
+                .get()
+                .awaitTaskFirestore()
+
+            val docs = snapshot?.documents ?: emptyList()
+            for (doc in docs) {
+                val targetUid = doc.getString("targetUid") ?: "ALL"
+                if (targetUid == "ALL" || targetUid == uid) {
+                    val notif = com.example.data.model.AdminNotification(
+                        id = doc.id,
+                        targetUid = targetUid,
+                        targetName = doc.getString("targetName") ?: "Tất cả",
+                        title = doc.getString("title") ?: "",
+                        message = doc.getString("message") ?: "",
+                        type = doc.getString("type") ?: "GENERAL",
+                        createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
+                        sentBy = doc.getString("sentBy") ?: "Admin"
+                    )
+                    result.add(notif)
+                }
+            }
+            result.sortedBy { it.createdAt }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi lấy thông báo Admin: ${e.message}", e)
+            emptyList()
+        }
+    }
+
     suspend fun saveUserSalaryConfigToFirestore(config: com.example.data.model.UserConfig) {
         if (config.userId.startsWith("demo") || config.userId.contains("demo")) return
         val firestore = getDb() ?: return

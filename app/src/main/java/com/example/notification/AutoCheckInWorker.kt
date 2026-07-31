@@ -26,15 +26,27 @@ class AutoCheckInWorker(
         try {
             val database = AppDatabase.getInstance(context)
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(if (scheduledTimeMs > 0) scheduledTimeMs else System.currentTimeMillis()))
-            val existing = database.timeEntryDao().getEntryByDate(uid, todayStr)
+            
+            // Xung đột 1: Kiểm tra xem đang có ca nào active hay không
+            val activeEntry = database.timeEntryDao().getActiveEntry(uid)
+            val existingToday = database.timeEntryDao().getEntryByDate(uid, todayStr)
 
-            if (existing != null && existing.checkInTime != null) {
-                // User đã chủ động bấm vào ca thủ công trong ngày hôm nay. Không tự động check-in, nhưng hỗ trợ đặt lịch tự động ra ca.
-                android.util.Log.d("AutoCheckInWorker", "User đã check-in thủ công hôm nay. Bỏ qua tự động vào ca, chuẩn bị đặt lịch tự động ra ca.")
+            if (activeEntry != null && activeEntry.isWorking) {
+                // Người dùng đã vào ca (thủ công hoặc ca trước chưa ra ca) -> Tránh ghi đè ca đang làm
+                android.util.Log.d("AutoCheckInWorker", "Xung đột: Người dùng đang trong ca làm việc (${activeEntry.date}). Bỏ qua tự động vào ca.")
                 val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
                 val autoCheckoutEnabled = sharedPrefs.getBoolean("auto_checkout_enabled", false)
                 if (autoCheckoutEnabled) {
-                    val checkoutMs = NotificationHelper.estimateHistoricalCheckoutTime(context, uid, existing)
+                    val checkoutMs = NotificationHelper.estimateHistoricalCheckoutTime(context, uid, activeEntry)
+                    NotificationHelper.scheduleAutoCheckOut(context, uid, checkoutMs)
+                }
+            } else if (existingToday != null && existingToday.checkInTime != null) {
+                // Người dùng đã chủ động vào ca hoặc đã có dữ liệu chấm công cho ngày hôm nay
+                android.util.Log.d("AutoCheckInWorker", "Xung đột: Đã có bản ghi chấm công ngày $todayStr. Bỏ qua tự động vào ca.")
+                val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+                val autoCheckoutEnabled = sharedPrefs.getBoolean("auto_checkout_enabled", false)
+                if (autoCheckoutEnabled && existingToday.isWorking) {
+                    val checkoutMs = NotificationHelper.estimateHistoricalCheckoutTime(context, uid, existingToday)
                     NotificationHelper.scheduleAutoCheckOut(context, uid, checkoutMs)
                 }
             } else {
@@ -42,8 +54,15 @@ class AutoCheckInWorker(
                 val cal = Calendar.getInstance().apply { timeInMillis = checkInMs }
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
 
-                val sId = if (hour >= 15) "ca2" else "ca1"
-                val sType = if (sId == "ca2") "NIGHT" else "DAY"
+                val sId = if (hour >= 15 || hour < 6) "ca_dem" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else "DAY"
+
+                val dayType = when {
+                    sType == "NIGHT" -> "NIGHT"
+                    SalaryCalculator.isHoliday(todayStr) -> "HOLIDAY"
+                    SalaryCalculator.isSunday(todayStr) -> "SUNDAY"
+                    else -> "NORMAL"
+                }
 
                 val newEntry = TimeEntry(
                     userId = uid,
@@ -51,6 +70,7 @@ class AutoCheckInWorker(
                     checkInTime = checkInMs,
                     checkOutTime = null,
                     isWorking = true,
+                    dayType = dayType,
                     shiftId = sId,
                     shiftType = sType,
                     note = "🤖 Tự động vào ca theo lịch hẹn"

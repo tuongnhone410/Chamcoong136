@@ -149,6 +149,36 @@ object NotificationHelper {
         WorkManager.getInstance(context.applicationContext).cancelUniqueWork("checkout_reminder_$uid")
     }
 
+    // Lên lịch lắng nghe / đồng bộ thông báo từ Admin khi có kết nối mạng (NetworkType.CONNECTED)
+    fun scheduleAdminNotificationSync(context: Context, uid: String) {
+        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        if (uid.isNotBlank()) {
+            sharedPrefs.edit().putString("current_user_uid", uid).apply()
+        }
+
+        val constraints = androidx.work.Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+            .build()
+
+        val periodicRequest = androidx.work.PeriodicWorkRequestBuilder<AdminNotificationWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .setInputData(androidx.work.workDataOf("uid" to uid))
+            .build()
+
+        WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
+            "AdminNotificationWorker_$uid",
+            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            periodicRequest
+        )
+
+        val oneTimeRequest = androidx.work.OneTimeWorkRequestBuilder<AdminNotificationWorker>()
+            .setConstraints(constraints)
+            .setInputData(androidx.work.workDataOf("uid" to uid))
+            .build()
+
+        WorkManager.getInstance(context.applicationContext).enqueue(oneTimeRequest)
+    }
+
     fun scheduleCheckOutReminderForActiveEntry(context: Context, uid: String, activeEntry: TimeEntry) {
         if (!activeEntry.isWorking) return
 
@@ -183,7 +213,7 @@ object NotificationHelper {
         val shift = SalaryCalculator.getShiftForEntry(activeEntry)
         val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInMs }
         
-        if (customTime.isNotBlank()) {
+        if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
             try {
                 val parts = customTime.split(":")
                 val h = parts.getOrNull(0)?.toIntOrNull() ?: 19
@@ -267,7 +297,7 @@ object NotificationHelper {
         val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
         val customTime = sharedPrefs.getString("custom_check_in_time", "") ?: ""
         
-        if (customTime.isNotBlank()) {
+        if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
             val parts = customTime.split(":")
             val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
             val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
