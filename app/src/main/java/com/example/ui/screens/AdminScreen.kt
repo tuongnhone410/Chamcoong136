@@ -3154,6 +3154,9 @@ fun SendAdminNotificationDialog(
         "GENERAL" to "📢 Thông báo chung"
     )
 
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DarkContainer,
@@ -3259,7 +3262,11 @@ fun SendAdminNotificationDialog(
                         focusedBorderColor = NeonBlue,
                         unfocusedBorderColor = Color.Gray
                     ),
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) }
+                    )
                 )
 
                 Text("Nội dung thông báo:", color = White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -3276,7 +3283,14 @@ fun SendAdminNotificationDialog(
                         focusedBorderColor = NeonBlue,
                         unfocusedBorderColor = Color.Gray
                     ),
-                    maxLines = 4
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }
+                    )
                 )
             }
         },

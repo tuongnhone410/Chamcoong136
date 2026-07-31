@@ -1000,6 +1000,20 @@ fun SettingsScreen(
             var customCheckInTime by remember { mutableStateOf(notificationPrefs.getString("custom_check_in_time", "") ?: "") }
             var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
 
+            var estimatedInTime by remember { mutableStateOf("07:30") }
+            var estimatedOutTime by remember { mutableStateOf("17:30") }
+
+            LaunchedEffect(Unit) {
+                sessionState?.let { session ->
+                    val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                    estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
+                    
+                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = System.currentTimeMillis())
+                    val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                    estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
+                }
+            }
+
             CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // 1. Bật thông báo nhắc nhở
@@ -1197,7 +1211,7 @@ fun SettingsScreen(
                                     }
                                 },
                                 label = { Text("Giờ vào ca", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
+                                placeholder = { Text(text = estimatedInTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
@@ -1242,7 +1256,7 @@ fun SettingsScreen(
                                     notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
                                 },
                                 label = { Text("Giờ ra ca", fontSize = 12.sp, color = LightGray) },
-                                placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
+                                placeholder = { Text(text = estimatedOutTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),

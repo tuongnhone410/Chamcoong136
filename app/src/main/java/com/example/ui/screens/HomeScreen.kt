@@ -28,6 +28,10 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.AlarmOn
+import androidx.compose.material.icons.filled.AlarmOff
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
@@ -327,49 +331,31 @@ fun HomeScreen(
                         IconButton(
                             onClick = {
                                 showNotificationConfigDialog = true
-                            }
+                            },
+                            modifier = Modifier.testTag("btn_top_reminder_config")
                         ) {
-                            val bellIcon = when {
-                                notificationsEnabled -> Icons.Default.NotificationsActive
-                                autoClockInOutEnabled -> Icons.Default.Notifications
-                                else -> Icons.Default.NotificationsOff
+                            val alarmIcon = when {
+                                notificationsEnabled -> Icons.Default.AlarmOn
+                                autoClockInOutEnabled -> Icons.Default.Alarm
+                                else -> Icons.Default.AlarmOff
                             }
-                            val bellTint = when {
+                            val alarmTint = when {
                                 notificationsEnabled -> AccentOrange
                                 autoClockInOutEnabled -> NeonBlue
                                 else -> TextSecondary
                             }
-                            val bellDesc = when {
-                                notificationsEnabled -> "Chuông 2 bên: Đang bật nhắc nhở"
-                                autoClockInOutEnabled -> "Chuông 1 bên: Đang bật tự động"
-                                else -> "Gạch chéo: Đã tắt"
+                            val alarmDesc = when {
+                                notificationsEnabled -> "Nhắc nhở chấm công: Đang bật"
+                                autoClockInOutEnabled -> "Tự động chấm công: Đang bật"
+                                else -> "Cấu hình nhắc nhở: Đang tắt"
                             }
                             
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = bellIcon,
-                                    contentDescription = bellDesc,
-                                    tint = bellTint,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                // Draw one vibration arc for auto mode (Rung 1 bên)
-                                if (autoClockInOutEnabled && !notificationsEnabled) {
-                                    androidx.compose.foundation.Canvas(modifier = Modifier.size(24.dp)) {
-                                        val color = bellTint
-                                        val strokeWidth = 1.5.dp.toPx()
-                                        // Right side arc
-                                        drawArc(
-                                            color = color,
-                                            startAngle = -45f,
-                                            sweepAngle = 90f,
-                                            useCenter = false,
-                                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeWidth, cap = androidx.compose.ui.graphics.StrokeCap.Round),
-                                            topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.75f, size.height * 0.25f),
-                                            size = androidx.compose.ui.geometry.Size(size.width * 0.3f, size.height * 0.5f)
-                                        )
-                                    }
-                                }
-                            }
+                            Icon(
+                                imageVector = alarmIcon,
+                                contentDescription = alarmDesc,
+                                tint = alarmTint,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                         
                         val userFullName = configState?.hoVaTen ?: userSession?.displayName ?: "TRƯƠNG VĂN KHOA"
@@ -1536,7 +1522,7 @@ fun HomeScreen(
                                     }
                                 },
                                 label = { Text("Giờ vào ca", fontSize = 11.sp, color = LightGray) },
-                                placeholder = { Text("Dự kiến: $estimatedInTime (Tự học)", fontSize = 10.sp) },
+                                placeholder = { Text(text = estimatedInTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
@@ -1591,7 +1577,7 @@ fun HomeScreen(
                                     }
                                 },
                                 label = { Text("Giờ ra ca", fontSize = 11.sp, color = LightGray) },
-                                placeholder = { Text("Dự kiến: $estimatedOutTime (Tự học)", fontSize = 10.sp) },
+                                placeholder = { Text(text = estimatedOutTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
@@ -1606,32 +1592,6 @@ fun HomeScreen(
                                 modifier = Modifier.padding(horizontal = 4.dp)
                             )
                         }
-                    }
-
-                    HorizontalDivider(color = CardBorder)
-
-                    // Nút mở Trung tâm thông báo
-                    Button(
-                        onClick = {
-                            showNotificationConfigDialog = false
-                            onNavigateToNotifications()
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PrimaryBlue,
-                            contentColor = White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("btn_dialog_open_notif_center")
-                    ) {
-                        Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Xem Lịch Sử Tin Nhắn (${unreadNotifCount} chưa đọc)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
                     }
                 }
             },

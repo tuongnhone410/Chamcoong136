@@ -841,6 +841,41 @@ object FirestoreService {
         return notifMap.values.sortedBy { it.createdAt }
     }
 
+    suspend fun deleteAdminNotification(uid: String, notificationId: String): Boolean {
+        val firestore = getDb() ?: return false
+        var success = false
+
+        if (uid.isNotBlank() && !isDemoUser(uid)) {
+            try {
+                firestore.collection("users").document(uid)
+                    .collection("notifications").document(notificationId)
+                    .delete().awaitTaskFirestore()
+                success = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi xóa notification subcollection user: ${e.message}")
+            }
+        }
+
+        try {
+            firestore.collection("admin_notifications").document(notificationId)
+                .delete().awaitTaskFirestore()
+            success = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi xóa admin_notifications: ${e.message}")
+        }
+
+        try {
+            firestore.collection("app_config").document("admin_notifications")
+                .collection("items").document(notificationId)
+                .delete().awaitTaskFirestore()
+            success = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi xóa app_config notification item: ${e.message}")
+        }
+
+        return success
+    }
+
     suspend fun saveUserSalaryConfigToFirestore(config: com.example.data.model.UserConfig) {
         if (config.userId.startsWith("demo") || config.userId.contains("demo")) return
         val firestore = getDb() ?: return

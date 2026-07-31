@@ -1467,6 +1467,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     private val _readNotificationIds = MutableStateFlow<Set<String>>(emptySet())
     val readNotificationIds: StateFlow<Set<String>> = _readNotificationIds.asStateFlow()
 
+    private val _deletedNotificationIds = MutableStateFlow<Set<String>>(emptySet())
+    val deletedNotificationIds: StateFlow<Set<String>> = _deletedNotificationIds.asStateFlow()
+
     private val _isRefreshingNotifications = MutableStateFlow(false)
     val isRefreshingNotifications: StateFlow<Boolean> = _isRefreshingNotifications.asStateFlow()
 
@@ -1482,6 +1485,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val readSet = prefs.getStringSet("read_ids_$uid", emptySet()) ?: emptySet()
             _readNotificationIds.value = readSet
 
+            val deletedSet = prefs.getStringSet("deleted_ids_$uid", emptySet()) ?: emptySet()
+            _deletedNotificationIds.value = deletedSet
+
             val cachedJson = prefs.getString("cached_notifs_$uid", "") ?: ""
             if (cachedJson.isNotBlank()) {
                 try {
@@ -1489,18 +1495,21 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     val list = mutableListOf<com.example.data.model.AdminNotification>()
                     for (i in 0 until array.length()) {
                         val obj = array.getJSONObject(i)
-                        list.add(
-                            com.example.data.model.AdminNotification(
-                                id = obj.optString("id"),
-                                targetUid = obj.optString("targetUid", "ALL"),
-                                targetName = obj.optString("targetName", "Tất cả"),
-                                title = obj.optString("title"),
-                                message = obj.optString("message"),
-                                type = obj.optString("type", "GENERAL"),
-                                createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                                sentBy = obj.optString("sentBy", "Admin")
+                        val id = obj.optString("id")
+                        if (id !in deletedSet) {
+                            list.add(
+                                com.example.data.model.AdminNotification(
+                                    id = id,
+                                    targetUid = obj.optString("targetUid", "ALL"),
+                                    targetName = obj.optString("targetName", "Tất cả"),
+                                    title = obj.optString("title"),
+                                    message = obj.optString("message"),
+                                    type = obj.optString("type", "GENERAL"),
+                                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                                    sentBy = obj.optString("sentBy", "Admin")
+                                )
                             )
-                        )
+                        }
                     }
                     _adminNotifications.value = list.sortedByDescending { it.createdAt }
                 } catch (e: Exception) {
@@ -1540,11 +1549,12 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             _isRefreshingNotifications.value = true
             try {
                 val serverNotifs = com.example.data.FirestoreService.getUnreadAdminNotifications(uid, 0L)
+                val deletedIds = _deletedNotificationIds.value
                 
-                val currentLocal = _adminNotifications.value
+                val currentLocal = _adminNotifications.value.filter { it.id !in deletedIds }
                 val notifMap = mutableMapOf<String, com.example.data.model.AdminNotification>()
                 currentLocal.forEach { notifMap[it.id] = it }
-                serverNotifs.forEach { notifMap[it.id] = it }
+                serverNotifs.filter { it.id !in deletedIds }.forEach { notifMap[it.id] = it }
 
                 val mergedList = notifMap.values.sortedByDescending { it.createdAt }
                 _adminNotifications.value = mergedList
@@ -1579,9 +1589,20 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     fun deleteNotificationLocally(id: String) {
         val uid = currentUserSession.value?.uid ?: return
         viewModelScope.launch(Dispatchers.IO) {
+            val updatedDeleted = _deletedNotificationIds.value.toMutableSet()
+            updatedDeleted.add(id)
+            _deletedNotificationIds.value = updatedDeleted
+            getNotifPrefs().edit().putStringSet("deleted_ids_$uid", updatedDeleted).apply()
+
             val newList = _adminNotifications.value.filter { it.id != id }
             _adminNotifications.value = newList
             saveLocalCachedNotifications(uid, newList)
+
+            try {
+                com.example.data.FirestoreService.deleteAdminNotification(uid, id)
+            } catch (e: Exception) {
+                android.util.Log.e("TimeSnapViewModel", "Lỗi xóa thông báo server", e)
+            }
         }
     }
 
