@@ -63,13 +63,16 @@ class AutoCheckOutWorker(
                     android.util.Log.e("AutoCheckOutWorker", "Lỗi đồng bộ Firestore sau khi tự động ra ca: ${e.message}")
                 }
 
-                val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(checkoutMs))
+                val checkInMs = active.checkInTime ?: checkoutMs
+                val workedMs = checkoutMs - checkInMs
+                val workedHours = workedMs / (1000.0 * 60 * 60)
+                val formattedHours = String.format(Locale.getDefault(), "%.1f", workedHours).removeSuffix(".0")
 
                 // Hiển thị thông báo hoàn thành tự động ra ca
                 NotificationHelper.showNotification(
                     context = context,
                     title = "🤖 Tự động ra ca thành công!",
-                    message = "Hệ thống đã tự động bấm ra ca lúc $timeStr cho bạn.",
+                    message = "Bạn đã làm $formattedHours tiếng, tôi đã tự động ra ca cho bạn.",
                     notificationId = 1002
                 )
             } else {

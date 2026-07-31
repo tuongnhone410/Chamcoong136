@@ -66,6 +66,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.example.auth.UserSession
 import com.example.data.model.TimeEntry
 import com.example.ui.theme.AccentGreen
@@ -210,6 +213,8 @@ fun HomeScreen(
     var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
     var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
     var showAutoCheckoutSetupDialog by remember { mutableStateOf(false) }
+    var showNotificationConfigDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val keyboardController = LocalSoftwareKeyboardController.current
     val userSession by viewModel.currentUserSession.collectAsStateWithLifecycle()
@@ -279,32 +284,7 @@ fun HomeScreen(
                     ) {
                         IconButton(
                             onClick = {
-                                if (!notificationsEnabled) {
-                                    notificationsEnabled = true
-                                    notificationPrefs.edit()
-                                        .putBoolean("notifications_enabled", true)
-                                        .putBoolean("smart_learning_enabled", true)
-                                        .apply()
-                                    userSession?.let { session ->
-                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
-                                        activeEntry?.let { active ->
-                                            if (active.isWorking) {
-                                                com.example.notification.NotificationHelper.scheduleCheckOutReminderForActiveEntry(context, session.uid, active)
-                                            }
-                                        }
-                                    }
-                                    showReminderDialog = true
-                                } else {
-                                    notificationsEnabled = false
-                                    notificationPrefs.edit()
-                                        .putBoolean("notifications_enabled", false)
-                                        .apply()
-                                    userSession?.let { session ->
-                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
-                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
-                                    }
-                                    Toast.makeText(context, "Đã tắt nhắc nhở chấm công (Im lặng)", Toast.LENGTH_SHORT).show()
-                                }
+                                showNotificationConfigDialog = true
                             }
                         ) {
                             Icon(
@@ -1267,6 +1247,231 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = { showAutoCheckoutSetupDialog = false }) {
                     Text("Hủy", color = LightGray)
+                }
+            }
+        )
+    }
+
+    if (showNotificationConfigDialog) {
+        val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
+        var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
+        var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
+        
+        var autoCheckInEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_check_in_enabled", false)) }
+        var customCheckInTime by remember { mutableStateOf(notificationPrefs.getString("custom_check_in_time", "") ?: "") }
+
+        var autoCheckoutEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("auto_checkout_enabled", false)) }
+        var customCheckoutTime by remember { mutableStateOf(notificationPrefs.getString("custom_checkout_time", "") ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { showNotificationConfigDialog = false },
+            containerColor = DarkContainer,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.NotificationsActive,
+                        contentDescription = null,
+                        tint = AccentOrange,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "CẤU HÌNH NHẮC NHỞ & TỰ ĐỘNG",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = White
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // 1. Thông báo nhắc nhở
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Bật thông báo nhắc nhở", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "Nhắc nhở check-in / check-out trước ca.", color = LightGray, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = notificationsEnabled,
+                            onCheckedChange = { isEnabled ->
+                                notificationsEnabled = isEnabled
+                                notificationPrefs.edit().putBoolean("notifications_enabled", isEnabled).apply()
+                                userSession?.let { session ->
+                                    if (isEnabled) {
+                                        com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                    } else {
+                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                        androidx.work.WorkManager.getInstance(context).cancelUniqueWork("checkin_reminder_${session.uid}")
+                                    }
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
+                        )
+                    }
+
+                    if (notificationsEnabled) {
+                        OutlinedTextField(
+                            value = reminderMinutes,
+                            onValueChange = { newVal ->
+                                val filtered = newVal.filter { it.isDigit() }
+                                reminderMinutes = filtered
+                                notificationPrefs.edit().putString("reminder_minutes_before", filtered).apply()
+                                userSession?.let { session ->
+                                    com.example.notification.NotificationHelper.scheduleNextCheckInReminder(context, session.uid)
+                                }
+                            },
+                            label = { Text("Số phút nhắc nhở trước ca", fontSize = 11.sp, color = LightGray) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // 2. Tự động Vào Ca
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "🤖 Tự động vào ca (Hẹn giờ)", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "Tự động chấm công và thông báo '[hh:mm] Tôi đã tự động chấm công'.", color = LightGray, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = autoCheckInEnabled,
+                            onCheckedChange = { isEnabled ->
+                                autoCheckInEnabled = isEnabled
+                                notificationPrefs.edit().putBoolean("auto_check_in_enabled", isEnabled).apply()
+                                userSession?.let { session ->
+                                    if (isEnabled) {
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                        }
+                                    } else {
+                                        com.example.notification.NotificationHelper.cancelAutoCheckIn(context, session.uid)
+                                    }
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
+                        )
+                    }
+
+                    if (autoCheckInEnabled) {
+                        var inTimeTf by remember { mutableStateOf(TextFieldValue(customCheckInTime)) }
+                        OutlinedTextField(
+                            value = inTimeTf,
+                            onValueChange = { newVal ->
+                                val digits = newVal.text.filter { it.isDigit() }.take(4)
+                                val formatted = when {
+                                    digits.length >= 3 -> {
+                                        var hours = digits.substring(0, 2)
+                                        if ((hours.toIntOrNull() ?: 0) > 24) hours = "24"
+                                        var minutes = digits.substring(2)
+                                        if (hours == "24") minutes = "00" else if ((minutes.toIntOrNull() ?: 0) > 59) minutes = "59"
+                                        "$hours:$minutes"
+                                    }
+                                    digits.length == 2 -> if ((digits.toIntOrNull() ?: 0) > 24) "24" else digits
+                                    else -> digits
+                                }
+                                inTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                customCheckInTime = formatted
+                                notificationPrefs.edit().putString("custom_check_in_time", formatted).apply()
+                                userSession?.let { session ->
+                                    CoroutineScope(Dispatchers.IO).launch {
+                                        val targetMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, targetMs)
+                                    }
+                                }
+                            },
+                            label = { Text("Giờ vào ca (tuỳ chọn)", fontSize = 11.sp, color = LightGray) },
+                            placeholder = { Text("Để trống để tự học (07:30)", fontSize = 10.sp) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // 3. Tự động Ra Ca
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "🤖 Tự động ra ca (Hẹn giờ)", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "Tự động ra ca và thông báo số giờ làm.", color = LightGray, fontSize = 11.sp)
+                        }
+                        Switch(
+                            checked = autoCheckoutEnabled,
+                            onCheckedChange = { isEnabled ->
+                                autoCheckoutEnabled = isEnabled
+                                val editor = notificationPrefs.edit().putBoolean("auto_checkout_enabled", isEnabled)
+                                if (isEnabled) {
+                                    notificationsEnabled = false
+                                    editor.putBoolean("notifications_enabled", false)
+                                    userSession?.let { session ->
+                                        com.example.notification.NotificationHelper.cancelCheckOutReminder(context, session.uid)
+                                    }
+                                }
+                                editor.apply()
+                            },
+                            colors = SwitchDefaults.colors(checkedTrackColor = AccentOrange, checkedThumbColor = White)
+                        )
+                    }
+
+                    if (autoCheckoutEnabled) {
+                        var outTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
+                        OutlinedTextField(
+                            value = outTimeTf,
+                            onValueChange = { newVal ->
+                                val digits = newVal.text.filter { it.isDigit() }.take(4)
+                                val formatted = when {
+                                    digits.length >= 3 -> {
+                                        var hours = digits.substring(0, 2)
+                                        if ((hours.toIntOrNull() ?: 0) > 24) hours = "24"
+                                        var minutes = digits.substring(2)
+                                        if (hours == "24") minutes = "00" else if ((minutes.toIntOrNull() ?: 0) > 59) minutes = "59"
+                                        "$hours:$minutes"
+                                    }
+                                    digits.length == 2 -> if ((digits.toIntOrNull() ?: 0) > 24) "24" else digits
+                                    else -> digits
+                                }
+                                outTimeTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                customCheckoutTime = formatted
+                                notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
+                            },
+                            label = { Text("Giờ ra ca (tuỳ chọn)", fontSize = 11.sp, color = LightGray) },
+                            placeholder = { Text("Để trống để tự học hoặc tính 11h45p", fontSize = 10.sp) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showNotificationConfigDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
+                ) {
+                    Text("Xong", color = White, fontWeight = FontWeight.Bold)
                 }
             }
         )

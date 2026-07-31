@@ -111,7 +111,7 @@ object NotificationHelper {
         android.util.Log.d("NotificationHelper", "Đã đặt lịch nhắc Check-out sau ${delayMs / 1000 / 60} phút (${delayMs / 1000}s) cho ca $shiftId")
     }
 
-    // Lên lịch nhắc Check-out dựa trên ca làm việc thực tế đang diễn ra
+    // Lên lịch nhắc Check-out dựa trên ca làm việc thực tế đang diễn ra (Tính 11 tiếng 45 phút / trước 12 tiếng 15 phút)
     fun scheduleCheckOutReminderForActiveEntry(context: Context, uid: String, activeEntry: TimeEntry) {
         if (!activeEntry.isWorking) return
 
@@ -125,42 +125,27 @@ object NotificationHelper {
             return
         }
 
-        val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
         val checkInTime = activeEntry.checkInTime ?: System.currentTimeMillis()
+        val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
 
-        val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInTime }
-        val endParts = shift.endTime.split(":")
-        val endHour = endParts.getOrNull(0)?.toIntOrNull() ?: 19
-        val endMinute = endParts.getOrNull(1)?.toIntOrNull() ?: 30
-
+        // Bật thông báo nhắc nhở: tính trước 12 tiếng 15 phút = 11 tiếng 45 phút kể từ lúc check-in (nếu nhân viên mới) hoặc trước giờ hết ca 15 phút
         val targetCal = Calendar.getInstance().apply {
             timeInMillis = checkInTime
-            set(Calendar.HOUR_OF_DAY, endHour)
-            set(Calendar.MINUTE, endMinute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+            add(Calendar.HOUR_OF_DAY, 11)
+            add(Calendar.MINUTE, 45)
         }
-
-        // Ca đêm hoặc giờ kết thúc đứng trước giờ check-in (ví dụ vào 19:30 kết thúc 07:30 ngày hôm sau)
-        if (shift.shiftType == "NIGHT" || targetCal.before(calCheckIn)) {
-            targetCal.add(Calendar.DAY_OF_YEAR, 1)
-        }
-
-        // Thêm 5 phút buffer sau khi hết ca làm việc để nhắc ra ca
-        targetCal.add(Calendar.MINUTE, 5)
 
         val now = System.currentTimeMillis()
         var delayMs = targetCal.timeInMillis - now
 
         if (delayMs <= 0) {
-            // Đã quá giờ ra ca mà nhân viên chưa bấm ra ca -> Nhắc nhở ngay sau 2 giây!
             delayMs = 2000L
         }
 
         scheduleCheckOutReminder(context, uid, delayMs, shift.shiftId)
     }
 
-    // Ước tính giờ ra ca dựa trên lịch sử làm việc cũ hoặc giờ ca mặc định
+    // Ước tính giờ ra ca dựa trên lịch sử làm việc cũ theo tuần (1, 2, 3 tuần) hoặc tháng (1 tháng gần nhất)
     suspend fun estimateHistoricalCheckoutTime(context: Context, uid: String, activeEntry: TimeEntry): Long {
         val checkInMs = activeEntry.checkInTime ?: System.currentTimeMillis()
         val shift = com.example.data.SalaryCalculator.getShiftForEntry(activeEntry)
@@ -171,27 +156,50 @@ object NotificationHelper {
 
         try {
             val db = com.example.data.db.AppDatabase.getInstance(context)
-            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 15)
-            val validCheckoutTimes = entries.mapNotNull { it.checkOutTime }
-            if (validCheckoutTimes.isNotEmpty()) {
-                var totalMinutesInDay = 0L
-                for (coTime in validCheckoutTimes) {
-                    val calCO = Calendar.getInstance().apply { timeInMillis = coTime }
-                    val mins = calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
-                    totalMinutesInDay += mins
+            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
+            if (entries.isNotEmpty()) {
+                val nowCal = Calendar.getInstance()
+                val currentDayOfWeek = nowCal.get(Calendar.DAY_OF_WEEK)
+                val oldestEntryTime = entries.last().checkInTime ?: nowCal.timeInMillis
+                val spanDays = (nowCal.timeInMillis - oldestEntryTime) / (1000 * 60 * 60 * 24)
+
+                val targetEntries = if (spanDays >= 28) {
+                    // Trống quá lâu (ví dụ 1 tháng): Học theo 1 tháng gần nhất (không học 2,3 tháng)
+                    val monthEntries = entries.filter { (nowCal.timeInMillis - (it.checkInTime ?: 0L)) <= 30L * 24 * 3600 * 1000 }
+                    val weekOfMonth = ((nowCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1
+                    val matching = monthEntries.filter { entry ->
+                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
+                        ((entryCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1 == weekOfMonth
+                    }
+                    if (matching.isNotEmpty()) matching else monthEntries
+                } else {
+                    // Học theo thứ tự 1, 2, 3 tuần (tuần 1, tuần 2, tuần 3)
+                    val sameDay = entries.filter { entry ->
+                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
+                        entryCal.get(Calendar.DAY_OF_WEEK) == currentDayOfWeek
+                    }
+                    if (sameDay.isNotEmpty()) sameDay else entries.take(7)
                 }
-                val avgMins = (totalMinutesInDay / validCheckoutTimes.size).toInt()
-                targetHour = avgMins / 60
-                targetMin = avgMins % 60
+
+                val validCheckoutTimes = targetEntries.mapNotNull { it.checkOutTime }
+                if (validCheckoutTimes.isNotEmpty()) {
+                    var totalMins = 0L
+                    for (coTime in validCheckoutTimes) {
+                        val calCO = Calendar.getInstance().apply { timeInMillis = coTime }
+                        totalMins += calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
+                    }
+                    val avgMins = (totalMins / validCheckoutTimes.size).toInt()
+                    targetHour = avgMins / 60
+                    targetMin = avgMins % 60
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("NotificationHelper", "Lỗi lấy lịch sử checkout: ${e.message}")
         }
 
         if (targetHour == -1) {
-            val endParts = shift.endTime.split(":")
-            targetHour = endParts.getOrNull(0)?.toIntOrNull() ?: 19
-            targetMin = endParts.getOrNull(1)?.toIntOrNull() ?: 30
+            // Nhân viên mới chưa có lịch sử (Tự động ra ca): Tính đúng 12 tiếng kể từ lúc bấm vào ca
+            return checkInMs + 12 * 60 * 60 * 1000L
         }
 
         val targetCal = Calendar.getInstance().apply {
@@ -207,6 +215,114 @@ object NotificationHelper {
         }
 
         return targetCal.timeInMillis
+    }
+
+    // Ước tính giờ vào ca dựa trên cấu hình tùy chỉnh hoặc học theo lịch sử (1, 2, 3 tuần hoặc 1 tháng gần nhất)
+    suspend fun estimateHistoricalCheckInTime(context: Context, uid: String): Long {
+        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val customTime = sharedPrefs.getString("custom_check_in_time", "") ?: ""
+        
+        if (customTime.isNotBlank()) {
+            val parts = customTime.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
+            val cal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, h)
+                set(Calendar.MINUTE, m)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            if (cal.before(Calendar.getInstance())) {
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            return cal.timeInMillis
+        }
+
+        var targetHour = 7
+        var targetMin = 30
+        try {
+            val db = com.example.data.db.AppDatabase.getInstance(context)
+            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
+            if (entries.isNotEmpty()) {
+                val nowCal = Calendar.getInstance()
+                val currentDayOfWeek = nowCal.get(Calendar.DAY_OF_WEEK)
+                val oldestEntryTime = entries.last().checkInTime ?: nowCal.timeInMillis
+                val spanDays = (nowCal.timeInMillis - oldestEntryTime) / (1000 * 60 * 60 * 24)
+
+                val targetEntries = if (spanDays >= 28) {
+                    // Trống quá lâu (ví dụ 1 tháng): Học theo 1 tháng gần nhất (chỉ cần học 1 tháng, không học 2,3 tháng)
+                    val monthEntries = entries.filter { (nowCal.timeInMillis - (it.checkInTime ?: 0L)) <= 30L * 24 * 3600 * 1000 }
+                    val weekOfMonth = ((nowCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1
+                    val matching = monthEntries.filter { entry ->
+                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
+                        ((entryCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1 == weekOfMonth
+                    }
+                    if (matching.isNotEmpty()) matching else monthEntries
+                } else {
+                    // Học theo thứ tự 1, 2, 3 tuần (tuần 1, tuần 2, tuần 3)
+                    val sameDay = entries.filter { entry ->
+                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
+                        entryCal.get(Calendar.DAY_OF_WEEK) == currentDayOfWeek
+                    }
+                    if (sameDay.isNotEmpty()) sameDay else entries.take(7)
+                }
+
+                val validCheckInTimes = targetEntries.mapNotNull { it.checkInTime }
+                if (validCheckInTimes.isNotEmpty()) {
+                    var totalMins = 0L
+                    for (ciTime in validCheckInTimes) {
+                        val c = Calendar.getInstance().apply { timeInMillis = ciTime }
+                        totalMins += c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+                    }
+                    val avgMins = (totalMins / validCheckInTimes.size).toInt()
+                    targetHour = avgMins / 60
+                    targetMin = avgMins % 60
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NotificationHelper", "Lỗi học lịch sử checkin: ${e.message}")
+        }
+
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, targetHour)
+            set(Calendar.MINUTE, targetMin)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.before(Calendar.getInstance())) {
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return cal.timeInMillis
+    }
+
+    // Đặt lịch Hẹn giờ / Tự động Vào Ca
+    fun scheduleAutoCheckIn(context: Context, uid: String, targetTimeMs: Long) {
+        val now = System.currentTimeMillis()
+        val delayMs = (targetTimeMs - now).coerceAtLeast(1000L)
+
+        val data = Data.Builder()
+            .putString("uid", uid)
+            .putLong("scheduledTimeMs", targetTimeMs)
+            .build()
+
+        val workRequest = OneTimeWorkRequestBuilder<AutoCheckInWorker>()
+            .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+            .setInputData(data)
+            .addTag("auto_checkin_$uid")
+            .build()
+
+        WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
+            "auto_checkin_$uid",
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
+        android.util.Log.d("NotificationHelper", "Đã đặt lịch Tự động vào ca sau ${delayMs / 1000 / 60} phút cho user $uid")
+    }
+
+    // Hủy Tự động Vào Ca
+    fun cancelAutoCheckIn(context: Context, uid: String) {
+        WorkManager.getInstance(context.applicationContext).cancelUniqueWork("auto_checkin_$uid")
+        android.util.Log.d("NotificationHelper", "Đã hủy Tự động vào ca cho user $uid")
     }
 
     // Đặt lịch Hẹn giờ / Tự động Ra Ca
