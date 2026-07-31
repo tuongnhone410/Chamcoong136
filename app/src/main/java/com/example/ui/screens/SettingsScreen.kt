@@ -40,6 +40,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
@@ -990,6 +996,8 @@ fun SettingsScreen(
             }
 
             // CATEGORY 5: CẤU HÌNH NHẮC NHỞ CHẤM CÔNG (Notification Config)
+            val keyboardController = LocalSoftwareKeyboardController.current
+            val focusManager = LocalFocusManager.current
             val notificationPrefs = LocalContext.current.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
             var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
             var smartLearningEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("smart_learning_enabled", true)) }
@@ -1008,7 +1016,7 @@ fun SettingsScreen(
                     val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
                     estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
                     
-                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = System.currentTimeMillis())
+                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
                     val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
                     estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
                 }
@@ -1213,7 +1221,11 @@ fun SettingsScreen(
                                 label = { Text("Giờ vào ca", fontSize = 12.sp, color = LightGray) },
                                 placeholder = { Text(text = estimatedInTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                }),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
@@ -1258,13 +1270,67 @@ fun SettingsScreen(
                                 label = { Text("Giờ ra ca", fontSize = 12.sp, color = LightGray) },
                                 placeholder = { Text(text = estimatedOutTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                }),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                            )
+
+                            // Input Chu kỳ đổi ca (tuần)
+                            var shiftRotationWeeks by remember { mutableStateOf(notificationPrefs.getInt("shift_rotation_weeks", 2)) }
+                            var rotationWeeksTf by remember { mutableStateOf(TextFieldValue(shiftRotationWeeks.toString())) }
+                            OutlinedTextField(
+                                value = rotationWeeksTf,
+                                onValueChange = { newVal ->
+                                    val digits = newVal.text.filter { it.isDigit() }
+                                    if (digits.isEmpty()) {
+                                        rotationWeeksTf = newVal
+                                        return@OutlinedTextField
+                                    }
+                                    var num = digits.toIntOrNull() ?: 2
+                                    if (num < 1) num = 1
+                                    if (num > 4) num = 4
+                                    val formatted = num.toString()
+                                    rotationWeeksTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
+                                    shiftRotationWeeks = num
+                                    val editor = notificationPrefs.edit()
+                                    editor.putInt("shift_rotation_weeks", num)
+                                    if (notificationPrefs.getLong("shift_anchor_time", 0L) <= 0L) {
+                                        editor.putLong("shift_anchor_time", System.currentTimeMillis())
+                                    }
+                                    editor.apply()
+
+                                    sessionState?.let { session ->
+                                        CoroutineScope(Dispatchers.IO).launch {
+                                            val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                            estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
+                                            val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                            val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                            estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
+                                            
+                                            if (autoClockInOutEnabled) {
+                                                com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                            }
+                                        }
+                                    }
+                                },
+                                label = { Text("Chu kỳ đổi ca (tuần)", fontSize = 12.sp, color = LightGray) },
+                                placeholder = { Text("2", fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                }),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
 
                             Text(
-                                text = "💡 Nếu để trống giờ vào/ra, hệ thống sẽ tự học từ lịch sử.",
+                                text = "💡 Chu kỳ tính theo tuần (1-4 tuần): Đặt số 2 = 2 tuần. Qua tuần thứ 3 hệ thống sẽ tự động đảo ngược giờ vào ca & ra ca.",
                                 color = LightGray.copy(alpha = 0.7f),
                                 fontSize = 11.sp,
                                 fontStyle = FontStyle.Italic,

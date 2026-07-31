@@ -205,13 +205,78 @@ object NotificationHelper {
         scheduleCheckOutReminder(context, uid, delayMs, shift.shiftId)
     }
 
-    // Ước tính giờ ra ca dựa trên lịch sử
+    fun getEffectiveCheckInTime(context: Context, targetMs: Long = System.currentTimeMillis()): String {
+        val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val rawIn = prefs.getString("custom_check_in_time", "") ?: ""
+        val rawOut = prefs.getString("custom_checkout_time", "") ?: ""
+        
+        if (rawIn.isBlank() && rawOut.isBlank()) return ""
+        
+        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+        var anchorTime = prefs.getLong("shift_anchor_time", 0L)
+        if (anchorTime <= 0L) {
+            anchorTime = System.currentTimeMillis()
+            prefs.edit().putLong("shift_anchor_time", anchorTime).apply()
+        }
+        
+        val msPerWeek = 7L * 24 * 3600 * 1000
+        val calAnchor = Calendar.getInstance().apply { timeInMillis = anchorTime }
+        val calTarget = Calendar.getInstance().apply { timeInMillis = targetMs }
+        
+        val weekAnchor = (calAnchor.timeInMillis + calAnchor.timeZone.getOffset(calAnchor.timeInMillis)) / msPerWeek
+        val weekTarget = (calTarget.timeInMillis + calTarget.timeZone.getOffset(calTarget.timeInMillis)) / msPerWeek
+        val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
+        
+        val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
+        if (cyclePhase == 1) {
+            if (rawOut.isNotBlank()) return rawOut
+            val parts = rawIn.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 19
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
+            val swappedH = if (h >= 12) (h - 12) else (h + 12)
+            return String.format(Locale.getDefault(), "%02d:%02d", swappedH, m)
+        }
+        return rawIn
+    }
+
+    fun getEffectiveCheckOutTime(context: Context, targetMs: Long = System.currentTimeMillis()): String {
+        val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        val rawIn = prefs.getString("custom_check_in_time", "") ?: ""
+        val rawOut = prefs.getString("custom_checkout_time", "") ?: ""
+        
+        if (rawIn.isBlank() && rawOut.isBlank()) return ""
+        
+        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+        var anchorTime = prefs.getLong("shift_anchor_time", 0L)
+        if (anchorTime <= 0L) {
+            anchorTime = System.currentTimeMillis()
+            prefs.edit().putLong("shift_anchor_time", anchorTime).apply()
+        }
+        
+        val msPerWeek = 7L * 24 * 3600 * 1000
+        val calAnchor = Calendar.getInstance().apply { timeInMillis = anchorTime }
+        val calTarget = Calendar.getInstance().apply { timeInMillis = targetMs }
+        
+        val weekAnchor = (calAnchor.timeInMillis + calAnchor.timeZone.getOffset(calAnchor.timeInMillis)) / msPerWeek
+        val weekTarget = (calTarget.timeInMillis + calTarget.timeZone.getOffset(calTarget.timeInMillis)) / msPerWeek
+        val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
+        
+        val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
+        if (cyclePhase == 1) {
+            if (rawIn.isNotBlank()) return rawIn
+            val parts = rawOut.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
+            val swappedH = if (h >= 12) (h - 12) else (h + 12)
+            return String.format(Locale.getDefault(), "%02d:%02d", swappedH, m)
+        }
+        return rawOut
+    }
+
+    // Ước tính giờ ra ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
     suspend fun estimateHistoricalCheckoutTime(context: Context, uid: String, activeEntry: TimeEntry): Long {
-        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-        val customTime = sharedPrefs.getString("custom_checkout_time", "") ?: ""
         val checkInMs = activeEntry.checkInTime ?: System.currentTimeMillis()
-        val shift = SalaryCalculator.getShiftForEntry(activeEntry)
-        val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInMs }
+        val customTime = getEffectiveCheckOutTime(context, checkInMs)
         
         if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
             try {
@@ -229,71 +294,66 @@ object NotificationHelper {
                 return cal.timeInMillis
             } catch (e: Exception) {}
         }
-        
+
         var targetHour = -1
         var targetMin = -1
 
         try {
+            val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+            val block1Days = rotationWeeks * 7L
+
             val db = com.example.data.db.AppDatabase.getInstance(context)
             val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
+            
             if (entries.isNotEmpty()) {
-                val nowCal = Calendar.getInstance()
-                val currentDayOfWeek = nowCal.get(Calendar.DAY_OF_WEEK)
-                val oldestEntryTime = entries.last().checkInTime ?: nowCal.timeInMillis
-                val spanDays = (nowCal.timeInMillis - oldestEntryTime) / (1000 * 60 * 60 * 24)
+                val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInMs }
+                val isTodayNight = calCheckIn.get(Calendar.HOUR_OF_DAY) >= 15
+                val nowMs = System.currentTimeMillis()
 
-                val targetEntries = if (spanDays >= 28) {
-                    val monthEntries = entries.filter { (nowCal.timeInMillis - (it.checkInTime ?: 0L)) <= 30L * 24 * 3600 * 1000 }
-                    val weekOfMonth = ((nowCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1
-                    val matching = monthEntries.filter { entry ->
-                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
-                        ((entryCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1 == weekOfMonth
-                    }
-                    if (matching.isNotEmpty()) matching else monthEntries
+                val block1CurrentWeeks = entries.filter { entry ->
+                    val ci = entry.checkInTime ?: return@filter false
+                    (nowMs - ci) <= block1Days * 24 * 3600 * 1000
+                }
+
+                val matchingShiftBlock1 = block1CurrentWeeks.filter { entry ->
+                    val ci = entry.checkInTime ?: return@filter false
+                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    if (isTodayNight) hour >= 15 else hour < 15
+                }
+
+                val targetEntries = if (matchingShiftBlock1.isNotEmpty()) {
+                    matchingShiftBlock1
                 } else {
-                    val sameDay = entries.filter { entry ->
-                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
-                        entryCal.get(Calendar.DAY_OF_WEEK) == currentDayOfWeek
-                    }
-                    if (sameDay.isNotEmpty()) sameDay else entries.take(7)
+                    entries.filter { entry ->
+                        val ci = entry.checkInTime ?: return@filter false
+                        val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                        val hour = cal.get(Calendar.HOUR_OF_DAY)
+                        if (isTodayNight) hour >= 15 else hour < 15
+                    }.ifEmpty { entries }
                 }
 
-                // Lọc bỏ các ngày ra ca bất thường (< 4 tiếng làm việc)
-                val validEntries = targetEntries.filter { entry ->
-                    val ci = entry.checkInTime
-                    val co = entry.checkOutTime
-                    if (ci == null || co == null) false
-                    else {
-                        val duration = co - ci
-                        duration >= 4 * 3600 * 1000L // Ít nhất 4 tiếng làm việc
-                    }
+                val frequencyMap = mutableMapOf<Int, Int>()
+                for (entry in targetEntries) {
+                    val co = entry.checkOutTime ?: continue
+                    val cal = Calendar.getInstance().apply { timeInMillis = co }
+                    val rawMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                    val roundedMins = ((rawMins + 7) / 15) * 15 % 1440
+                    frequencyMap[roundedMins] = (frequencyMap[roundedMins] ?: 0) + 1
                 }
 
-                val validCheckoutTimes = validEntries.mapNotNull { it.checkOutTime }
-                if (validCheckoutTimes.isNotEmpty()) {
-                    val isCurrentNight = calCheckIn.get(Calendar.HOUR_OF_DAY) >= 15
-                    val filteredTimes = validCheckoutTimes.filter { time ->
-                        val c = Calendar.getInstance().apply { timeInMillis = time }
-                        val hour = c.get(Calendar.HOUR_OF_DAY)
-                        if (isCurrentNight) (hour in 3..11) else (hour in 15..23)
-                    }.ifEmpty { validCheckoutTimes }
-
-                    // Thuật toán Trung vị (Median) để loại bỏ hoàn toàn các ngày ra ca lệch chuẩn
-                    val minsList = filteredTimes.map { coTime ->
-                        val calCO = Calendar.getInstance().apply { timeInMillis = coTime }
-                        calCO.get(Calendar.HOUR_OF_DAY) * 60 + calCO.get(Calendar.MINUTE)
-                    }.sorted()
-
-                    if (minsList.isNotEmpty()) {
-                        val medianMins = minsList[minsList.size / 2]
-                        targetHour = medianMins / 60
-                        targetMin = medianMins % 60
-                    }
+                val mostFrequentMins = frequencyMap.maxByOrNull { it.value }?.key
+                if (mostFrequentMins != null) {
+                    targetHour = mostFrequentMins / 60
+                    targetMin = mostFrequentMins % 60
                 }
             }
         } catch (e: Exception) {}
 
-        if (targetHour == -1) return checkInMs + 12 * 60 * 60 * 1000L
+        if (targetHour == -1) {
+            return checkInMs + 8 * 3600 * 1000L
+        }
 
         val targetCal = Calendar.getInstance().apply {
             timeInMillis = checkInMs
@@ -302,14 +362,15 @@ object NotificationHelper {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        if (shift.shiftType == "NIGHT" || targetCal.before(calCheckIn)) targetCal.add(Calendar.DAY_OF_YEAR, 1)
+        if (targetCal.timeInMillis <= checkInMs) {
+            targetCal.add(Calendar.DAY_OF_YEAR, 1)
+        }
         return targetCal.timeInMillis
     }
 
-    // Ước tính giờ vào ca dựa trên lịch sử
+    // Ước tính giờ vào ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
     suspend fun estimateHistoricalCheckInTime(context: Context, uid: String): Long {
-        val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-        val customTime = sharedPrefs.getString("custom_check_in_time", "") ?: ""
+        val customTime = getEffectiveCheckInTime(context, System.currentTimeMillis())
         
         if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
             val parts = customTime.split(":")
@@ -327,56 +388,63 @@ object NotificationHelper {
 
         var targetHour = 7
         var targetMin = 30
+
         try {
+            val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+            val block1Days = rotationWeeks * 7L
+
             val db = com.example.data.db.AppDatabase.getInstance(context)
             val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
             if (entries.isNotEmpty()) {
-                val nowCal = Calendar.getInstance()
-                val currentDayOfWeek = nowCal.get(Calendar.DAY_OF_WEEK)
-                val oldestEntryTime = entries.last().checkInTime ?: nowCal.timeInMillis
-                val spanDays = (nowCal.timeInMillis - oldestEntryTime) / (1000 * 60 * 60 * 24)
+                val nowMs = System.currentTimeMillis()
 
-                val targetEntries = if (spanDays >= 28) {
-                    val monthEntries = entries.filter { (nowCal.timeInMillis - (it.checkInTime ?: 0L)) <= 30L * 24 * 3600 * 1000 }
-                    val weekOfMonth = ((nowCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1
-                    val matching = monthEntries.filter { entry ->
-                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
-                        ((entryCal.get(Calendar.DAY_OF_MONTH) - 1) / 7) + 1 == weekOfMonth
-                    }
-                    if (matching.isNotEmpty()) matching else monthEntries
-                } else {
-                    val sameDay = entries.filter { entry ->
-                        val entryCal = Calendar.getInstance().apply { timeInMillis = entry.checkInTime ?: 0L }
-                        entryCal.get(Calendar.DAY_OF_WEEK) == currentDayOfWeek
-                    }
-                    if (sameDay.isNotEmpty()) sameDay else entries.take(7)
+                val block1CurrentWeeks = entries.filter { entry ->
+                    val ci = entry.checkInTime ?: return@filter false
+                    (nowMs - ci) <= block1Days * 24 * 3600 * 1000
                 }
 
-                val validCheckInTimes = targetEntries.mapNotNull { it.checkInTime }
-                if (validCheckInTimes.isNotEmpty()) {
-                    val recentEntries = entries.take(3)
-                    val isRecentNight = recentEntries.count { 
-                        val c = Calendar.getInstance().apply { timeInMillis = it.checkInTime ?: 0L }
-                        c.get(Calendar.HOUR_OF_DAY) >= 15
-                    } >= 2
-                    
-                    val filteredTimes = validCheckInTimes.filter { time ->
-                        val c = Calendar.getInstance().apply { timeInMillis = time }
-                        val isNight = c.get(Calendar.HOUR_OF_DAY) >= 15
-                        isNight == isRecentNight
-                    }.ifEmpty { validCheckInTimes }
+                val recentEntries = block1CurrentWeeks.ifEmpty { entries.take(5) }
+                var nightCount = 0
+                var dayCount = 0
+                for (entry in recentEntries) {
+                    val ci = entry.checkInTime ?: continue
+                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                    if (cal.get(Calendar.HOUR_OF_DAY) >= 15) nightCount++ else dayCount++
+                }
+                val isNightShift = nightCount > dayCount
 
-                    // Thuật toán Trung vị (Median) để loại bỏ hoàn toàn giờ vào ca bất thường
-                    val minsList = filteredTimes.map { ciTime ->
-                        val c = Calendar.getInstance().apply { timeInMillis = ciTime }
-                        c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
-                    }.sorted()
+                val matchingShiftBlock1 = block1CurrentWeeks.filter { entry ->
+                    val ci = entry.checkInTime ?: return@filter false
+                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    if (isNightShift) hour >= 15 else hour < 15
+                }
 
-                    if (minsList.isNotEmpty()) {
-                        val medianMins = minsList[minsList.size / 2]
-                        targetHour = medianMins / 60
-                        targetMin = medianMins % 60
-                    }
+                val targetEntries = if (matchingShiftBlock1.isNotEmpty()) {
+                    matchingShiftBlock1
+                } else {
+                    entries.filter { entry ->
+                        val ci = entry.checkInTime ?: return@filter false
+                        val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                        val hour = cal.get(Calendar.HOUR_OF_DAY)
+                        if (isNightShift) hour >= 15 else hour < 15
+                    }.ifEmpty { entries }
+                }
+
+                val frequencyMap = mutableMapOf<Int, Int>()
+                for (entry in targetEntries) {
+                    val ci = entry.checkInTime ?: continue
+                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
+                    val rawMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                    val roundedMins = ((rawMins + 7) / 15) * 15 % 1440
+                    frequencyMap[roundedMins] = (frequencyMap[roundedMins] ?: 0) + 1
+                }
+
+                val mostFrequentMins = frequencyMap.maxByOrNull { it.value }?.key
+                if (mostFrequentMins != null) {
+                    targetHour = mostFrequentMins / 60
+                    targetMin = mostFrequentMins % 60
                 }
             }
         } catch (e: Exception) {}
@@ -387,7 +455,9 @@ object NotificationHelper {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        if (cal.before(Calendar.getInstance())) cal.add(Calendar.DAY_OF_YEAR, 1)
+        if (cal.before(Calendar.getInstance())) {
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
         return cal.timeInMillis
     }
 

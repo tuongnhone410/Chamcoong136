@@ -3263,9 +3263,12 @@ fun SendAdminNotificationDialog(
                         unfocusedBorderColor = Color.Gray
                     ),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
-                        onNext = { focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) }
+                        onDone = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }
                     )
                 )
 
@@ -3287,6 +3290,10 @@ fun SendAdminNotificationDialog(
                         onDone = {
                             keyboardController?.hide()
                             focusManager.clearFocus()
+                            val finalTitle = title.ifBlank { "📢 Thông báo từ Admin" }
+                            if (message.isNotBlank()) {
+                                onSend(selectedTargetUid, selectedTargetName, finalTitle, message, notifType)
+                            }
                         }
                     )
                 )
