@@ -3147,15 +3147,15 @@ fun SendAdminNotificationDialog(
     var isExpandedEmpDropdown by remember { mutableStateOf(false) }
     var isExpandedTypeDropdown by remember { mutableStateOf(false) }
 
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
     val typeOptions = listOf(
         "SHIFT_REMINDER" to "⏰ Nhắc nhở ca làm việc",
         "SHIFT_CHANGE" to "🔄 Xác nhận thay đổi ca làm việc",
         "AUTO_TIME_APPROVED" to "✅ Giờ tự động đã phê duyệt",
         "GENERAL" to "📢 Thông báo chung"
     )
-
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3290,10 +3290,6 @@ fun SendAdminNotificationDialog(
                         onDone = {
                             keyboardController?.hide()
                             focusManager.clearFocus()
-                            val finalTitle = title.ifBlank { "📢 Thông báo từ Admin" }
-                            if (message.isNotBlank()) {
-                                onSend(selectedTargetUid, selectedTargetName, finalTitle, message, notifType)
-                            }
                         }
                     )
                 )
@@ -3302,6 +3298,8 @@ fun SendAdminNotificationDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
                     val finalTitle = title.ifBlank { "📢 Thông báo từ Admin" }
                     if (message.isNotBlank()) {
                         onSend(selectedTargetUid, selectedTargetName, finalTitle, message, notifType)

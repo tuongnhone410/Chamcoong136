@@ -1207,6 +1207,8 @@ fun HomeScreen(
 
     if (showAutoCheckoutSetupDialog) {
         val context = LocalContext.current
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         var localTimeTf by remember { mutableStateOf(TextFieldValue(customCheckoutTime)) }
 
         AlertDialog(
@@ -1281,7 +1283,11 @@ fun HomeScreen(
                         label = { Text("Giờ ra ca", fontSize = 12.sp) },
                         placeholder = { Text("Để trống để tự học", fontSize = 11.sp) },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                        }),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = White,
@@ -1295,6 +1301,8 @@ fun HomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
                         val trimmed = localTimeTf.text.trim()
                         customCheckoutTime = trimmed
                         notificationPrefs.edit()
@@ -1321,6 +1329,8 @@ fun HomeScreen(
     }
 
     if (showNotificationConfigDialog) {
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
         val notificationPrefs = remember(context) { context.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE) }
         var notificationsEnabled by remember { mutableStateOf(notificationPrefs.getBoolean("notifications_enabled", true)) }
         var reminderMinutes by remember { mutableStateOf(notificationPrefs.getString("reminder_minutes_before", "15") ?: "15") }
@@ -1661,7 +1671,11 @@ fun HomeScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { showNotificationConfigDialog = false },
+                    onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        showNotificationConfigDialog = false
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
                 ) {
                     Text("Xong", color = White, fontWeight = FontWeight.Bold)
