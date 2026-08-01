@@ -1291,8 +1291,8 @@ fun SettingsScreen(
                                         return@OutlinedTextField
                                     }
                                     var num = digits.toIntOrNull() ?: 2
-                                    if (num < 1) num = 1
-                                    if (num > 4) num = 4
+                                    if (num < 0) num = 0
+                                    if (num > 5) num = 5
                                     val formatted = num.toString()
                                     rotationWeeksTf = TextFieldValue(text = formatted, selection = TextRange(formatted.length))
                                     shiftRotationWeeks = num
@@ -1330,7 +1330,7 @@ fun SettingsScreen(
                             )
 
                             Text(
-                                text = "💡 Chu kỳ tính theo tuần (1-4 tuần): Đặt số 2 = 2 tuần. Qua tuần thứ 3 hệ thống sẽ tự động đảo ngược giờ vào ca & ra ca.",
+                                text = "💡 Chu kỳ: 0 = Không đổi ca. Từ 1-5 tuần: Hệ thống tự động đảo ngược giờ vào/ra ca sau mỗi số tuần cấu hình.",
                                 color = LightGray.copy(alpha = 0.7f),
                                 fontSize = 11.sp,
                                 fontStyle = FontStyle.Italic,

@@ -205,6 +205,13 @@ object NotificationHelper {
         scheduleCheckOutReminder(context, uid, delayMs, shift.shiftId)
     }
 
+    fun getContinuousWeekIndex(timeMs: Long): Long {
+        val tz = java.util.TimeZone.getDefault()
+        val localMs = timeMs + tz.getOffset(timeMs)
+        val offsetMs = 3L * 24 * 3600 * 1000L // +3 days to start on Monday (Epoch 01/01/1970 was Thursday)
+        return (localMs + offsetMs) / (7L * 24 * 3600 * 1000L)
+    }
+
     fun getEffectiveCheckInTime(context: Context, targetMs: Long = System.currentTimeMillis()): String {
         val prefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
         val rawIn = prefs.getString("custom_check_in_time", "") ?: ""
@@ -212,19 +219,19 @@ object NotificationHelper {
         
         if (rawIn.isBlank() && rawOut.isBlank()) return ""
         
-        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
+        if (rotationWeeks == 0) {
+            return rawIn
+        }
+        
         var anchorTime = prefs.getLong("shift_anchor_time", 0L)
         if (anchorTime <= 0L) {
             anchorTime = System.currentTimeMillis()
             prefs.edit().putLong("shift_anchor_time", anchorTime).apply()
         }
         
-        val msPerWeek = 7L * 24 * 3600 * 1000
-        val calAnchor = Calendar.getInstance().apply { timeInMillis = anchorTime }
-        val calTarget = Calendar.getInstance().apply { timeInMillis = targetMs }
-        
-        val weekAnchor = (calAnchor.timeInMillis + calAnchor.timeZone.getOffset(calAnchor.timeInMillis)) / msPerWeek
-        val weekTarget = (calTarget.timeInMillis + calTarget.timeZone.getOffset(calTarget.timeInMillis)) / msPerWeek
+        val weekAnchor = getContinuousWeekIndex(anchorTime)
+        val weekTarget = getContinuousWeekIndex(targetMs)
         val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
         
         val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
@@ -246,19 +253,19 @@ object NotificationHelper {
         
         if (rawIn.isBlank() && rawOut.isBlank()) return ""
         
-        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+        val rotationWeeks = prefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
+        if (rotationWeeks == 0) {
+            return rawOut
+        }
+        
         var anchorTime = prefs.getLong("shift_anchor_time", 0L)
         if (anchorTime <= 0L) {
             anchorTime = System.currentTimeMillis()
             prefs.edit().putLong("shift_anchor_time", anchorTime).apply()
         }
         
-        val msPerWeek = 7L * 24 * 3600 * 1000
-        val calAnchor = Calendar.getInstance().apply { timeInMillis = anchorTime }
-        val calTarget = Calendar.getInstance().apply { timeInMillis = targetMs }
-        
-        val weekAnchor = (calAnchor.timeInMillis + calAnchor.timeZone.getOffset(calAnchor.timeInMillis)) / msPerWeek
-        val weekTarget = (calTarget.timeInMillis + calTarget.timeZone.getOffset(calTarget.timeInMillis)) / msPerWeek
+        val weekAnchor = getContinuousWeekIndex(anchorTime)
+        val weekTarget = getContinuousWeekIndex(targetMs)
         val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
         
         val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
@@ -300,7 +307,7 @@ object NotificationHelper {
 
         try {
             val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
             val block1Days = rotationWeeks * 7L
 
             val db = com.example.data.db.AppDatabase.getInstance(context)
@@ -391,7 +398,7 @@ object NotificationHelper {
 
         try {
             val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(1, 4)
+            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
             val block1Days = rotationWeeks * 7L
 
             val db = com.example.data.db.AppDatabase.getInstance(context)
