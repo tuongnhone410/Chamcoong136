@@ -2365,7 +2365,7 @@ fun EmployeeConfigEdit(
                 AdminInputField("Phụ cấp thâm niên", pcThamNien, onValueChange = { pcThamNien = it }, isNumeric = true)
                 AdminInputField("Phụ cấp nhà ở", pcNhaO, onValueChange = { pcNhaO = it }, isNumeric = true)
                 AdminInputField("Phụ cấp độc hại", pcDocHai, onValueChange = { pcDocHai = it }, isNumeric = true)
-                AdminInputField("Phụ cấp điện thoại", pcDtDoanhThu, onValueChange = { pcDtDoanhThu = it }, isNumeric = true)
+                AdminInputField("Phụ cấp doanh thu", pcDtDoanhThu, onValueChange = { pcDtDoanhThu = it }, isNumeric = true)
                 AdminInputField("Phụ cấp xăng xe", pcXangXe, onValueChange = { pcXangXe = it }, isNumeric = true)
                 AdminInputField("Phụ cấp ca đêm", pcCaDem, onValueChange = { pcCaDem = it }, isNumeric = true)
                 AdminInputField("Phụ cấp khác", pcKhac1, onValueChange = { pcKhac1 = it }, isNumeric = true)
@@ -3083,7 +3083,7 @@ fun EmployeePayslipView(
                     PayslipMoneyRow(label = "Nhà ở", value = s.pcNhaOVal, isAddition = true)
                 }
                 if (employee.pcKhac1 > 0.0 && s.pcKhac1Val > 0.0) {
-                    PayslipMoneyRow(label = "Khác 1", value = s.pcKhac1Val, isAddition = true)
+                    PayslipMoneyRow(label = "Phụ cấp khác", value = s.pcKhac1Val, isAddition = true)
                 }
 
                 HorizontalDivider(

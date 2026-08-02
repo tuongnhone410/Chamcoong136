@@ -490,7 +490,7 @@ object ExportUtils {
         if (summary.pcCaDemVal > 0.0) drawRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", "+${fmt.format(summary.pcCaDemVal)}đ", paintGreen)
         if (pcXangXeShowPNG > 0.0) drawRow("Phụ cấp xăng xe", "+${fmt.format(pcXangXeShowPNG)}đ", paintGreen)
         if (pcNhaOShowPNG > 0.0) drawRow("Phụ cấp nhà ở", "+${fmt.format(pcNhaOShowPNG)}đ", paintGreen)
-        if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác 1", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
+        if (pcKhac1ShowPNG > 0.0) drawRow("Phụ cấp khác", "+${fmt.format(pcKhac1ShowPNG)}đ", paintGreen)
 
         // Section 3: Khấu trừ & Nghĩa vụ
         currentY += 20f
@@ -782,7 +782,7 @@ object ExportUtils {
 
         // Required flat allowances
         drawPdfRow("Phụ cấp ăn trưa (Cơm ca)", pcComCaShow, 0.0)
-        drawPdfRow("Phụ cấp điện thoại", pcKhac1Show, 0.0)
+        drawPdfRow("Phụ cấp khác", pcKhac1Show, 0.0)
         drawPdfRow("Phụ cấp xăng xe", pcXangXeShow, 0.0)
 
         // Required bonus/thưởng
@@ -800,7 +800,6 @@ object ExportUtils {
         if (pcComOtShow > 0.0) drawPdfRow("Phụ cấp cơm OT", pcComOtShow, 0.0)
         if (summary.pcCaDemVal > 0.0) drawPdfRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", summary.pcCaDemVal, 0.0)
         if (pcDtDoanhThuShow > 0.0) drawPdfRow("Phụ cấp doanh thu", pcDtDoanhThuShow, 0.0)
-        if (pcKhacShow > 0.0) drawPdfRow("Phụ cấp khác", pcKhacShow, 0.0)
 
         // Required trích trừ
         drawPdfRow("BHXH bắt buộc người lao động đóng (10.5%)", 0.0, summary.tienBh)

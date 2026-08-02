@@ -15,8 +15,8 @@ android {
     applicationId = "com.aistudio.timesnappro.vklypa"
     minSdk = 24
     targetSdk = 36
-    versionCode = 101
-    versionName = "2.1"
+    versionCode = 102
+    versionName = "2.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
