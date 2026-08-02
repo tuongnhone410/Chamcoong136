@@ -5,13 +5,22 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.os.Build
 import android.provider.MediaStore
+import android.widget.Toast
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import com.example.auth.UserSession
 import com.example.data.AttendanceRecord
 import com.example.data.SalaryCalculator
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
+import java.io.File
+import java.io.FileOutputStream
 import java.io.OutputStream
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
@@ -544,6 +553,432 @@ object ExportUtils {
             }
         } catch (e: Exception) { e.printStackTrace() }
         return false
+    }
+
+    fun sharePayslipAndAttendanceAsPdf(
+        context: Context,
+        entries: List<TimeEntry>,
+        summary: com.example.viewmodel.SalarySummary,
+        config: UserConfig,
+        userSession: UserSession?,
+        monthLabel: String,
+        selectedMonth: String,
+        selectedTab: Int = 0,
+        includeSundayInProjection: Boolean = false,
+        remainingWeekdays: Int = 0,
+        remainingSundays: Int = 0,
+        dailySalary: Double = 0.0,
+        luongDuKienVal: Double = 0.0,
+        soNgayCongDuKien: Int = 0,
+        customOt15DaysCount: Double = 0.0,
+        customOt15Pay: Double = 0.0,
+        selectedOt15Shift: String = "Đêm",
+        customNightAllowance: Double = 0.0,
+        hasLoggedUnpaidOrAbsent: Boolean = false
+    ) {
+        val df = DecimalFormat("#.#")
+        val fmt = DecimalFormat("#,###")
+
+        val todayCal = Calendar.getInstance()
+        val currentYear = todayCal.get(Calendar.YEAR)
+        val currentMonth = todayCal.get(Calendar.MONTH) + 1
+        val isCurrentSelectedMonth = selectedMonth.startsWith(String.format(Locale.US, "%04d-%02d", currentYear, currentMonth))
+
+        val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+        fun calcPrPDF(fieldName: String, valRaw: Double): Double {
+            return com.example.data.SalaryCalculator.calculateAllowanceValue(
+                fieldName = fieldName,
+                allowanceValue = valRaw,
+                calcType = config.getCalcTypeFor(fieldName),
+                totalWorkDays = soNgayCongDuKienDouble,
+                comCaCount = summary.workingDays,
+                comOtCount = 0,
+                nightShiftsCount = summary.caDemCount,
+                scheduledDaysSoFar = summary.workingDays,
+                totalScheduledDaysInMonth = 26
+            )
+        }
+
+        val pcKyThuatShow = if (selectedTab == 1) calcPrPDF("pcKyThuat", config.pcKyThuat) else summary.pcKyThuatVal
+        val pcTrachNhiemShow = if (selectedTab == 1) calcPrPDF("pcTrachNhiem", config.pcTrachNhiem) else summary.pcTrachNhiemVal
+        val pcChucVuShow = if (selectedTab == 1) calcPrPDF("pcChucVu", config.pcChucVu) else summary.pcChucVuVal
+        val pcHieuSuatShow = if (selectedTab == 1) calcPrPDF("pcHieuSuat", config.pcHieuSuat) else summary.pcHieuSuatVal
+        val pcSanPhamShow = if (selectedTab == 1) calcPrPDF("pcSanPham", config.pcSanPham) else summary.pcSanPhamVal
+
+        val pcComCaShow = if (selectedTab == 1) {
+            if (isCurrentSelectedMonth) {
+                summary.pcComCaVal + (remainingWeekdays * config.pcComCa) + (if (includeSundayInProjection) remainingSundays * config.pcComCa else 0.0)
+            } else {
+                summary.pcComCaVal
+            }
+        } else {
+            summary.pcComCaVal
+        }
+
+        val pcComOtShow = if (selectedTab == 1) {
+            summary.pcComOtVal + (customOt15DaysCount * config.pcComOt)
+        } else {
+            summary.pcComOtVal
+        }
+
+        val pcNhaOShow = if (selectedTab == 1) calcPrPDF("pcNhaO", config.pcNhaO) else summary.pcNhaOVal
+        val pcDocHaiShow = if (selectedTab == 1) calcPrPDF("pcDocHai", config.pcDocHai) else summary.pcDocHaiVal
+        val pcDtDoanhThuShow = if (selectedTab == 1) calcPrPDF("pcDtDoanhThu", config.pcDtDoanhThu) else summary.pcDtDoanhThuVal
+        val pcXangXeShow = if (selectedTab == 1) calcPrPDF("pcXangXe", config.pcXangXe) else summary.pcXangXeVal
+        val pcKhacShow = if (selectedTab == 1) calcPrPDF("pcKhac", config.pcKhac) else summary.pcKhacVal
+        val pcKhac1Show = if (selectedTab == 1) calcPrPDF("pcKhac1", config.pcKhac1) else summary.pcKhac1Val
+        val pcThamNienShow = if (selectedTab == 1) calcPrPDF("pcThamNien", config.pcThamNien) else summary.pcThamNienVal
+
+        val pcChuyenCanShow = if (selectedTab == 1) {
+            if (hasLoggedUnpaidOrAbsent) 0.0 else calcPrPDF("tienChuyenCanGoc", config.tienChuyenCanGoc)
+        } else {
+            summary.phuCapChuyenCan
+        }
+
+        val pdfDocument = PdfDocument()
+
+        val pageInfo1 = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+        val page1 = pdfDocument.startPage(pageInfo1)
+        val canvas1 = page1.canvas
+
+        val primaryColor = android.graphics.Color.parseColor("#1A73E8")
+        val navyColor = android.graphics.Color.parseColor("#1E293B")
+        val textColor = android.graphics.Color.parseColor("#334155")
+        val grayLabelColor = android.graphics.Color.parseColor("#64748B")
+        val bgLightColor = android.graphics.Color.parseColor("#F8FAFC")
+        val borderLightColor = android.graphics.Color.parseColor("#E2E8F0")
+        val greenColor = android.graphics.Color.parseColor("#16A34A")
+        val redColor = android.graphics.Color.parseColor("#DC2626")
+
+        val paintBg = Paint().apply { color = android.graphics.Color.WHITE }
+        val paintHeaderBg = Paint().apply { color = bgLightColor }
+        val paintBorder = Paint().apply { color = borderLightColor; strokeWidth = 1f; style = Paint.Style.STROKE }
+        val paintTitle = Paint().apply { color = primaryColor; textSize = 22f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val paintSubtitle = Paint().apply { color = navyColor; textSize = 14f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val paintDate = Paint().apply { color = grayLabelColor; textSize = 11f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL) }
+        val paintSectionHeader = Paint().apply { color = primaryColor; textSize = 12f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val paintLabel = Paint().apply { color = grayLabelColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL) }
+        val paintValBold = Paint().apply { color = navyColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val paintValNormal = Paint().apply { color = textColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL) }
+        val paintValGreen = Paint().apply { color = greenColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.RIGHT }
+        val paintValRed = Paint().apply { color = redColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.RIGHT }
+        val paintFooter = Paint().apply { color = grayLabelColor; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL); textAlign = Paint.Align.CENTER }
+
+        canvas1.drawRect(0f, 0f, 595f, 842f, paintBg)
+        canvas1.drawRect(0f, 0f, 595f, 130f, paintHeaderBg)
+        canvas1.drawLine(0f, 130f, 595f, 130f, paintBorder)
+
+        var currentY = 32f
+        val paintCompany = Paint().apply { color = navyColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        canvas1.drawText("CÔNG TY TNHH CÔNG NGHỆ TIMESNAP PRO", 40f, currentY, paintCompany)
+
+        currentY = 62f
+        canvas1.drawText("TIMESNAP PRO", 40f, currentY, paintTitle)
+        
+        currentY += 28f
+        val docType = if (selectedTab == 1) "BẢNG LƯƠNG DỰ KIẾN (TỰ ĐỘNG)" else "PHIẾU LƯƠNG ĐIỆN TỬ CHI TIẾT"
+        canvas1.drawText(docType, 40f, currentY, paintSubtitle)
+
+        currentY += 22f
+        val formattedMonthLabel = if (monthLabel.startsWith("Tháng", ignoreCase = true)) monthLabel else "Tháng $monthLabel"
+        val statusText = if (selectedTab == 1) "Dự kiến" else "Đã phê duyệt"
+        canvas1.drawText("Kỳ tính lương: $formattedMonthLabel | Trạng thái: $statusText | Ngày xuất: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())}", 40f, currentY, paintDate)
+
+        currentY = 160f
+        canvas1.drawText("I. THÔNG TIN NHÂN SỰ & CÔNG LAO ĐỘNG", 40f, currentY, paintSectionHeader)
+        currentY += 8f
+        canvas1.drawLine(40f, currentY, 555f, currentY, paintBorder)
+
+        currentY += 18f
+        val empName = config.hoVaTen.ifBlank { userSession?.displayName ?: "N/A" }
+        val empCode = config.maNhanVien.ifBlank { userSession?.uid?.take(8) ?: "N/A" }
+
+        // Row 1
+        canvas1.drawText("Họ và tên:", 45f, currentY, paintLabel)
+        canvas1.drawText(empName, 150f, currentY, paintValBold)
+        canvas1.drawText("Công chuẩn:", 320f, currentY, paintLabel)
+        val standardDaysVal = if (selectedTab == 1) "${summary.standardWorkDays} ngày" else "${if (summary.isCurrentMonth) summary.expectedWorkDays else summary.standardWorkDays} ngày"
+        canvas1.drawText(standardDaysVal, 440f, currentY, paintValBold)
+
+        // Row 2
+        currentY += 18f
+        canvas1.drawText("Mã nhân viên:", 45f, currentY, paintLabel)
+        canvas1.drawText(empCode, 150f, currentY, paintValNormal)
+        canvas1.drawText("Công thực tế:", 320f, currentY, paintLabel)
+        val actualDaysVal = if (selectedTab == 1) "$soNgayCongDuKien ngày" else "${summary.workingDays} ngày"
+        canvas1.drawText(actualDaysVal, 440f, currentY, paintValBold)
+
+        // Row 3
+        currentY += 18f
+        canvas1.drawText("Bộ phận:", 45f, currentY, paintLabel)
+        canvas1.drawText(config.boPhan.ifBlank { "N/A" }, 150f, currentY, paintValNormal)
+        canvas1.drawText("Ngày nghỉ phép:", 320f, currentY, paintLabel)
+        val leaveDaysVal = "${entries.count { it.dayType.equals("LEAVE", ignoreCase = true) }} ngày"
+        canvas1.drawText(leaveDaysVal, 440f, currentY, paintValNormal)
+
+        // Row 4
+        currentY += 18f
+        canvas1.drawText("Mức lương cơ bản:", 45f, currentY, paintLabel)
+        canvas1.drawText("${fmt.format(config.luongCoBan)} VNĐ", 150f, currentY, paintValBold)
+        canvas1.drawText("Giờ làm thêm:", 320f, currentY, paintLabel)
+        val totalOtHrsVal = "${df.format(summary.otDayHours + summary.chuNhatHours + summary.otLeHours + summary.otNightHours)} giờ"
+        canvas1.drawText(totalOtHrsVal, 440f, currentY, paintValNormal)
+
+        currentY = 245f
+        canvas1.drawText("II. CHI TIẾT THU NHẬP VÀ KHẤU TRỪ (+ / -)", 40f, currentY, paintSectionHeader)
+        currentY += 8f
+        canvas1.drawLine(40f, currentY, 555f, currentY, paintBorder)
+
+        currentY += 22f
+        val tblCol1 = 50f
+        val tblCol2 = 380f
+        val tblCol3 = 540f
+
+        val paintTblHeader = Paint().apply { color = navyColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        val paintTblHeaderRight = Paint().apply { color = navyColor; textSize = 10f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.RIGHT }
+        
+        canvas1.drawText("Khoản mục / Chi tiết", tblCol1, currentY, paintTblHeader)
+        canvas1.drawText("Cộng (+)", tblCol2, currentY, paintTblHeaderRight)
+        canvas1.drawText("Trừ (-)", tblCol3, currentY, paintTblHeaderRight)
+
+        currentY += 10f
+        canvas1.drawLine(40f, currentY, 555f, currentY, paintBorder)
+        currentY += 20f
+
+        fun drawPdfRow(label: String, plusVal: Double, minusVal: Double) {
+            canvas1.drawText(label, tblCol1, currentY, paintValNormal)
+            if (plusVal > 0.0) {
+                canvas1.drawText("+${fmt.format(plusVal)}", tblCol2, currentY, paintValGreen)
+            } else {
+                canvas1.drawText("-", tblCol2, currentY, Paint().apply { color = grayLabelColor; textSize = 10f; textAlign = Paint.Align.RIGHT })
+            }
+            if (minusVal > 0.0) {
+                canvas1.drawText("-${fmt.format(minusVal)}", tblCol3, currentY, paintValRed)
+            } else {
+                canvas1.drawText("-", tblCol3, currentY, Paint().apply { color = grayLabelColor; textSize = 10f; textAlign = Paint.Align.RIGHT })
+            }
+            currentY += 16f
+        }
+
+        val baseSalaryValue = if (selectedTab == 1) Math.round((config.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble() else summary.baseBasicSalary
+        val baseSalaryLabelText = if (selectedTab == 1) "Lương theo công thực tế ($soNgayCongDuKien công)" 
+                              else "Lương theo công thực tế (${summary.workingDays} công)"
+        drawPdfRow(baseSalaryLabelText, baseSalaryValue, 0.0)
+
+        // OT Lương
+        val otNormalPay = summary.tienOtNgay
+        val otSundayPay = summary.tienChuNhat
+        val otHolidayPay = summary.tienOtLe
+        val otNightPay = summary.tienOtDem
+        val totalOtPay = otNormalPay + otSundayPay + otHolidayPay + otNightPay
+        if (totalOtPay > 0.0) {
+            if (otNormalPay > 0.0) drawPdfRow("Lương tăng ca ngày thường (${df.format(summary.otDayHours)}h)", otNormalPay, 0.0)
+            if (otSundayPay > 0.0) drawPdfRow("Lương tăng ca chủ nhật (${df.format(summary.chuNhatHours)}h)", otSundayPay, 0.0)
+            if (otHolidayPay > 0.0) drawPdfRow("Lương tăng ca ngày lễ (${df.format(summary.otLeHours)}h)", otHolidayPay, 0.0)
+            if (otNightPay > 0.0) drawPdfRow("Lương tăng ca đêm (${df.format(summary.otNightHours)}h)", otNightPay, 0.0)
+        } else {
+            drawPdfRow("Lương tăng ca (OT)", 0.0, 0.0)
+        }
+
+        // Required flat allowances
+        drawPdfRow("Phụ cấp ăn trưa (Cơm ca)", pcComCaShow, 0.0)
+        drawPdfRow("Phụ cấp điện thoại", pcKhac1Show, 0.0)
+        drawPdfRow("Phụ cấp xăng xe", pcXangXeShow, 0.0)
+
+        // Required bonus/thưởng
+        val bonusShow = pcHieuSuatShow + pcSanPhamShow
+        drawPdfRow("Thưởng hiệu suất & Sản phẩm", bonusShow, 0.0)
+
+        // Other active allowances
+        if (pcChuyenCanShow > 0.0) drawPdfRow("Phụ cấp chuyên cần", pcChuyenCanShow, 0.0)
+        if (pcTrachNhiemShow > 0.0) drawPdfRow("Phụ cấp trách nhiệm", pcTrachNhiemShow, 0.0)
+        if (pcKyThuatShow > 0.0) drawPdfRow("Phụ cấp kỹ thuật", pcKyThuatShow, 0.0)
+        if (pcChucVuShow > 0.0) drawPdfRow("Phụ cấp chức vụ", pcChucVuShow, 0.0)
+        if (pcDocHaiShow > 0.0) drawPdfRow("Phụ cấp độc hại", pcDocHaiShow, 0.0)
+        if (pcThamNienShow > 0.0) drawPdfRow("Phụ cấp thâm niên", pcThamNienShow, 0.0)
+        if (pcNhaOShow > 0.0) drawPdfRow("Phụ cấp nhà ở", pcNhaOShow, 0.0)
+        if (pcComOtShow > 0.0) drawPdfRow("Phụ cấp cơm OT", pcComOtShow, 0.0)
+        if (summary.pcCaDemVal > 0.0) drawPdfRow("Phụ cấp ca đêm (${summary.caDemCount} ca)", summary.pcCaDemVal, 0.0)
+        if (pcDtDoanhThuShow > 0.0) drawPdfRow("Phụ cấp doanh thu", pcDtDoanhThuShow, 0.0)
+        if (pcKhacShow > 0.0) drawPdfRow("Phụ cấp khác", pcKhacShow, 0.0)
+
+        // Required trích trừ
+        drawPdfRow("BHXH bắt buộc người lao động đóng (10.5%)", 0.0, summary.tienBh)
+        drawPdfRow("Thuế thu nhập cá nhân (TNCN)", 0.0, 0.0)
+        drawPdfRow("Tạm ứng lương", 0.0, 0.0)
+
+        // Optional trích trừ
+        if (summary.doanPhi > 0.0) drawPdfRow("Kinh phí công đoàn", 0.0, summary.doanPhi)
+        if (summary.tienKhauTruNghi > 0.0 && selectedTab == 0) drawPdfRow("Khấu trừ nghỉ không phép/vắng", 0.0, summary.tienKhauTruNghi)
+
+        currentY += 15f
+        canvas1.drawRect(40f, currentY, 555f, currentY + 50f, paintHeaderBg)
+        canvas1.drawRect(40f, currentY, 555f, currentY + 50f, paintBorder)
+
+        val totalLabelText = if (selectedTab == 1) "DỰ KIẾN THỰC NHẬN:" else "TỔNG THỰC NHẬN:"
+        val totalValue = if (selectedTab == 1) luongDuKienVal else summary.luongThucNhan
+
+        canvas1.drawText(totalLabelText, 55f, currentY + 31f, Paint().apply { color = navyColor; textSize = 11f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) })
+        canvas1.drawText("${fmt.format(totalValue)} VNĐ", 540f, currentY + 31f, Paint().apply { color = greenColor; textSize = 15f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.RIGHT })
+
+        currentY = 675f
+        val signHeaderPaint = Paint().apply { color = navyColor; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.CENTER }
+        val signSubPaint = Paint().apply { color = grayLabelColor; textSize = 7.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL); textAlign = Paint.Align.CENTER }
+
+        // Col 1: Người lập biểu (X = 100f)
+        canvas1.drawText("Người lập biểu", 100f, currentY, signHeaderPaint)
+        canvas1.drawText("(Ký, ghi rõ họ tên)", 100f, currentY + 14f, signSubPaint)
+
+        // Col 2: Kế toán trưởng (X = 230f)
+        canvas1.drawText("Kế toán trưởng", 230f, currentY, signHeaderPaint)
+        canvas1.drawText("(Ký, đóng dấu)", 230f, currentY + 14f, signSubPaint)
+
+        // Col 3: Giám đốc (X = 360f)
+        canvas1.drawText("Giám đốc", 360f, currentY, signHeaderPaint)
+        canvas1.drawText("(Ký, đóng dấu)", 360f, currentY + 14f, signSubPaint)
+
+        // Col 4: Chữ ký người nhận (X = 495f)
+        canvas1.drawText("Chữ ký người nhận", 495f, currentY, signHeaderPaint)
+        canvas1.drawText("(Ký nhận thực tế)", 495f, currentY + 14f, signSubPaint)
+
+        canvas1.drawText("XUẤT TỪ ỨNG DỤNG TIMESNAP PRO - QUẢN LÝ BẢNG LƯƠNG THÔNG MINH", 297f, 800f, paintFooter)
+        canvas1.drawText("Trang 1 / 2", 297f, 815f, paintFooter)
+
+        pdfDocument.finishPage(page1)
+
+        val pageInfo2 = PdfDocument.PageInfo.Builder(595, 842, 2).create()
+        val page2 = pdfDocument.startPage(pageInfo2)
+        val canvas2 = page2.canvas
+
+        canvas2.drawRect(0f, 0f, 595f, 842f, paintBg)
+        canvas2.drawRect(0f, 0f, 595f, 110f, paintHeaderBg)
+        canvas2.drawLine(0f, 110f, 595f, 110f, paintBorder)
+
+        canvas2.drawText("BẢNG CHI TIẾT CHẤM CÔNG CÁ NHÂN", 40f, 50f, paintSubtitle)
+        canvas2.drawText("Tháng $monthLabel | Nhân viên: $empName ($empCode)", 40f, 75f, paintDate)
+
+        currentY = 140f
+        canvas2.drawText("III. CHI TIẾT LỊCH SỬ CHẤM CÔNG TRONG THÁNG", 40f, currentY, paintSectionHeader)
+        currentY += 8f
+        canvas2.drawLine(40f, currentY, 555f, currentY, paintBorder)
+
+        currentY += 25f
+        
+        val attCol1 = 45f
+        val attCol2 = 140f
+        val attCol3 = 210f
+        val attCol4 = 280f
+        val attCol5 = 390f
+
+        val paintAttHeader = Paint().apply { color = navyColor; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+        
+        canvas2.drawText("Ngày", attCol1, currentY, paintAttHeader)
+        canvas2.drawText("Giờ vào", attCol2, currentY, paintAttHeader)
+        canvas2.drawText("Giờ ra", attCol3, currentY, paintAttHeader)
+        canvas2.drawText("Trạng thái / Ngày công", attCol4, currentY, paintAttHeader)
+        canvas2.drawText("Ghi chú", attCol5, currentY, paintAttHeader)
+
+        currentY += 8f
+        canvas2.drawLine(40f, currentY, 555f, currentY, paintBorder)
+        currentY += 18f
+
+        val sdfDateParser = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val sortedEntries = entries.sortedWith { e1, e2 ->
+            try {
+                val d1 = sdfDateParser.parse(e1.date) ?: Date(0)
+                val d2 = sdfDateParser.parse(e2.date) ?: Date(0)
+                d1.compareTo(d2)
+            } catch (e: Exception) {
+                e1.date.compareTo(e2.date)
+            }
+        }
+
+        val sdfTimeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+        if (sortedEntries.isEmpty()) {
+            canvas2.drawText("Không có dữ liệu chấm công nào trong tháng này.", 45f, currentY + 15f, paintValNormal)
+        } else {
+            sortedEntries.forEachIndexed { idx, entry ->
+                if (currentY > 750f) {
+                    return@forEachIndexed
+                }
+
+                canvas2.drawLine(40f, currentY + 4f, 555f, currentY + 4f, paintBorder)
+
+                canvas2.drawText(entry.date, attCol1, currentY, paintValBold)
+
+                val inText = if (entry.checkInTime != null && entry.checkInTime > 0) sdfTimeFormatter.format(Date(entry.checkInTime)) else "--:--"
+                canvas2.drawText(inText, attCol2, currentY, paintValNormal)
+
+                val outText = if (entry.checkOutTime != null && entry.checkOutTime > 0) sdfTimeFormatter.format(Date(entry.checkOutTime)) else "--:--"
+                canvas2.drawText(outText, attCol3, currentY, paintValNormal)
+
+                val friendlyStatus = when (entry.dayType.uppercase()) {
+                    "NORMAL" -> "Ngày thường"
+                    "SUNDAY" -> "Chủ nhật"
+                    "HOLIDAY" -> "Ngày lễ"
+                    "LEAVE" -> "Nghỉ phép"
+                    "ABSENT" -> "Vắng mặt"
+                    "UNPAID_LEAVE" -> "Nghỉ ko lương"
+                    "NIGHT_SHIFT" -> "Ca đêm"
+                    else -> entry.dayType
+                }
+                
+                canvas2.drawText(friendlyStatus, attCol4, currentY, Paint().apply {
+                    color = when (entry.dayType.uppercase()) {
+                        "ABSENT", "UNPAID_LEAVE" -> redColor
+                        "SUNDAY", "HOLIDAY" -> primaryColor
+                        "LEAVE" -> greenColor
+                        else -> textColor
+                    }
+                    textSize = 9f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                })
+
+                val noteText = entry.note?.take(22) ?: ""
+                canvas2.drawText(noteText, attCol5, currentY, paintValNormal)
+
+                currentY += 18f
+            }
+        }
+
+        canvas2.drawText("XUẤT TỪ ỨNG DỤNG TIMESNAP PRO - QUẢN LÝ BẢNG LƯƠNG THÔNG MINH", 297f, 800f, paintFooter)
+        canvas2.drawText("Trang 2 / 2", 297f, 815f, paintFooter)
+
+        pdfDocument.finishPage(page2)
+
+        try {
+            val exportDir = File(context.cacheDir, "TimeSnapPro_Exports")
+            if (!exportDir.exists()) {
+                exportDir.mkdirs()
+            }
+            val pdfFile = File(exportDir, "TimeSnap_BaoCaoLuong_Cong_${empCode}_${selectedMonth.replace("-", "_")}.pdf")
+            val fos = FileOutputStream(pdfFile)
+            pdfDocument.writeTo(fos)
+            fos.flush()
+            fos.close()
+            pdfDocument.close()
+
+            val authority = "${context.packageName}.fileprovider"
+            val uri = FileProvider.getUriForFile(context, authority, pdfFile)
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "TimeSnap Pro: Phiếu Lương & Bảng Công $formattedMonthLabel")
+                putExtra(Intent.EXTRA_TEXT, "Kính gửi, tôi xin gửi chi tiết phiếu lương và bảng công cá nhân tháng $formattedMonthLabel được xuất từ ứng dụng TimeSnap Pro.")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            val chooser = Intent.createChooser(shareIntent, "Gửi báo cáo qua:")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(chooser)
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "Lỗi khi tạo PDF: ${e.message}", Toast.LENGTH_LONG).show()
+            pdfDocument.close()
+        }
     }
 }
 

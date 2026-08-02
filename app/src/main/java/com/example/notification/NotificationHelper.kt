@@ -167,7 +167,7 @@ object NotificationHelper {
 
         WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
             "AdminNotificationWorker_$uid",
-            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+            androidx.work.ExistingPeriodicWorkPolicy.REPLACE,
             periodicRequest
         )
 
@@ -234,8 +234,11 @@ object NotificationHelper {
         val weekTarget = getContinuousWeekIndex(targetMs)
         val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
         
+        val anchorType = prefs.getString("shift_anchor_type", "DAY") ?: "DAY"
         val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
-        if (cyclePhase == 1) {
+        val effectivePhase = if (anchorType == "NIGHT") (cyclePhase + 1) % 2 else cyclePhase
+        
+        if (effectivePhase == 1) {
             if (rawOut.isNotBlank()) return rawOut
             val parts = rawIn.split(":")
             val h = parts.getOrNull(0)?.toIntOrNull() ?: 19
@@ -268,8 +271,11 @@ object NotificationHelper {
         val weekTarget = getContinuousWeekIndex(targetMs)
         val weeksPassed = (weekTarget - weekAnchor).coerceAtLeast(0)
         
+        val anchorType = prefs.getString("shift_anchor_type", "DAY") ?: "DAY"
         val cyclePhase = ((weeksPassed / rotationWeeks) % 2).toInt()
-        if (cyclePhase == 1) {
+        val effectivePhase = if (anchorType == "NIGHT") (cyclePhase + 1) % 2 else cyclePhase
+        
+        if (effectivePhase == 1) {
             if (rawIn.isNotBlank()) return rawIn
             val parts = rawOut.split(":")
             val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
@@ -390,6 +396,16 @@ object NotificationHelper {
                 set(Calendar.MILLISECOND, 0)
             }
             if (cal.before(Calendar.getInstance())) cal.add(Calendar.DAY_OF_YEAR, 1)
+            
+            // Tự động bỏ qua ngày Chủ Nhật và ngày lễ để tính giờ đi làm cho tuần sau / ca tiếp theo
+            while (true) {
+                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+                if (SalaryCalculator.isSunday(dateStr) || SalaryCalculator.isHoliday(dateStr)) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                } else {
+                    break
+                }
+            }
             return cal.timeInMillis
         }
 
@@ -464,6 +480,16 @@ object NotificationHelper {
         }
         if (cal.before(Calendar.getInstance())) {
             cal.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        
+        // Tự động bỏ qua ngày Chủ Nhật và ngày lễ để tính giờ đi làm cho tuần sau / ca tiếp theo
+        while (true) {
+            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+            if (SalaryCalculator.isSunday(dateStr) || SalaryCalculator.isHoliday(dateStr)) {
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+            } else {
+                break
+            }
         }
         return cal.timeInMillis
     }

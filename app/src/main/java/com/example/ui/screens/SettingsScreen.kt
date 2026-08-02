@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AlarmOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Percent
@@ -1022,7 +1023,7 @@ fun SettingsScreen(
                 }
             }
 
-            CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.Settings) {
+            CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.AlarmOn) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // 1. Bật thông báo nhắc nhở
                     Row(
@@ -1165,7 +1166,7 @@ fun SettingsScreen(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
-                                checkedTrackColor = AccentOrange,
+                                checkedTrackColor = NeonBlue,
                                 uncheckedThumbColor = MediumGray,
                                 uncheckedTrackColor = Color(0xFF1E1E1E)
                             )
@@ -1329,13 +1330,122 @@ fun SettingsScreen(
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
 
-                            Text(
-                                text = "💡 Chu kỳ: 0 = Không đổi ca. Từ 1-5 tuần: Hệ thống tự động đảo ngược giờ vào/ra ca sau mỗi số tuần cấu hình.",
-                                color = LightGray.copy(alpha = 0.7f),
-                                fontSize = 11.sp,
-                                fontStyle = FontStyle.Italic,
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
+                            // Cấu hình Ngày mốc và Ca mốc bắt đầu
+                            var shiftAnchorTime by remember { mutableStateOf(notificationPrefs.getLong("shift_anchor_time", System.currentTimeMillis())) }
+                            var shiftAnchorType by remember { mutableStateOf(notificationPrefs.getString("shift_anchor_type", "DAY") ?: "DAY") }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Ngày mốc bắt đầu:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                val anchorDateStr = java.text.SimpleDateFormat("EEEE, dd/MM/yyyy", java.util.Locale("vi", "VN")).format(java.util.Date(shiftAnchorTime))
+                                OutlinedButton(
+                                    onClick = {
+                                        val curCal = java.util.Calendar.getInstance().apply { timeInMillis = shiftAnchorTime }
+                                        android.app.DatePickerDialog(
+                                            context,
+                                            { _, yr, mo, dy ->
+                                                val c = java.util.Calendar.getInstance()
+                                                c.set(yr, mo, dy)
+                                                val newTime = c.timeInMillis
+                                                shiftAnchorTime = newTime
+                                                notificationPrefs.edit().putLong("shift_anchor_time", newTime).apply()
+                                                
+                                                sessionState?.let { session ->
+                                                    CoroutineScope(Dispatchers.IO).launch {
+                                                        val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                        estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
+                                                        val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                        val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                        estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
+                                                        
+                                                        if (autoClockInOutEnabled) {
+                                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            curCal.get(java.util.Calendar.YEAR),
+                                            curCal.get(java.util.Calendar.MONTH),
+                                            curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                        ).show()
+                                    },
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Text("📅 $anchorDateStr", fontSize = 11.sp, color = White)
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Ca tại ngày mốc:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val isNight = shiftAnchorType == "NIGHT"
+                                    Button(
+                                        onClick = {
+                                            shiftAnchorType = "DAY"
+                                            notificationPrefs.edit().putString("shift_anchor_type", "DAY").apply()
+                                            
+                                            sessionState?.let { session ->
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                    estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
+                                                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                    val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                    estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
+                                                    
+                                                    if (autoClockInOutEnabled) {
+                                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (!isNight) NeonBlue else MediumGray,
+                                            contentColor = White
+                                        ),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp)
+                                    ) {
+                                        Text("Ca Ngày", fontSize = 11.sp)
+                                    }
+                                    
+                                    Button(
+                                        onClick = {
+                                            shiftAnchorType = "NIGHT"
+                                            notificationPrefs.edit().putString("shift_anchor_type", "NIGHT").apply()
+                                            
+                                            sessionState?.let { session ->
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                    estimatedInTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(inMs))
+                                                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                    val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                    estimatedOutTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(outMs))
+                                                    
+                                                    if (autoClockInOutEnabled) {
+                                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isNight) NeonBlue else MediumGray,
+                                            contentColor = White
+                                        ),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp)
+                                    ) {
+                                        Text("Ca Đêm", fontSize = 11.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

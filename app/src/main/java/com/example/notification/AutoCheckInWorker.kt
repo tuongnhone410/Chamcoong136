@@ -27,6 +27,15 @@ class AutoCheckInWorker(
             val database = AppDatabase.getInstance(context)
             val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(if (scheduledTimeMs > 0) scheduledTimeMs else System.currentTimeMillis()))
             
+            val isSunday = SalaryCalculator.isSunday(todayStr)
+            val isHoliday = SalaryCalculator.isHoliday(todayStr)
+            if (isSunday || isHoliday) {
+                android.util.Log.d("AutoCheckInWorker", "Bỏ qua chấm công tự động vì hôm nay là ngày nghỉ hoặc ngày lễ ($todayStr).")
+                val nextCheckInMs = NotificationHelper.estimateHistoricalCheckInTime(context, uid)
+                NotificationHelper.scheduleAutoCheckIn(context, uid, nextCheckInMs)
+                return Result.success()
+            }
+            
             // Xung đột 1: Kiểm tra xem đang có ca nào active hay không
             val activeEntry = database.timeEntryDao().getActiveEntry(uid)
             val existingToday = database.timeEntryDao().getEntryByDate(uid, todayStr)

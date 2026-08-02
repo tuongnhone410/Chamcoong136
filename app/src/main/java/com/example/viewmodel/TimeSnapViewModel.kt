@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.glance.appwidget.updateAll
 import com.example.auth.AuthController
 import com.example.auth.UserSession
 import com.example.data.db.AppDatabase
@@ -71,6 +70,53 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Reactive flow of user's actual and projected income comparison over the last 6 months
+    val salaryHistoryState: StateFlow<List<MonthlySalaryPoint>> = currentUserSession
+        .flatMapLatest { session ->
+            if (session != null) {
+                combine(
+                    repository.getEntries(session.uid),
+                    userConfig,
+                    userEarliestEntryDate,
+                    _triggerRefresh
+                ) { allEntries, config, earliestDate, _ ->
+                    if (config != null) {
+                        val format = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                        val points = mutableListOf<MonthlySalaryPoint>()
+                        // Calculate for the last 6 months (chronological order)
+                        for (i in 5 downTo 0) {
+                            val tempCal = Calendar.getInstance()
+                            tempCal.add(Calendar.MONTH, -i)
+                            val monthStr = format.format(tempCal.time)
+                            
+                            val parts = monthStr.split("-")
+                            val mPattern = "${parts[0]}-${parts[1]}-"
+                            val mPatternSlash = "/${parts[1]}/${parts[0]}"
+                            
+                            val monthEntries = allEntries.filter { 
+                                it.date.startsWith(mPattern) || it.date.endsWith(mPatternSlash)
+                            }
+                            
+                            val summary = calculateSalarySummaryForMonth(monthStr, monthEntries, config, earliestDate)
+                            points.add(
+                                MonthlySalaryPoint(
+                                    monthStr = monthStr,
+                                    luongThucNhan = summary.luongThucNhan,
+                                    workingDays = summary.workingDays,
+                                    luongDuKien = summary.luongThucNhan
+                                )
+                            )
+                        }
+                        points
+                    } else {
+                        emptyList()
+                    }
+                }
+            } else {
+                flowOf(emptyList())
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Reactive list of active month entries
     val monthTimeEntries: StateFlow<List<TimeEntry>> = combine(
@@ -273,7 +319,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     val expectedOut = sdfTime.format(Date(targetMs))
 
                     if (config?.tinhKhauTruNghi == true) {
-                        _runningDurationText.value = "Thực làm: ${actHours}g ${actMinutes}p (Đã khấu trừ ${config.soGioNghiGiaiLao}g nghỉ)\nĐủ 8 tiếng lúc: $expectedOut"
+                        _runningDurationText.value = "Thực làm: ${actHours}g ${actMinutes}p (Trừ ${config.soGioNghiGiaiLao}g nghỉ)\nĐủ 8 tiếng lúc: $expectedOut"
                     } else {
                         _runningDurationText.value = "Đã làm: ${hours}g ${minutes}p\nĐủ 8 tiếng lúc: $expectedOut"
                     }
@@ -470,11 +516,6 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             triggerSync()
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    com.example.widget.TimeSnapWidget().updateAll(getApplication())
-                } catch (e: Exception) {}
-            }
         }
     }
     
@@ -1357,7 +1398,15 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun calculateSalarySummary(entries: List<TimeEntry>, config: UserConfig, firstEntryDate: String? = null): SalarySummary {
-        val selectedMonth = currentSelectedMonth.value
+        return calculateSalarySummaryForMonth(currentSelectedMonth.value, entries, config, firstEntryDate)
+    }
+
+    private fun calculateSalarySummaryForMonth(
+        selectedMonth: String,
+        entries: List<TimeEntry>,
+        config: UserConfig,
+        firstEntryDate: String? = null
+    ): SalarySummary {
         var targetYear = 2026
         var targetMonth = 5
         try {
@@ -1559,6 +1608,32 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 val mergedList = notifMap.values.sortedByDescending { it.createdAt }
                 _adminNotifications.value = mergedList
                 saveLocalCachedNotifications(uid, mergedList)
+
+                // Phát sinh thông báo hệ thống nếu có thông báo mới tinh
+                val context = getApplication<Application>()
+                val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+                val lastCheckTime = sharedPrefs.getLong("admin_notif_last_check_${uid}", 0L)
+
+                var newestTimestamp = lastCheckTime
+                var hasNew = false
+                for (notif in mergedList) {
+                    if (notif.createdAt > lastCheckTime) {
+                        val notifId = (notif.createdAt % 1000000).toInt() + 20000
+                        com.example.notification.NotificationHelper.showNotification(
+                            context = context,
+                            title = if (notif.title.isNotBlank()) notif.title else "📢 Thông báo từ Admin",
+                            message = notif.message,
+                            notificationId = notifId
+                        )
+                        if (notif.createdAt > newestTimestamp) {
+                            newestTimestamp = notif.createdAt
+                        }
+                        hasNew = true
+                    }
+                }
+                if (hasNew) {
+                    sharedPrefs.edit().putLong("admin_notif_last_check_${uid}", newestTimestamp).apply()
+                }
             } catch (e: Exception) {
                 android.util.Log.e("TimeSnapViewModel", "Lỗi tải thông báo từ server", e)
             } finally {
@@ -1607,6 +1682,14 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     }
 
 }
+
+// Monthly Salary Point for comparison chart
+data class MonthlySalaryPoint(
+    val monthStr: String,
+    val luongThucNhan: Double,
+    val workingDays: Int,
+    val luongDuKien: Double
+)
 
 // Data wrapper for salary analysis
 data class SalarySummary(

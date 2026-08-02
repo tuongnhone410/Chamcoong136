@@ -284,7 +284,7 @@ fun HomeScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "Hệ thống quản trị lương quốc dân",
+                            text = "Hệ thống quản trị lương toàn diện",
                             color = TextSecondary,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
@@ -671,7 +671,8 @@ fun HomeScreen(
                     ) {
                         // Left: Status Badge & Subtitle
                         Column(
-                            horizontalAlignment = Alignment.Start
+                            horizontalAlignment = Alignment.Start,
+                            modifier = Modifier.weight(1f)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -703,8 +704,10 @@ fun HomeScreen(
                                 color = if (isWorking) AccentOrange else TextSecondary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
-                            )
+                             )
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Right: Big Clock showing HH:mm without seconds
                         Text(
@@ -713,7 +716,8 @@ fun HomeScreen(
                             fontSize = 32.sp,
                             fontWeight = FontWeight.Black,
                             textAlign = TextAlign.End,
-                            letterSpacing = 1.5.sp
+                            letterSpacing = 1.5.sp,
+                            maxLines = 1
                         )
                     }
 
@@ -950,7 +954,7 @@ fun HomeScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(16.dp))
-                            MonthlyActivityChart(data = monthlyData)
+                            MonthlyActivityChart(data = monthlyData, selectedMonth = selectedMonth)
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1360,9 +1364,9 @@ fun HomeScreen(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.NotificationsActive,
+                        imageVector = Icons.Default.AlarmOn,
                         contentDescription = null,
-                        tint = AccentOrange,
+                        tint = PrimaryBlue,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1418,7 +1422,7 @@ fun HomeScreen(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
-                                checkedTrackColor = AccentOrange
+                                checkedTrackColor = PrimaryBlue
                             )
                         )
                     }
@@ -1487,7 +1491,7 @@ fun HomeScreen(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = White,
-                                checkedTrackColor = AccentOrange
+                                checkedTrackColor = PrimaryBlue
                             )
                         )
                     }
@@ -1660,13 +1664,122 @@ fun HomeScreen(
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
                             )
 
-                            Text(
-                                text = "💡 Chu kỳ: 0 = Không đổi ca. Từ 1-5 tuần: Hệ thống tự động đảo ngược giờ vào/ra ca sau mỗi số tuần cấu hình.",
-                                color = LightGray.copy(alpha = 0.7f),
-                                fontSize = 11.sp,
-                                fontStyle = FontStyle.Italic,
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
+                            // Cấu hình Ngày mốc và Ca mốc bắt đầu
+                            var shiftAnchorTime by remember { mutableStateOf(notificationPrefs.getLong("shift_anchor_time", System.currentTimeMillis())) }
+                            var shiftAnchorType by remember { mutableStateOf(notificationPrefs.getString("shift_anchor_type", "DAY") ?: "DAY") }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Ngày mốc bắt đầu:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                val anchorDateStr = SimpleDateFormat("EEEE, dd/MM/yyyy", Locale("vi", "VN")).format(Date(shiftAnchorTime))
+                                OutlinedButton(
+                                    onClick = {
+                                        val curCal = Calendar.getInstance().apply { timeInMillis = shiftAnchorTime }
+                                        android.app.DatePickerDialog(
+                                            context,
+                                            { _, yr, mo, dy ->
+                                                val c = Calendar.getInstance()
+                                                c.set(yr, mo, dy)
+                                                val newTime = c.timeInMillis
+                                                shiftAnchorTime = newTime
+                                                notificationPrefs.edit().putLong("shift_anchor_time", newTime).apply()
+                                                
+                                                userSession?.let { session ->
+                                                    CoroutineScope(Dispatchers.IO).launch {
+                                                        val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                        estimatedInTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(inMs))
+                                                        val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                        val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                        estimatedOutTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(outMs))
+                                                        
+                                                        if (autoClockInOutEnabled) {
+                                                            com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            curCal.get(Calendar.YEAR),
+                                            curCal.get(Calendar.MONTH),
+                                            curCal.get(Calendar.DAY_OF_MONTH)
+                                        ).show()
+                                    },
+                                    modifier = Modifier.height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Text("📅 $anchorDateStr", fontSize = 11.sp, color = White)
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Ca tại ngày mốc:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val isNight = shiftAnchorType == "NIGHT"
+                                    Button(
+                                        onClick = {
+                                            shiftAnchorType = "DAY"
+                                            notificationPrefs.edit().putString("shift_anchor_type", "DAY").apply()
+                                            
+                                            userSession?.let { session ->
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                    estimatedInTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(inMs))
+                                                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                    val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                    estimatedOutTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(outMs))
+                                                    
+                                                    if (autoClockInOutEnabled) {
+                                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (!isNight) PrimaryBlue else MediumGray,
+                                            contentColor = White
+                                        ),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp)
+                                    ) {
+                                        Text("Ca Ngày", fontSize = 11.sp)
+                                    }
+                                    
+                                    Button(
+                                        onClick = {
+                                            shiftAnchorType = "NIGHT"
+                                            notificationPrefs.edit().putString("shift_anchor_type", "NIGHT").apply()
+                                            
+                                            userSession?.let { session ->
+                                                CoroutineScope(Dispatchers.IO).launch {
+                                                    val inMs = com.example.notification.NotificationHelper.estimateHistoricalCheckInTime(context, session.uid)
+                                                    estimatedInTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(inMs))
+                                                    val mockEntry = com.example.data.model.TimeEntry(userId = session.uid, date = "", checkInTime = inMs)
+                                                    val outMs = com.example.notification.NotificationHelper.estimateHistoricalCheckoutTime(context, session.uid, mockEntry)
+                                                    estimatedOutTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(outMs))
+                                                    
+                                                    if (autoClockInOutEnabled) {
+                                                        com.example.notification.NotificationHelper.scheduleAutoCheckIn(context, session.uid, inMs)
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isNight) PrimaryBlue else MediumGray,
+                                            contentColor = White
+                                        ),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp)
+                                    ) {
+                                        Text("Ca Đêm", fontSize = 11.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1680,7 +1793,7 @@ fun HomeScreen(
                         focusManager.clearFocus()
                         showNotificationConfigDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
                     Text("Xong", color = White, fontWeight = FontWeight.Bold)
                 }
@@ -1696,9 +1809,9 @@ fun HomeScreen(
             onDismissRequest = { showReminderDialog = false },
             icon = {
                 Icon(
-                    imageVector = Icons.Default.NotificationsActive,
+                    imageVector = Icons.Default.AlarmOn,
                     contentDescription = null,
-                    tint = AccentOrange,
+                    tint = PrimaryBlue,
                     modifier = Modifier.size(28.dp)
                 )
             },
@@ -2108,7 +2221,7 @@ private fun calculateMonthlyChartData(selectedMonth: String, entries: List<TimeE
 }
 
 @Composable
-fun MonthlyActivityChart(data: List<DayChartPoint>) {
+fun MonthlyActivityChart(data: List<DayChartPoint>, selectedMonth: String = "") {
     val workedPoints = remember(data) {
         data.filter { it.hours > 0.0 }
     }
@@ -2140,9 +2253,34 @@ fun MonthlyActivityChart(data: List<DayChartPoint>) {
             val hoursList = data.map { it.hours }
             val maxHours = (hoursList.maxOrNull() ?: 8.0).coerceAtLeast(1.0)
             
+            val density = androidx.compose.ui.platform.LocalDensity.current
             val scrollState = rememberScrollState()
-            LaunchedEffect(scrollState.maxValue) {
-                scrollState.scrollTo(scrollState.maxValue)
+            
+            val lastActiveIndex = remember(data, selectedMonth) {
+                val idx = data.indexOfLast { it.hours > 0.0 }
+                if (idx == -1) {
+                    val todayCal = Calendar.getInstance()
+                    val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
+                    val todayMonthStr = String.format(Locale.US, "%04d-%02d", todayCal.get(Calendar.YEAR), todayCal.get(Calendar.MONTH) + 1)
+                    if (selectedMonth == todayMonthStr || selectedMonth.isEmpty()) {
+                        (todayDay - 1).coerceIn(0, data.lastIndex)
+                    } else {
+                        data.lastIndex
+                    }
+                } else {
+                    idx
+                }
+            }
+
+            LaunchedEffect(scrollState.maxValue, lastActiveIndex) {
+                if (scrollState.maxValue > 0) {
+                    val itemWidthPx = with(density) { 32.dp.toPx() }
+                    val spacingPx = with(density) { 12.dp.toPx() }
+                    val stepPx = itemWidthPx + spacingPx
+                    val firstVisibleIndex = (lastActiveIndex - 6).coerceAtLeast(0)
+                    val targetScroll = (firstVisibleIndex * stepPx).toInt().coerceIn(0, scrollState.maxValue)
+                    scrollState.scrollTo(targetScroll)
+                }
             }
 
             Row(

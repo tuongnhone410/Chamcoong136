@@ -1,6 +1,15 @@
 
 package com.example.ui.screens
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import com.example.viewmodel.MonthlySalaryPoint
 
 import android.content.ContentValues
 import android.content.Context
@@ -77,6 +86,7 @@ fun PayslipScreen(
     val summary by viewModel.salarySummaryState.collectAsStateWithLifecycle()
     val config by viewModel.userConfig.collectAsStateWithLifecycle()
     val entries by viewModel.monthTimeEntries.collectAsStateWithLifecycle(emptyList())
+    val salaryHistoryList by viewModel.salaryHistoryState.collectAsStateWithLifecycle()
 
     var customOt15DaysCount by remember { mutableStateOf(0.0) }
     var selectedOt15Shift by remember { mutableStateOf("Ngày") }
@@ -155,6 +165,13 @@ fun PayslipScreen(
                     Icon(Icons.Default.ArrowForwardIos, "Tháng sau", tint = NeonBlue)
                 }
             }
+
+            // Monthly Income Trend Comparison Chart
+            MonthlyIncomeTrendChart(
+                historyList = salaryHistoryList,
+                selectedMonth = selectedMonth,
+                onMonthSelected = { viewModel.selectMonth(it) }
+            )
             
             if (summary == null || config == null) {
                 // Empty state setup
@@ -478,13 +495,21 @@ fun PayslipScreen(
                 }
 
                 // ELEGANT THERMAL PAPER DARK INVOICE CARD STYLE
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkContainer),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                ) {
+                AnimatedContent(
+                    targetState = selectedMonth,
+                    transitionSpec = {
+                        (slideInHorizontally { width -> width } + fadeIn(animationSpec = tween(300)))
+                            .togetherWith(slideOutHorizontally { width -> -width } + fadeOut(animationSpec = tween(300)))
+                    },
+                    label = "PayslipCardTransition"
+                ) { targetMonth ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp)
+                    ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1004,6 +1029,7 @@ fun PayslipScreen(
                         }
                     }
                 }
+                } // End of AnimatedContent
 
                 // JSON structure removed per user request
 
@@ -1047,7 +1073,51 @@ fun PayslipScreen(
                     Icon(imageVector = Icons.Default.Download, contentDescription = "Export")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "XUẤT PHIẾU LƯƠNG",
+                        text = "XUẤT PHIẾU LƯƠNG (ẢNH PNG)",
+                        color = White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // EXPORT DETAILED PDF AND SHARE (ZALO, GMAIL, MESSENGER, ETC)
+                Button(
+                    onClick = {
+                        com.example.util.ExportUtils.sharePayslipAndAttendanceAsPdf(
+                            context = context,
+                            entries = entries,
+                            summary = s,
+                            config = c,
+                            userSession = userSession,
+                            monthLabel = monthLabel,
+                            selectedMonth = selectedMonth,
+                            selectedTab = selectedTab,
+                            includeSundayInProjection = includeSundayInProjection,
+                            remainingWeekdays = remainingWeekdays,
+                            remainingSundays = remainingSundays,
+                            dailySalary = dailySalary,
+                            luongDuKienVal = luongDuKienVal,
+                            soNgayCongDuKien = soNgayCongDuKien,
+                            customOt15DaysCount = customOt15DaysCount,
+                            customOt15Pay = customOt15Pay,
+                            selectedOt15Shift = selectedOt15Shift,
+                            customNightAllowance = customNightAllowance,
+                            hasLoggedUnpaidOrAbsent = hasLoggedUnpaidOrAbsent
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("export_pdf_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
+                ) {
+                    Icon(imageVector = Icons.Default.Share, contentDescription = "Share PDF")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "XUẤT PDF",
                         color = White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -1492,5 +1562,177 @@ fun savePayslipAsPngImage(
         e.printStackTrace()
     }
     return false
+}
+
+@Composable
+fun MonthlyIncomeTrendChart(
+    historyList: List<MonthlySalaryPoint>,
+    selectedMonth: String,
+    onMonthSelected: (String) -> Unit
+) {
+    if (historyList.isEmpty()) return
+
+    val fmt = remember { DecimalFormat("#,###") }
+    
+    // Average salary calculation
+    val averageSalary = remember(historyList) {
+        if (historyList.isNotEmpty()) historyList.map { it.luongThucNhan }.average() else 0.0
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = DarkContainer),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Title & Trend Info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "SO SÁNH THU NHẬP THỰC TẾ",
+                        color = NeonBlue,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Xu hướng thu nhập 6 tháng gần nhất",
+                        color = LightGray,
+                        fontSize = 11.sp
+                    )
+                }
+                
+                // Average Indicator tag
+                Box(
+                    modifier = Modifier
+                        .background(AccentGreen.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                        .border(1.dp, AccentGreen.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Lương TB",
+                            color = AccentGreen,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${fmt.format(averageSalary)}đ",
+                            color = White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Chart area
+            val maxIncome = remember(historyList) {
+                (historyList.maxOfOrNull { it.luongThucNhan } ?: 10000000.0).coerceAtLeast(1000000.0)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                historyList.forEach { pt ->
+                    val isSelected = pt.monthStr == selectedMonth
+                    
+                    // Simple parser for month label format "yyyy-MM" -> "Thg M" or "MM/yy"
+                    val label = remember(pt.monthStr) {
+                        try {
+                            val parts = pt.monthStr.split("-")
+                            "T${parts[1]}"
+                        } catch (e: Exception) {
+                            pt.monthStr
+                        }
+                    }
+
+                    // Height factor calculation
+                    val heightFraction = (pt.luongThucNhan / maxIncome).coerceIn(0.08, 1.0).toFloat()
+                    
+                    // Smooth visual state transition for selected bar
+                    val barAlpha by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0.45f,
+                        animationSpec = tween(durationMillis = 300)
+                    )
+                    val scaleFactor by animateFloatAsState(
+                        targetValue = if (isSelected) 1.05f else 1.0f,
+                        animationSpec = tween(durationMillis = 300)
+                    )
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onMonthSelected(pt.monthStr) }
+                            .padding(horizontal = 2.dp)
+                    ) {
+                        // Income text above bar
+                        Text(
+                            text = if (pt.luongThucNhan >= 1000000) {
+                                String.format(Locale.US, "%.1fM", pt.luongThucNhan / 1000000.0)
+                            } else {
+                                fmt.format(pt.luongThucNhan)
+                            },
+                            color = if (isSelected) NeonBlue else LightGray.copy(alpha = barAlpha),
+                            fontSize = 9.sp,
+                            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+
+                        // Visual bar with premium gradients & shapes
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp * heightFraction)
+                                .scale(scaleX = 1f, scaleY = scaleFactor)
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = if (isSelected) {
+                                            listOf(NeonBlue, NeonBlue.copy(alpha = 0.4f))
+                                        } else {
+                                            listOf(Color.Gray.copy(alpha = barAlpha), Color.Gray.copy(alpha = 0.2f * barAlpha))
+                                        }
+                                    ),
+                                    shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
+                                )
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 0.dp,
+                                    color = if (isSelected) White.copy(alpha = 0.8f) else Color.Transparent,
+                                    shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
+                                )
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Month label
+                        Text(
+                            text = label,
+                            color = if (isSelected) NeonBlue else LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
