@@ -377,7 +377,7 @@ object ExportUtils {
         val pcDocHaiShowPNG = if (selectedTab == 1) calcPrPNG("pcDocHai", config.pcDocHai) else summary.pcDocHaiVal
         val pcDtDoanhThuShowPNG = if (selectedTab == 1) calcPrPNG("pcDtDoanhThu", config.pcDtDoanhThu) else summary.pcDtDoanhThuVal
         val pcXangXeShowPNG = if (selectedTab == 1) calcPrPNG("pcXangXe", config.pcXangXe) else summary.pcXangXeVal
-        val pcKhacShowPNG = if (selectedTab == 1) calcPrPNG("pcKhac", config.pcKhac) else summary.pcKhacVal
+        val pcKhacShowPNG = if (selectedTab == 1) calcPrPNG("pcCaDem", config.pcCaDem) else summary.pcCaDemVal
         val pcKhac1ShowPNG = if (selectedTab == 1) calcPrPNG("pcKhac1", config.pcKhac1) else summary.pcKhac1Val
         val pcThamNienShowPNG = if (selectedTab == 1) calcPrPNG("pcThamNien", config.pcThamNien) else summary.pcThamNienVal
 
@@ -625,7 +625,7 @@ object ExportUtils {
         val pcDocHaiShow = if (selectedTab == 1) calcPrPDF("pcDocHai", config.pcDocHai) else summary.pcDocHaiVal
         val pcDtDoanhThuShow = if (selectedTab == 1) calcPrPDF("pcDtDoanhThu", config.pcDtDoanhThu) else summary.pcDtDoanhThuVal
         val pcXangXeShow = if (selectedTab == 1) calcPrPDF("pcXangXe", config.pcXangXe) else summary.pcXangXeVal
-        val pcKhacShow = if (selectedTab == 1) calcPrPDF("pcKhac", config.pcKhac) else summary.pcKhacVal
+        val pcKhacShow = if (selectedTab == 1) calcPrPDF("pcCaDem", config.pcCaDem) else summary.pcCaDemVal
         val pcKhac1Show = if (selectedTab == 1) calcPrPDF("pcKhac1", config.pcKhac1) else summary.pcKhac1Val
         val pcThamNienShow = if (selectedTab == 1) calcPrPDF("pcThamNien", config.pcThamNien) else summary.pcThamNienVal
 
@@ -724,7 +724,7 @@ object ExportUtils {
         val totalOtHrsVal = "${df.format(summary.otDayHours + summary.chuNhatHours + summary.otLeHours + summary.otNightHours)} giờ"
         canvas1.drawText(totalOtHrsVal, 440f, currentY, paintValNormal)
 
-        currentY = 245f
+        currentY += 26f
         canvas1.drawText("II. CHI TIẾT THU NHẬP VÀ KHẤU TRỪ (+ / -)", 40f, currentY, paintSectionHeader)
         currentY += 8f
         canvas1.drawLine(40f, currentY, 555f, currentY, paintBorder)
@@ -821,21 +821,9 @@ object ExportUtils {
         canvas1.drawText(totalLabelText, 55f, currentY + 31f, Paint().apply { color = navyColor; textSize = 11f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) })
         canvas1.drawText("${fmt.format(totalValue)} VNĐ", 540f, currentY + 31f, Paint().apply { color = greenColor; textSize = 15f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.RIGHT })
 
-        currentY = 675f
+        currentY = Math.max(675f, currentY + 70f)
         val signHeaderPaint = Paint().apply { color = navyColor; textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.CENTER }
         val signSubPaint = Paint().apply { color = grayLabelColor; textSize = 7.5f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL); textAlign = Paint.Align.CENTER }
-
-        // Col 1: Người lập biểu (X = 100f)
-        canvas1.drawText("Người lập biểu", 100f, currentY, signHeaderPaint)
-        canvas1.drawText("(Ký, ghi rõ họ tên)", 100f, currentY + 14f, signSubPaint)
-
-        // Col 2: Kế toán trưởng (X = 230f)
-        canvas1.drawText("Kế toán trưởng", 230f, currentY, signHeaderPaint)
-        canvas1.drawText("(Ký, đóng dấu)", 230f, currentY + 14f, signSubPaint)
-
-        // Col 3: Giám đốc (X = 360f)
-        canvas1.drawText("Giám đốc", 360f, currentY, signHeaderPaint)
-        canvas1.drawText("(Ký, đóng dấu)", 360f, currentY + 14f, signSubPaint)
 
         // Col 4: Chữ ký người nhận (X = 495f)
         canvas1.drawText("Chữ ký người nhận", 495f, currentY, signHeaderPaint)
@@ -993,7 +981,13 @@ fun AttendanceRecord.toTimeEntry(): TimeEntry {
         date = com.example.data.SalaryCalculator.normalizeDateToDmy(this.dateString),
         checkInTime = this.clockInTime,
         checkOutTime = rawOut,
-        dayType = if (this.status.isBlank()) "NORMAL" else this.status,
+        dayType = if (this.clockInTime > 0 && this.clockOutTime != null && this.clockOutTime > 0) {
+            "NORMAL"
+        } else if (this.status.isBlank()) {
+            "NORMAL"
+        } else {
+            this.status
+        },
         isWorking = this.clockOutTime == null && this.clockInTime > 0, // Simplified guess
         note = this.notes
     )

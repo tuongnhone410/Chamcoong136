@@ -100,8 +100,15 @@ class ReminderWorker(
                         }
                     }
 
-                    // 2. Kiểm tra nếu nhân viên ĐÃ check-in từ trước thì không gửi nhắc nhở nữa
+                    // 2. Kiểm tra nếu nhân viên ĐÃ check-in từ trước hoặc đang có ca làm việc hoạt động (ví dụ ca đêm qua ngày mới) thì không gửi nhắc nhở nữa
                     val database = AppDatabase.getInstance(context)
+                    val activeEntry = database.timeEntryDao().getActiveEntry(uid)
+                    if (activeEntry != null && activeEntry.isWorking) {
+                        android.util.Log.d("ReminderWorker", "Nhân viên đang trong ca (hoặc ca đêm qua chưa ra ca), không cần nhắc nhở vào ca.")
+                        NotificationHelper.scheduleNextCheckInReminder(context, uid)
+                        return Result.success()
+                    }
+
                     val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                     val existingEntry = database.timeEntryDao().getEntryByDate(uid, todayStr)
                     if (existingEntry != null && existingEntry.checkInTime != null) {

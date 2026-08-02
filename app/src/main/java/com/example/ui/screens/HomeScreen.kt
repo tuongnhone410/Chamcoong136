@@ -2044,7 +2044,8 @@ fun StatCard(
 data class DayChartPoint(
     val label: String,
     val hours: Double,
-    val dateStr: String
+    val dateStr: String,
+    val isNightShift: Boolean = false
 )
 
 @Composable
@@ -2106,7 +2107,7 @@ fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
 
                     if (barHeight > 2f) {
                         drawRoundRect(
-                            color = if (pt.hours > 8.0) AccentGreen else barColor,
+                            color = if (pt.isNightShift) NightPurple else if (pt.hours > 8.0) AccentGreen else barColor,
                             topLeft = Offset(xLeft, yTop),
                             size = Size(barMaxWidth, barHeight),
                             cornerRadius = CornerRadius(8f, 8f)
@@ -2129,7 +2130,13 @@ fun TimeSnap7DayBarChart(data: List<DayChartPoint>) {
                         if (pt.hours > 0.0) {
                             val hrsText = if (pt.hours % 1.0 == 0.0) "${pt.hours.toInt()}h" else "${DecimalFormat("#.#").format(pt.hours)}h"
                             val valPaint = android.text.TextPaint().apply {
-                                color = if (pt.hours > 8.0) android.graphics.Color.parseColor("#27AE60") else android.graphics.Color.parseColor("#2F80ED")
+                                color = if (pt.isNightShift) {
+                                    android.graphics.Color.parseColor("#BB6BD9") // Purple
+                                } else if (pt.hours > 8.0) {
+                                    android.graphics.Color.parseColor("#27AE60")
+                                } else {
+                                    android.graphics.Color.parseColor("#2F80ED")
+                                }
                                 textSize = 20f
                                 textAlign = android.graphics.Paint.Align.CENTER
                                 isFakeBoldText = true
@@ -2179,7 +2186,11 @@ private fun calculateRecent7Days(entries: List<TimeEntry>): List<DayChartPoint> 
         } else {
             0.0
         }
-        DayChartPoint(label, hours, dateStr)
+        val isNight = if (entity != null) {
+            entity.shiftType == "NIGHT" || entity.dayType == "NIGHT" || 
+            (entity.checkInTime != null && com.example.data.SalaryCalculator.isNightShift(entity.checkInTime, entity.checkOutTime))
+        } else false
+        DayChartPoint(label, hours, dateStr, isNight)
     }
 }
 
@@ -2215,7 +2226,11 @@ private fun calculateMonthlyChartData(selectedMonth: String, entries: List<TimeE
         } else {
             0.0
         }
-        list.add(DayChartPoint(day.toString(), hours, if (entity != null) entity.date else dateStr1))
+        val isNight = if (entity != null) {
+            entity.shiftType == "NIGHT" || entity.dayType == "NIGHT" || 
+            (entity.checkInTime != null && com.example.data.SalaryCalculator.isNightShift(entity.checkInTime, entity.checkOutTime))
+        } else false
+        list.add(DayChartPoint(day.toString(), hours, if (entity != null) entity.date else dateStr1, isNight))
     }
     return list
 }
@@ -2318,7 +2333,9 @@ fun MonthlyActivityChart(data: List<DayChartPoint>, selectedMonth: String = "") 
                                 .fillMaxHeight(barHeightFraction)
                                 .background(
                                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                        colors = if (hrs > 8.0) {
+                                        colors = if (pt.isNightShift) {
+                                            listOf(NightPurple, NightPurple.copy(alpha = 0.2f))
+                                        } else if (hrs > 8.0) {
                                             listOf(AccentGreen, AccentGreen.copy(alpha = 0.2f))
                                         } else {
                                             listOf(NeonBlue, NeonBlue.copy(alpha = 0.2f))

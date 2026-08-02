@@ -407,7 +407,7 @@ fun PayslipScreen(
                 val pcDocHaiShow = if (selectedTab == 1) calcPr("pcDocHai", c.pcDocHai) else s.pcDocHaiVal
                 val pcDtDoanhThuShow = if (selectedTab == 1) calcPr("pcDtDoanhThu", c.pcDtDoanhThu) else s.pcDtDoanhThuVal
                 val pcXangXeShow = if (selectedTab == 1) calcPr("pcXangXe", c.pcXangXe) else s.pcXangXeVal
-                val pcKhacShow = if (selectedTab == 1) calcPr("pcKhac", c.pcKhac) else s.pcKhacVal
+                val pcKhacShow = if (selectedTab == 1) calcPr("pcCaDem", c.pcCaDem) else s.pcCaDemVal
                 val pcKhac1Show = if (selectedTab == 1) calcPr("pcKhac1", c.pcKhac1) else s.pcKhac1Val
                 val pcThamNienShow = if (selectedTab == 1) calcPr("pcThamNien", c.pcThamNien) else s.pcThamNienVal
 
@@ -436,7 +436,7 @@ fun PayslipScreen(
                 val totalOtHours = customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0)
                 val customOt15Pay = totalOtHours * hourlySalary * c.heSoOtNgayThuong
                 val customNightAllowance = if (selectedOt15Shift == "Đêm") {
-                    customOt15DaysCount * c.pcKhac
+                    customOt15DaysCount * c.pcCaDem
                 } else 0.0
                 val luongDuKienVal = s.luongThucNhan + baseSalaryAdjustment + additionalSundaysPay + allowanceAdjustment + customOt15Pay + customNightAllowance
 
@@ -1254,7 +1254,7 @@ fun savePayslipAsPngImage(
     val pcDocHaiShowPNG = if (selectedTab == 1) config.pcDocHai else summary.pcDocHaiVal
     val pcDtDoanhThuShowPNG = if (selectedTab == 1) config.pcDtDoanhThu else summary.pcDtDoanhThuVal
     val pcXangXeShowPNG = if (selectedTab == 1) config.pcXangXe else summary.pcXangXeVal
-    val pcKhacShowPNG = if (selectedTab == 1) config.pcKhac else summary.pcKhacVal
+    val pcKhacShowPNG = if (selectedTab == 1) config.pcCaDem else summary.pcCaDemVal
     val pcKhac1ShowPNG = if (selectedTab == 1) config.pcKhac1 else summary.pcKhac1Val
     val pcThamNienShowPNG = if (selectedTab == 1) config.pcThamNien else summary.pcThamNienVal
 
@@ -1287,7 +1287,7 @@ fun savePayslipAsPngImage(
     if (config.pcDocHai > 0.0) estimatedHeight += 45
     if (config.pcDtDoanhThu > 0.0) estimatedHeight += 45
     if (config.pcXangXe > 0.0) estimatedHeight += 45
-    if (config.pcKhac > 0.0) estimatedHeight += 45
+    if (config.pcCaDem > 0.0) estimatedHeight += 45
     if (config.pcKhac1 > 0.0) estimatedHeight += 45
     if (config.pcThamNien > 0.0) estimatedHeight += 45
     if (pcChuyenCanShowPNG > 0.0) estimatedHeight += 45

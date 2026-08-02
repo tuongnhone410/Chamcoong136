@@ -36,7 +36,7 @@ data class UserConfig(
     val pcXangXe: Double = 0.0,
     val pcThamNien: Double = 0.0, // Thâm niên
     val pcKhac1: Double = 0.0,
-    val pcKhac: Double = 0.0,
+    val pcCaDem: Double = 0.0,
     val allowanceCalcTypes: String = "", // Stores calc type overrides as "field1:type1;field2:type2..."
     val soGioNghiGiaiLao: Double = 1.5, // Break hours (unpaid hours) per shift
     val tinhKhauTruNghi: Boolean = false, // Enable break time deduction from hours worked
@@ -89,7 +89,7 @@ data class UserConfig(
             return when (field) {
                 "pcComCa" -> "PER_WORK_DAY"
                 "pcComOt" -> "OT_MEAL_GE_1H"
-                "pcKhac" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
+                "pcCaDem" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
                 "pcThamNien" -> "MONTHLY_FLAT"
                 "tienChuyenCanGoc" -> "MONTHLY_PRO_RATED"
                 else -> "MONTHLY_PRO_RATED"

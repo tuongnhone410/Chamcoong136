@@ -153,10 +153,14 @@ object SalaryCalculator {
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
     fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
-        if (isLeaveType(entry.dayType)) {
-            val upper = entry.dayType.uppercase(Locale.ROOT)
+        val hasTimes = entry.checkInTime != null && entry.checkOutTime != null
+        val finalDayType = if (hasTimes && isLeaveType(entry.dayType)) "NORMAL" else entry.dayType
+        val workingEntry = entry.copy(dayType = finalDayType)
+
+        if (isLeaveType(finalDayType)) {
+            val upper = finalDayType.uppercase(Locale.ROOT)
             val workD = if (upper.contains("PAID") || upper == "NP" || upper.contains("PHEP") || upper.contains("PHÉP") || upper.contains("HOLIDAY") || upper.contains("LỄ") || upper.contains("LE")) 1.0 else 0.0
-            return entry.copy(
+            return workingEntry.copy(
                 workDay = workD,
                 otHours = 0.0,
                 lateMinutes = 0,
@@ -168,14 +172,14 @@ object SalaryCalculator {
             )
         }
 
-        val rawInRaw = entry.checkInTime ?: return entry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
+        val rawInRaw = workingEntry.checkInTime ?: return workingEntry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
         // Round to nearest minute to avoid sub-minute floating point variance across different days
         val rawIn = Math.round(rawInRaw / 60000.0) * 60000L
-        val rawOutRaw = entry.checkOutTime
+        val rawOutRaw = workingEntry.checkOutTime
         val rawOut = rawOutRaw?.let { Math.round(it / 60000.0) * 60000L }
 
         // 1. Load Shift configuration
-        val shift = getShiftForEntry(entry)
+        val shift = getShiftForEntry(workingEntry)
 
         // 2. Normalization
         val stdInMs = getMillisForTime(rawIn, shift.startTime, 0)
@@ -229,9 +233,9 @@ object SalaryCalculator {
             0
         }
 
-        val resolvedBreakDeduction = entry.customBreakDeduction ?: config?.tinhKhauTruNghi ?: (shift.breakHours > 0.0)
+        val resolvedBreakDeduction = workingEntry.customBreakDeduction ?: config?.tinhKhauTruNghi ?: (shift.breakHours > 0.0)
         val breakHrsToUse = if (resolvedBreakDeduction) {
-            entry.customBreakHours ?: config?.soGioNghiGiaiLao ?: shift.breakHours
+            workingEntry.customBreakHours ?: config?.soGioNghiGiaiLao ?: shift.breakHours
         } else {
             0.0
         }
@@ -264,7 +268,7 @@ object SalaryCalculator {
             0.0
         }
 
-        return entry.copy(
+        return workingEntry.copy(
             shiftId = shift.shiftId,
             shiftType = shift.shiftType,
             rawCheckIn = rawIn,
@@ -482,9 +486,8 @@ object SalaryCalculator {
         val pcThamNienPr = calculateAllowanceValue("pcThamNien", config.pcThamNien, config.getCalcTypeFor("pcThamNien"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
         val pcKhac1Pr = calculateAllowanceValue("pcKhac1", config.pcKhac1, config.getCalcTypeFor("pcKhac1"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
         
-        // pcKhac is Phụ cấp ca đêm (mỗi ca)
-        val pcKhacPr = calculateAllowanceValue("pcKhac", config.pcKhac, config.getCalcTypeFor("pcKhac"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
-        val pcCaDemPr = pcKhacPr
+        // pcCaDem is Phụ cấp ca đêm (mỗi ca)
+        val pcCaDemPr = calculateAllowanceValue("pcCaDem", config.pcCaDem, config.getCalcTypeFor("pcCaDem"), totalWorkDays, comCaCount, comOtCount, nightShiftsCount, scheduledDaysSoFar, totalScheduledDaysInMonth)
 
         val phuCapTong = pcKyThuatPr + pcTrachNhiemPr + pcChucVuPr + pcHieuSuatPr + 
                 pcSanPhamPr + pcComCaPr + pcComOtPr + pcNhaOPr + 
@@ -566,7 +569,7 @@ object SalaryCalculator {
             pcXangXeVal = pcXangXePr,
             pcThamNienVal = pcThamNienPr,
             pcKhac1Val = pcKhac1Pr,
-            pcKhacVal = pcKhacPr,
+            pcKhacVal = pcCaDemPr,
             pcCaDemVal = pcCaDemPr,
             caDemCount = nightShiftsCount,
             

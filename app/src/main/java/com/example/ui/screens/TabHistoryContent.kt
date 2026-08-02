@@ -172,13 +172,14 @@ fun TabHistoryContent(
                             when {
                                 isSelected -> Color(0xFF3A86FF).copy(alpha = 0.5f)
                                     record != null -> {
+                                        val hasTimes = record.clockInTime > 0 && record.clockOutTime != null && record.clockOutTime > 0
                                         val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
                                         val isHoliday = com.example.data.SalaryCalculator.isHoliday(record.dateString)
                                         val stUpper = record.status.uppercase(Locale.ROOT)
-                                        val isPaidLeave = stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP"
-                                        val isUnpaidLeave = stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID"
-                                        val isUnauthorizedLeave = stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP")
-                                        val isHolidayLeave = stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE"
+                                        val isPaidLeave = !hasTimes && (stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP")
+                                        val isUnpaidLeave = !hasTimes && (stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID")
+                                        val isUnauthorizedLeave = !hasTimes && (stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP"))
+                                        val isHolidayLeave = !hasTimes && (stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE")
                                         
                                         when {
                                             isPaidLeave || stUpper.contains("PAID") || stUpper.contains("PHÉP") -> Color(0xFFF2C94C).copy(alpha = 0.2f)
@@ -555,13 +556,17 @@ fun SingleDayEntryDialog(
                                     coutMillis = cout.timeInMillis
                                 }
 
-                                val finalStatus = when (selectedStatus) {
-                                    "PaidLeave", "PAID_LEAVE" -> "PAID_LEAVE"
-                                    "UnpaidLeave", "UNPAID_LEAVE" -> "UNPAID_LEAVE"
-                                    "UNAUTHORIZED_LEAVE", "KP" -> "UNAUTHORIZED_LEAVE"
-                                    "PaidHolidayLeave", "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE"
-                                    else -> {
-                                        if (coutMillis == null) "Active" else "Completed"
+                                val finalStatus = if (coutHour != null && coutMin != null) {
+                                    "Completed"
+                                } else {
+                                    when (selectedStatus) {
+                                        "PaidLeave", "PAID_LEAVE" -> "PAID_LEAVE"
+                                        "UnpaidLeave", "UNPAID_LEAVE" -> "UNPAID_LEAVE"
+                                        "UNAUTHORIZED_LEAVE", "KP" -> "UNAUTHORIZED_LEAVE"
+                                        "PaidHolidayLeave", "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE"
+                                        else -> {
+                                            if (coutMillis == null) "Active" else "Completed"
+                                        }
                                     }
                                 }
 

@@ -657,6 +657,32 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
+            val remoteDates = mergedRemoteRecords.map {
+                com.example.data.SalaryCalculator.normalizeDateToDmy(it.dateString)
+            }.filter { it.isNotBlank() }.toSet()
+
+            // Find local entries that have no corresponding record in Firestore (meaning deleted by Admin)
+            val toDeleteLocally = currentEntries.filter { entry ->
+                val normDate = com.example.data.SalaryCalculator.normalizeDateToDmy(entry.date)
+                normDate.isNotBlank() && !remoteDates.contains(normDate)
+            }
+
+            for (entryToDelete in toDeleteLocally) {
+                android.util.Log.d("TimeSnapViewModel", "Local entry for ${entryToDelete.date} was deleted on Firestore. Deleting locally.")
+                repository.delete(entryToDelete)
+                
+                val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                val todayDmy = com.example.data.SalaryCalculator.normalizeDateToDmy(todayStr)
+                val entryNormDate = com.example.data.SalaryCalculator.normalizeDateToDmy(entryToDelete.date)
+                
+                if (entryNormDate == todayDmy) {
+                    android.util.Log.d("TimeSnapViewModel", "Cancelling automated processes for today because today's entry was deleted.")
+                    com.example.notification.NotificationHelper.cancelAutoCheckIn(getApplication(), userId)
+                    com.example.notification.NotificationHelper.cancelAutoCheckOut(getApplication(), userId)
+                }
+            }
+            currentEntries.removeAll(toDeleteLocally)
+
             for (log in mergedRemoteRecords) {
                 val formattedDate = log.dateString
 

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -125,26 +126,6 @@ fun NotificationCenterScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.fetchAdminNotifications() },
-                        enabled = !isLoading,
-                        modifier = Modifier.testTag("btn_refresh_notif")
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = PrimaryBlue,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Tải lại",
-                                tint = PrimaryBlue
-                            )
-                        }
-                    }
-
                     if (unreadCount > 0) {
                         IconButton(
                             onClick = {
@@ -169,12 +150,17 @@ fun NotificationCenterScreen(
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
-        Column(
+        PullToRefreshBox(
+            isRefreshing = isLoading,
+            onRefresh = { viewModel.fetchAdminNotifications() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             Spacer(modifier = Modifier.height(12.dp))
 
             // Search bar
@@ -313,6 +299,7 @@ fun NotificationCenterScreen(
                 }
             }
         }
+    }
     }
 
     // Notification Detail Dialog

@@ -265,7 +265,7 @@ object FirestoreService {
             }?.sortedByDescending { it.clockInTime } ?: emptyList()
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching attendance logs for $uid: ${e.message}")
-            emptyList()
+            throw e
         }
     }
 
@@ -742,6 +742,25 @@ object FirestoreService {
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi lưu thông báo cho nhân viên: ${e.message}")
             }
+        } else if (notif.targetUid == "ALL") {
+            // Nếu gửi cho tất cả nhân viên -> Lưu vào subcollection của từng nhân viên để chắc chắn họ nhận được (do quy định bảo mật Firestore chặn đọc root)
+            try {
+                val allUsers = getAllUserConfigs()
+                allUsers.forEach { user ->
+                    if (user.userId.isNotBlank() && !isDemoUser(user.userId)) {
+                        try {
+                            firestore.collection("users").document(user.userId)
+                                .collection("notifications").document(notifId)
+                                .set(map)
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Lỗi lưu thông báo cho nhân viên ${user.userId}: ${ex.message}")
+                        }
+                    }
+                }
+                anySuccess = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi phân phối thông báo cho tất cả nhân viên: ${e.message}")
+            }
         }
 
         // 3. Đường dẫn dự phòng 3: app_config/admin_notifications/items/{notifId}
@@ -906,7 +925,8 @@ object FirestoreService {
             "pcXangXe" to config.pcXangXe,
             "pcThamNien" to config.pcThamNien,
             "pcKhac1" to config.pcKhac1,
-            "pcKhac" to config.pcKhac,
+            "pcKhac" to config.pcCaDem,
+            "pcCaDem" to config.pcCaDem,
             "allowanceCalcTypes" to config.allowanceCalcTypes,
             "soGioNghiGiaiLao" to config.soGioNghiGiaiLao,
             "tinhKhauTruNghi" to config.tinhKhauTruNghi,
@@ -1010,7 +1030,7 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
     val pcXangXeVal = getDouble("pcXangXe") ?: getDouble("phu_cap_xang_xe") ?: 0.0
     val pcThamNienVal = getDouble("pcThamNien") ?: getDouble("phu_cap_tham_nien") ?: 0.0
     val pcKhac1Val = getDouble("pcKhac1") ?: 0.0
-    val pcKhacVal = getDouble("pcKhac") ?: getDouble("phu_cap_khac") ?: 0.0
+    val pcCaDemVal = getDouble("pcCaDem") ?: getDouble("pcKhac") ?: getDouble("phu_cap_khac") ?: 0.0
 
     return com.example.data.model.UserConfig(
         userId = userId,
@@ -1039,7 +1059,7 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         pcXangXe = pcXangXeVal,
         pcThamNien = pcThamNienVal,
         pcKhac1 = pcKhac1Val,
-        pcKhac = pcKhacVal,
+        pcCaDem = pcCaDemVal,
         allowanceCalcTypes = getString("allowanceCalcTypes") ?: "",
         soGioNghiGiaiLao = getDouble("soGioNghiGiaiLao") ?: 1.5,
         tinhKhauTruNghi = getBoolean("tinhKhauTruNghi") ?: false,
@@ -1111,7 +1131,7 @@ fun DocumentSnapshot.toUserConfig(uid: String): UserConfig {
         phu_cap_doc_hai = getDouble("phu_cap_doc_hai") ?: getDouble("pcDocHai") ?: 0.0,
         phu_cap_dien_thoai = getDouble("phu_cap_dien_thoai") ?: getDouble("pcDtDoanhThu") ?: 0.0,
         phu_cap_xang_xe = getDouble("phu_cap_xang_xe") ?: getDouble("pcXangXe") ?: 0.0,
-        phu_cap_khac = getDouble("phu_cap_khac") ?: getDouble("pcKhac") ?: 0.0,
+        phu_cap_khac = getDouble("phu_cap_khac") ?: getDouble("pcCaDem") ?: getDouble("pcKhac") ?: 0.0,
         
         phu_cap = getDouble("phu_cap") ?: 500000.0,
         thuong = getDouble("thuong") ?: 0.0,

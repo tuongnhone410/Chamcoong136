@@ -921,12 +921,14 @@ fun EmployeeDetailView(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Bottom Shift Status Bar
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(9.dp)
@@ -942,7 +944,10 @@ fun EmployeeDetailView(
                     }
 
                     if (todayRec == null || todayRec.clockInTime == 0L) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Button(
                                 onClick = {
                                     val now = System.currentTimeMillis()
@@ -955,12 +960,12 @@ fun EmployeeDetailView(
                                         )
                                     )
                                 },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.weight(1f).height(32.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                             ) {
-                                Text("Vào ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Vào ca", color = White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Button(
@@ -982,12 +987,12 @@ fun EmployeeDetailView(
                                         adminViewModel.saveEmployeeConfig(employee.copy(phepNamConLai = (employee.phepNamConLai - 1).coerceAtLeast(0)))
                                     }
                                 },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.weight(1f).height(32.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF2C94C))
                             ) {
-                                Text("Nghỉ phép", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Nghỉ phép", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Button(
@@ -1006,28 +1011,29 @@ fun EmployeeDetailView(
                                         )
                                     )
                                 },
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.weight(1f).height(32.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEB5757))
                             ) {
-                                Text("Không phép", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Không phép", color = White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else if (todayRec.clockOutTime == null || todayRec.clockOutTime == 0L) {
-                        Button(
-                            onClick = {
-                                val now = System.currentTimeMillis()
-                                adminViewModel.saveAttendanceRecord(
-                                    todayRec.copy(clockOutTime = now)
-                                )
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                        // Admin muốn ra ca thì xoá ngày công này và thêm giờ vào, giờ ra thủ công, chứ không được sửa giờ ra trực tiếp
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF312E81).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFF4338CA), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Text("Ra ca", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "💡 Nhân viên đang trong ca làm việc. Để ra ca, vui lòng xóa ngày công này và bấm Thêm công mới.",
+                                color = Color(0xFFC7D2FE),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
@@ -2269,7 +2275,7 @@ fun EmployeeConfigEdit(
     var pcXangXe by remember { mutableStateOf(formatCurrency(employee.pcXangXe)) }
     var pcThamNien by remember { mutableStateOf(formatCurrency(employee.pcThamNien)) }
     var pcDtDoanhThu by remember { mutableStateOf(formatCurrency(employee.pcDtDoanhThu)) }
-    var pcCaDem by remember { mutableStateOf(formatCurrency(employee.pcKhac)) }
+    var pcCaDem by remember { mutableStateOf(formatCurrency(employee.pcCaDem)) }
     var pcKhac1 by remember { mutableStateOf(formatCurrency(employee.pcKhac1)) }
 
     // Others
@@ -2421,7 +2427,7 @@ fun EmployeeConfigEdit(
                         pcThamNien = pcThamNien.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        pcKhac = pcCaDem.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        pcCaDem = pcCaDem.replace(".", "").toDoubleOrNull() ?: 0.0,
                         pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: 0.0,
                         tienChuyenCanGoc = chuyenCan.replace(".", "").toDoubleOrNull() ?: 0.0,
                         soNgayPhepNam = phepNam.toIntOrNull() ?: 12,

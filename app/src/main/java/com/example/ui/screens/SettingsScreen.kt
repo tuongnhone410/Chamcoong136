@@ -262,7 +262,7 @@ fun SettingsScreen(
     var pcDocHai by remember { mutableStateOf("") }
     var pcDtDoanhThu by remember { mutableStateOf("") }
     var pcXangXe by remember { mutableStateOf("") }
-    var pcKhac by remember { mutableStateOf("") }
+    var pcCaDem by remember { mutableStateOf("") }
     var pcKhac1 by remember { mutableStateOf("") }
     var pcThamNien by remember { mutableStateOf("") }
     var allowanceCalcTypesMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -308,7 +308,7 @@ fun SettingsScreen(
             pcDocHai = c.pcDocHai.toLong().toString()
             pcDtDoanhThu = c.pcDtDoanhThu.toLong().toString()
             pcXangXe = c.pcXangXe.toLong().toString()
-            pcKhac = c.pcKhac.toLong().toString()
+            pcCaDem = c.pcCaDem.toLong().toString()
             pcKhac1 = c.pcKhac1.toLong().toString()
             pcThamNien = c.pcThamNien.toLong().toString()
             allowanceCalcTypesMap = c.allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
@@ -385,7 +385,7 @@ fun SettingsScreen(
                 pcDocHai = pcDocHai.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcDtDoanhThu = pcDtDoanhThu.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcXangXe = pcXangXe.replace(".", "").toDoubleOrNull() ?: 0.0,
-                pcKhac = pcKhac.replace(".", "").toDoubleOrNull() ?: 0.0,
+                pcCaDem = pcCaDem.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcKhac1 = pcKhac1.replace(".", "").toDoubleOrNull() ?: 0.0,
                 pcThamNien = pcThamNien.replace(".", "").toDoubleOrNull() ?: 0.0,
                 allowanceCalcTypes = allowanceCalcTypesMap.entries.joinToString(";") { "${it.key}:${it.value}" },
@@ -854,14 +854,14 @@ fun SettingsScreen(
                         )
                         AllowanceRowItem(
                             name = "7. Phụ cấp ca đêm (mỗi ca)",
-                            value = pcKhac,
-                            fieldName = "pcKhac",
+                            value = pcCaDem,
+                            fieldName = "pcCaDem",
                             calcTypeMap = allowanceCalcTypesMap,
                             onClick = {
-                                activeEditingAllowanceField = "pcKhac"
+                                activeEditingAllowanceField = "pcCaDem"
                                 activeEditingAllowanceName = "Phụ cấp Ca đêm"
-                                activeEditingAllowanceValue = pcKhac
-                                activeEditingAllowanceType = allowanceCalcTypesMap["pcKhac"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcKhac")
+                                activeEditingAllowanceValue = pcCaDem
+                                activeEditingAllowanceType = allowanceCalcTypesMap["pcCaDem"] ?: com.example.data.model.UserConfig.getDefaultCalcType("pcCaDem")
                             }
                         )
                     }
@@ -985,7 +985,7 @@ fun SettingsScreen(
                             "pcDocHai" -> pcDocHai = cleanVal
                             "pcDtDoanhThu" -> pcDtDoanhThu = cleanVal
                             "pcXangXe" -> pcXangXe = cleanVal
-                            "pcKhac" -> pcKhac = cleanVal
+                            "pcCaDem" -> pcCaDem = cleanVal
                             "pcKhac1" -> pcKhac1 = cleanVal
                             "pcThamNien" -> pcThamNien = cleanVal
                         }

@@ -1283,11 +1283,16 @@ fun DayGridCell(
         }
     }
 
+    val isActualWorkingDay = entry != null && entry.checkInTime != null && entry.checkOutTime != null
+    val isPaidLeave = entry?.dayType == "PAID_LEAVE" && !isActualWorkingDay
+    val isUnpaidLeave = entry?.dayType == "UNPAID_LEAVE" && !isActualWorkingDay
+    val isUnauthorizedLeave = entry?.dayType == "UNAUTHORIZED_LEAVE" && !isActualWorkingDay
+
     val borderColor = when {
         isSelected -> NeonBlue
-        entry?.dayType == "PAID_LEAVE" -> NeonBlue
-        entry?.dayType == "UNPAID_LEAVE" -> AccentOrange
-        entry?.dayType == "UNAUTHORIZED_LEAVE" -> Color(0xFFEB5757)
+        isPaidLeave -> NeonBlue
+        isUnpaidLeave -> AccentOrange
+        isUnauthorizedLeave -> Color(0xFFEB5757)
         entry?.isWorking == true -> AccentOrange
         isNightShift -> NightPurple
         entry != null -> AccentGreen
@@ -1296,9 +1301,9 @@ fun DayGridCell(
 
     val backgroundColor = when {
         isSelected -> NeonBlue.copy(alpha = 0.2f)
-        entry?.dayType == "PAID_LEAVE" -> NeonBlue.copy(alpha = 0.15f)
-        entry?.dayType == "UNPAID_LEAVE" -> AccentOrange.copy(alpha = 0.12f)
-        entry?.dayType == "UNAUTHORIZED_LEAVE" -> Color(0xFFEB5757).copy(alpha = 0.15f)
+        isPaidLeave -> NeonBlue.copy(alpha = 0.15f)
+        isUnpaidLeave -> AccentOrange.copy(alpha = 0.12f)
+        isUnauthorizedLeave -> Color(0xFFEB5757).copy(alpha = 0.15f)
         entry?.isWorking == true -> AccentOrange.copy(alpha = 0.15f)
         isNightShift -> NightPurple.copy(alpha = 0.2f)
         entry != null -> AccentGreen.copy(alpha = 0.12f)
