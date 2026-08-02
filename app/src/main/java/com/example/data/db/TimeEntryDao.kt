@@ -33,6 +33,9 @@ interface TimeEntryDao {
     @Query("DELETE FROM time_entries WHERE userId = :userId")
     suspend fun clearAllForUser(userId: String)
 
+    @Query("DELETE FROM time_entries WHERE userId = :userId AND date = :date")
+    suspend fun deleteByDate(userId: String, date: String)
+
     @Query("DELETE FROM time_entries WHERE userId = :userId AND (date LIKE :monthPattern OR date LIKE :altMonthPattern)")
     suspend fun deleteEntriesInMonth(userId: String, monthPattern: String, altMonthPattern: String)
 

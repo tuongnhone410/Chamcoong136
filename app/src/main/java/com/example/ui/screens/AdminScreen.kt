@@ -1748,9 +1748,9 @@ fun EmployeeDetailView(
                 var showAddAttendanceDialog by remember { mutableStateOf(false) }
                 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 32.dp)
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
                 ) {
                     item {
                         // Attendance Summary Board
@@ -1765,7 +1765,7 @@ fun EmployeeDetailView(
                     
                     item {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -1786,7 +1786,7 @@ fun EmployeeDetailView(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 32.dp, horizontal = 16.dp),
+                                    .padding(vertical = 32.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1807,9 +1807,7 @@ fun EmployeeDetailView(
                         }
                     } else {
                         items(filteredRecords.sortedByDescending { it.dateString }) { record ->
-                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                                AttendanceRecordItem(record = record, employee = employee, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
-                            }
+                            AttendanceRecordItem(record = record, employee = employee, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
                         }
                     }
                 }
@@ -2181,7 +2179,7 @@ fun AttendanceSummaryBoard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp),
+            .padding(vertical = 6.dp),
         colors = CardDefaults.cardColors(containerColor = DarkContainer),
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, PrimaryBlue.copy(alpha = 0.2f))

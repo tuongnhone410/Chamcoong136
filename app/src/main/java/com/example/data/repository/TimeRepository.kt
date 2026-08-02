@@ -36,6 +36,10 @@ class TimeRepository(
         timeEntryDao.delete(entry)
     }
 
+    suspend fun deleteByDate(userId: String, date: String) {
+        timeEntryDao.deleteByDate(userId, date)
+    }
+
     suspend fun deleteEntriesInMonth(userId: String, monthPattern: String, altMonthPattern: String) {
         timeEntryDao.deleteEntriesInMonth(userId, monthPattern, altMonthPattern)
     }

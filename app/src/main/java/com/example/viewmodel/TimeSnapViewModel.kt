@@ -841,6 +841,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             val currentEntries = repository.getEntries(userId).first()
             val existingDates = currentEntries.map { com.example.data.SalaryCalculator.normalizeDateToDmy(it.date) }.toSet()
             
+            val prefs = getApplication<Application>().getSharedPreferences("timesnap_deleted_prefs", android.content.Context.MODE_PRIVATE)
+            val deletedSet = prefs.getStringSet("deleted_legacy_dates_$userId", emptySet()) ?: emptySet()
+            
             val legacyRecordsToMigrate = mutableListOf<com.example.data.AttendanceRecord>()
 
             // 2. Check and migrate local legacy database "timesnap_pro.db"
@@ -881,8 +884,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 for (log in legacyRecordsToMigrate) {
                     val formattedDate = com.example.data.SalaryCalculator.normalizeDateToDmy(log.dateString)
 
-                    // Only migrate if we don't already have an entry for this formattedDate
-                    if (!existingDates.contains(formattedDate)) {
+                    // Only migrate if we don't already have an entry for this formattedDate and it was not previously deleted
+                    if (!existingDates.contains(formattedDate) && !deletedSet.contains(formattedDate) && !deletedSet.contains(log.dateString)) {
                         val cal = Calendar.getInstance()
                         var isSunday = false
                         try {
@@ -1280,10 +1283,29 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private suspend fun recordDeletedDate(uid: String, dateStr: String) {
+        try {
+            com.example.data.DatabaseHelper.init(getApplication())
+            com.example.data.DatabaseHelper.instance.deleteAttendanceRecord(uid, dateStr)
+            
+            val prefs = getApplication<Application>().getSharedPreferences("timesnap_deleted_prefs", android.content.Context.MODE_PRIVATE)
+            val setKey = "deleted_legacy_dates_$uid"
+            val existingSet = prefs.getStringSet(setKey, emptySet()) ?: emptySet()
+            val updatedSet = existingSet.toMutableSet().apply {
+                add(dateStr)
+                add(com.example.data.SalaryCalculator.normalizeDateToDmy(dateStr))
+            }
+            prefs.edit().putStringSet(setKey, updatedSet).apply()
+        } catch (e: Exception) {
+            android.util.Log.e("TimeSnapViewModel", "Failed to record deleted date: ${e.message}")
+        }
+    }
+
     fun deleteEntry(entry: TimeEntry) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.delete(entry)
             deleteTimeEntryFromLegacyLog(entry)
+            recordDeletedDate(entry.userId, entry.date)
             
             // Revert leave quota if deleted entry was PAID_LEAVE
             if (entry.dayType == "PAID_LEAVE") {
@@ -1318,6 +1340,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             // 1. Delete from local database IMMEDIATELY so UI updates instantly
             for (entry in entriesToDelete) {
                 repository.delete(entry)
+                recordDeletedDate(session.uid, entry.date)
             }
 
             if (restoredLeaves > 0) {
@@ -1353,6 +1376,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
             // 1. Delete from local database IMMEDIATELY so UI updates instantly
             repository.deleteEntriesInMonth(session.uid, monthPattern, altMonthPattern)
+            for (entry in allEntries) {
+                recordDeletedDate(session.uid, entry.date)
+            }
             
             if (phepToRestore > 0) {
                 val config = repository.getConfigDirect(session.uid)

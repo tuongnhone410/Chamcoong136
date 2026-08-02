@@ -162,9 +162,11 @@ fun TabHistoryContent(
 
                 Button(
                     onClick = { isMultiSelectMode = true; selectedDates = emptySet() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A86FF))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A86FF)),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
                 ) {
-                    Text("Chọn Nhiều")
+                    Text("Chọn Nhiều", fontSize = 12.sp)
                 }
             }
         }

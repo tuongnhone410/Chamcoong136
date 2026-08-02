@@ -322,8 +322,27 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteAttendanceRecord(uid: String, dateString: String) {
-        viewModelScope.launch {
-            FirestoreService.deleteAttendanceRecord(uid, dateString)
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                FirestoreService.deleteAttendanceRecord(uid, dateString)
+                
+                val db = com.example.data.db.AppDatabase.getInstance(getApplication())
+                db.timeEntryDao().deleteByDate(uid, dateString)
+                
+                com.example.data.DatabaseHelper.init(getApplication())
+                com.example.data.DatabaseHelper.instance.deleteAttendanceRecord(uid, dateString)
+                
+                val prefs = getApplication<Application>().getSharedPreferences("timesnap_deleted_prefs", Context.MODE_PRIVATE)
+                val setKey = "deleted_legacy_dates_$uid"
+                val existingSet = prefs.getStringSet(setKey, emptySet()) ?: emptySet()
+                val updatedSet = existingSet.toMutableSet().apply {
+                    add(dateString)
+                    add(com.example.data.SalaryCalculator.normalizeDateToDmy(dateString))
+                }
+                prefs.edit().putStringSet(setKey, updatedSet).apply()
+            } catch (e: Exception) {
+                android.util.Log.e("AdminViewModel", "Failed to delete attendance record: ${e.message}")
+            }
         }
     }
 

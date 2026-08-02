@@ -153,14 +153,10 @@ object SalaryCalculator {
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
     fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
-        val hasTimes = entry.checkInTime != null && entry.checkOutTime != null
-        val finalDayType = if (hasTimes && isLeaveType(entry.dayType)) "NORMAL" else entry.dayType
-        val workingEntry = entry.copy(dayType = finalDayType)
-
-        if (isLeaveType(finalDayType)) {
-            val upper = finalDayType.uppercase(Locale.ROOT)
+        if (isLeaveType(entry.dayType)) {
+            val upper = entry.dayType.uppercase(Locale.ROOT)
             val workD = if (upper.contains("PAID") || upper == "NP" || upper.contains("PHEP") || upper.contains("PHÉP") || upper.contains("HOLIDAY") || upper.contains("LỄ") || upper.contains("LE")) 1.0 else 0.0
-            return workingEntry.copy(
+            return entry.copy(
                 workDay = workD,
                 otHours = 0.0,
                 lateMinutes = 0,
@@ -171,6 +167,9 @@ object SalaryCalculator {
                 normalizedCheckOut = null
             )
         }
+
+        val hasTimes = entry.checkInTime != null && entry.checkOutTime != null
+        val workingEntry = entry
 
         val rawInRaw = workingEntry.checkInTime ?: return workingEntry.copy(workDay = 0.0, otHours = 0.0, lateMinutes = 0, earlyLeaveMinutes = 0)
         // Round to nearest minute to avoid sub-minute floating point variance across different days
