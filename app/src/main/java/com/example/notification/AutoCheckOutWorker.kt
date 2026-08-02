@@ -55,7 +55,7 @@ class AutoCheckOutWorker(
                     shiftId = sId,
                     shiftType = sType,
                     dayType = dayType,
-                    note = if (active.note.isNullOrBlank()) "🤖 Tự động ra ca theo lịch hẹn" else "${active.note} (🤖 Tự động ra ca)"
+                    note = if (active.note.isNullOrBlank()) "Tự động ra ca" else "${active.note} (Tự động ra ca)"
                 )
 
                 val userConfig = database.userConfigDao().getConfigForUser(uid) ?: UserConfig(userId = uid)
@@ -86,8 +86,8 @@ class AutoCheckOutWorker(
                 // Hiển thị thông báo hoàn thành tự động ra ca
                 NotificationHelper.showNotification(
                     context = context,
-                    title = "🤖 Tự động ra ca thành công!",
-                    message = "Bạn đã làm $formattedHours tiếng, tôi đã tự động ra ca cho bạn.",
+                    title = "Bạn đã ra ca",
+                    message = "Bạn đã làm $formattedHours tiếng.",
                     notificationId = 1002
                 )
             } else {

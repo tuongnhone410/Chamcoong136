@@ -82,7 +82,7 @@ class AutoCheckInWorker(
                     dayType = dayType,
                     shiftId = sId,
                     shiftType = sType,
-                    note = "🤖 Tự động vào ca theo lịch hẹn"
+                    note = "Tự động vào ca"
                 )
 
                 val userConfig = database.userConfigDao().getConfigForUser(uid) ?: UserConfig(userId = uid)
@@ -111,8 +111,8 @@ class AutoCheckInWorker(
                 // Hiển thị thông báo theo yêu cầu: "hh:mm Tôi đã tự động chấm công cho bạn"
                 NotificationHelper.showNotification(
                     context = context,
-                    title = "🤖 Tự động chấm công thành công!",
-                    message = "$timeStr Tôi đã tự động chấm công cho bạn",
+                    title = "Bạn đã vào ca",
+                    message = "Lúc $timeStr",
                     notificationId = 1003
                 )
 

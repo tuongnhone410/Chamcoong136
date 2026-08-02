@@ -753,8 +753,8 @@ fun AdminScreen(
                     if (success) {
                         android.widget.Toast.makeText(
                             context,
-                            "📢 Đã phát thông báo! Hệ thống sẽ tự đẩy đến thiết bị người dùng ngay khi có kết nối Mạng/Wi-Fi.",
-                            android.widget.Toast.LENGTH_LONG
+                            "Đã gửi thông báo",
+                            android.widget.Toast.LENGTH_SHORT
                         ).show()
                     } else {
                         android.widget.Toast.makeText(
