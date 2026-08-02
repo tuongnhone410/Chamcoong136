@@ -383,34 +383,8 @@ object NotificationHelper {
 
     // Ước tính giờ vào ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
     suspend fun estimateHistoricalCheckInTime(context: Context, uid: String): Long {
-        val customTime = getEffectiveCheckInTime(context, System.currentTimeMillis())
-        
-        if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
-            val parts = customTime.split(":")
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: 7
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
-            val cal = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, h)
-                set(Calendar.MINUTE, m)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            if (cal.before(Calendar.getInstance())) cal.add(Calendar.DAY_OF_YEAR, 1)
-            
-            // Tự động bỏ qua ngày Chủ Nhật và ngày lễ để tính giờ đi làm cho tuần sau / ca tiếp theo
-            while (true) {
-                val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-                if (SalaryCalculator.isSunday(dateStr) || SalaryCalculator.isHoliday(dateStr)) {
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
-                } else {
-                    break
-                }
-            }
-            return cal.timeInMillis
-        }
-
-        var targetHour = 7
-        var targetMin = 30
+        var targetHour = -1
+        var targetMin = -1
 
         try {
             val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
@@ -472,25 +446,59 @@ object NotificationHelper {
             }
         } catch (e: Exception) {}
 
-        val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, targetHour)
-            set(Calendar.MINUTE, targetMin)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        if (targetHour == -1) {
+            targetHour = 7
+            targetMin = 30
         }
-        if (cal.before(Calendar.getInstance())) {
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        }
+        val fallbackTargetHour = targetHour
+        val fallbackTargetMin = targetMin
+
+        var currentTargetMs = System.currentTimeMillis()
+        var cal = Calendar.getInstance()
+        var found = false
+        var loopCount = 0
         
-        // Tự động bỏ qua ngày Chủ Nhật và ngày lễ để tính giờ đi làm cho tuần sau / ca tiếp theo
-        while (true) {
-            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-            if (SalaryCalculator.isSunday(dateStr) || SalaryCalculator.isHoliday(dateStr)) {
-                cal.add(Calendar.DAY_OF_YEAR, 1)
+        while (!found && loopCount < 14) {
+            val customTime = getEffectiveCheckInTime(context, currentTargetMs)
+            
+            if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
+                val parts = customTime.split(":")
+                targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 7
+                targetMin = parts.getOrNull(1)?.toIntOrNull() ?: 30
             } else {
+                targetHour = fallbackTargetHour
+                targetMin = fallbackTargetMin
+            }
+            
+            cal = Calendar.getInstance().apply {
+                timeInMillis = currentTargetMs
+                set(Calendar.HOUR_OF_DAY, targetHour)
+                set(Calendar.MINUTE, targetMin)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            
+            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+            val isSunday = SalaryCalculator.isSunday(dateStr)
+            val isHoliday = SalaryCalculator.isHoliday(dateStr)
+            
+            if (!isSunday && !isHoliday && cal.timeInMillis > System.currentTimeMillis()) {
+                found = true
                 break
             }
+            
+            val nextDay = Calendar.getInstance().apply {
+                timeInMillis = currentTargetMs
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            currentTargetMs = nextDay.timeInMillis
+            loopCount++
         }
+        
         return cal.timeInMillis
     }
 
