@@ -452,11 +452,6 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.5.sp
                             )
-                            Text(
-                                text = "Quản lý nhân viên, cấu hình chung & dữ liệu",
-                                color = LightGray,
-                                fontSize = 11.sp
-                            )
                         }
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
@@ -647,8 +642,8 @@ fun SettingsScreen(
                 }
             }
 
-            // CATEGORY 2.5: KHẤU TRỪ THỜI GIAN NGHỈ TRONG CA
-            CategoryLayout(title = "KHẤU TRỪ THỜI GIAN NGHỈ TRONG CA", icon = Icons.Default.Settings) {
+            // CATEGORY 2.5: THỜI GIAN NGHỈ TRONG CA
+            CategoryLayout(title = "THỜI GIAN NGHỈ TRONG CA", icon = Icons.Default.Settings) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
                         modifier = Modifier
@@ -753,7 +748,7 @@ fun SettingsScreen(
             }
 
             // CATEGORY 4: CÁC KHOẢN PHỤ CẤP
-            CategoryLayout(title = "CẤU HÌNH CÁC KHOẢN PHỤ CẤP", icon = Icons.Default.Star) {
+            CategoryLayout(title = "CÁC KHOẢN PHỤ CẤP", icon = Icons.Default.Star) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
                         text = "Chạm vào từng mục để chỉnh sửa số tiền và tính chất tính lương của khoản phụ cấp đó.",
@@ -1023,7 +1018,7 @@ fun SettingsScreen(
                 }
             }
 
-            CategoryLayout(title = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.AlarmOn) {
+            CategoryLayout(title = "NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.AlarmOn) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // 1. Bật thông báo nhắc nhở
                     Row(

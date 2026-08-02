@@ -12,8 +12,11 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE userId = :userId AND date = :date LIMIT 1")
     suspend fun getEntryByDate(userId: String, date: String): TimeEntry?
 
-    @Query("SELECT * FROM time_entries WHERE userId = :userId AND isWorking = 1 LIMIT 1")
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND isWorking = 1 ORDER BY checkInTime DESC LIMIT 1")
     suspend fun getActiveEntry(userId: String): TimeEntry?
+
+    @Query("SELECT * FROM time_entries WHERE userId = :userId AND isWorking = 1 ORDER BY checkInTime DESC LIMIT 1")
+    fun getActiveEntryFlow(userId: String): Flow<TimeEntry?>
 
     @Query("SELECT * FROM time_entries WHERE userId = :userId AND (date LIKE :monthPattern OR date LIKE :altMonthPattern) ORDER BY date ASC")
     fun getEntriesForUserInMonth(userId: String, monthPattern: String, altMonthPattern: String): Flow<List<TimeEntry>>

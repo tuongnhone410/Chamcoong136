@@ -336,7 +336,16 @@ object ExportUtils {
         val isCurrentSelectedMonth = selectedMonth.startsWith(String.format(Locale.US, "%04d-%02d", currentYear, currentMonth))
 
         // UI Pre-calculations
-        val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+        val effectiveSoNgayCong = if (soNgayCongDuKien > 0) {
+            soNgayCongDuKien
+        } else {
+            if (isCurrentSelectedMonth) {
+                summary.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
+            } else {
+                maxOf(summary.workingDays, summary.standardWorkDays)
+            }
+        }
+        val soNgayCongDuKienDouble = effectiveSoNgayCong.toDouble()
         fun calcPrPNG(fieldName: String, valRaw: Double): Double {
             return com.example.data.SalaryCalculator.calculateAllowanceValue(
                 fieldName = fieldName,
@@ -456,7 +465,7 @@ object ExportUtils {
         }
         drawRow("Mức lương cơ bản:", "${fmt.format(config.luongCoBan)}đ")
         
-        val attendanceInfo = if (selectedTab == 1) "$soNgayCongDuKien / ${summary.standardWorkDays} ngày" 
+        val attendanceInfo = if (selectedTab == 1) "$effectiveSoNgayCong / ${summary.standardWorkDays} ngày" 
                              else "${summary.workingDays} / ${if (summary.isCurrentMonth) summary.expectedWorkDays else summary.standardWorkDays} ngày"
         drawRow("Công làm việc:", attendanceInfo)
 
@@ -465,7 +474,7 @@ object ExportUtils {
         drawSectionHeader("THU NHẬP CHI TIẾT (+)")
         
         val luongDuKienBaseSalary = Math.round((config.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble()
-        val baseSalaryLabel = if (selectedTab == 1) "LCB thực nhận ($soNgayCongDuKien / ${summary.standardWorkDays})" 
+        val baseSalaryLabel = if (selectedTab == 1) "LCB thực nhận ($effectiveSoNgayCong / ${summary.standardWorkDays})" 
                               else "LCB thực nhận (${summary.workingDays} / ${summary.standardWorkDays})"
         val baseSalaryValue = if (selectedTab == 1) luongDuKienBaseSalary else summary.baseBasicSalary
         drawRow(baseSalaryLabel, "+${fmt.format(baseSalaryValue)}đ", paintGreen)
@@ -584,7 +593,16 @@ object ExportUtils {
         val currentMonth = todayCal.get(Calendar.MONTH) + 1
         val isCurrentSelectedMonth = selectedMonth.startsWith(String.format(Locale.US, "%04d-%02d", currentYear, currentMonth))
 
-        val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+        val effectiveSoNgayCong = if (soNgayCongDuKien > 0) {
+            soNgayCongDuKien
+        } else {
+            if (isCurrentSelectedMonth) {
+                summary.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
+            } else {
+                maxOf(summary.workingDays, summary.standardWorkDays)
+            }
+        }
+        val soNgayCongDuKienDouble = effectiveSoNgayCong.toDouble()
         fun calcPrPDF(fieldName: String, valRaw: Double): Double {
             return com.example.data.SalaryCalculator.calculateAllowanceValue(
                 fieldName = fieldName,
@@ -705,7 +723,7 @@ object ExportUtils {
         canvas1.drawText("Mã nhân viên:", 45f, currentY, paintLabel)
         canvas1.drawText(empCode, 150f, currentY, paintValNormal)
         canvas1.drawText("Công thực tế:", 320f, currentY, paintLabel)
-        val actualDaysVal = if (selectedTab == 1) "$soNgayCongDuKien ngày" else "${summary.workingDays} ngày"
+        val actualDaysVal = if (selectedTab == 1) "$effectiveSoNgayCong ngày" else "${summary.workingDays} ngày"
         canvas1.drawText(actualDaysVal, 440f, currentY, paintValBold)
 
         // Row 3
@@ -761,7 +779,7 @@ object ExportUtils {
         }
 
         val baseSalaryValue = if (selectedTab == 1) Math.round((config.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble() else summary.baseBasicSalary
-        val baseSalaryLabelText = if (selectedTab == 1) "Lương theo công thực tế ($soNgayCongDuKien công)" 
+        val baseSalaryLabelText = if (selectedTab == 1) "Lương theo công thực tế ($effectiveSoNgayCong công)" 
                               else "Lương theo công thực tế (${summary.workingDays} công)"
         drawPdfRow(baseSalaryLabelText, baseSalaryValue, 0.0)
 
@@ -862,7 +880,7 @@ object ExportUtils {
         canvas2.drawText("Ngày", attCol1, currentY, paintAttHeader)
         canvas2.drawText("Giờ vào", attCol2, currentY, paintAttHeader)
         canvas2.drawText("Giờ ra", attCol3, currentY, paintAttHeader)
-        canvas2.drawText("Trạng thái / Ngày công", attCol4, currentY, paintAttHeader)
+        canvas2.drawText("Ca làm / Trạng thái", attCol4, currentY, paintAttHeader)
         canvas2.drawText("Ghi chú", attCol5, currentY, paintAttHeader)
 
         currentY += 8f
@@ -900,24 +918,46 @@ object ExportUtils {
                 val outText = if (entry.checkOutTime != null && entry.checkOutTime > 0) sdfTimeFormatter.format(Date(entry.checkOutTime)) else "--:--"
                 canvas2.drawText(outText, attCol3, currentY, paintValNormal)
 
-                val friendlyStatus = when (entry.dayType.uppercase()) {
-                    "NORMAL" -> "Ngày thường"
-                    "SUNDAY" -> "Chủ nhật"
-                    "HOLIDAY" -> "Ngày lễ"
-                    "LEAVE" -> "Nghỉ phép"
-                    "ABSENT" -> "Vắng mặt"
-                    "UNPAID_LEAVE" -> "Nghỉ ko lương"
-                    "NIGHT_SHIFT" -> "Ca đêm"
-                    else -> entry.dayType
+                val isNightShift = entry.shiftType == "NIGHT" || entry.dayType == "NIGHT" || entry.shiftId == "ca_dem" || run {
+                    val inTime = entry.checkInTime
+                    if (inTime != null && inTime > 0) {
+                        val cal = Calendar.getInstance().apply { timeInMillis = inTime }
+                        val hour = cal.get(Calendar.HOUR_OF_DAY)
+                        hour >= 15 || hour < 6
+                    } else false
                 }
-                
-                canvas2.drawText(friendlyStatus, attCol4, currentY, Paint().apply {
-                    color = when (entry.dayType.uppercase()) {
-                        "ABSENT", "UNPAID_LEAVE" -> redColor
-                        "SUNDAY", "HOLIDAY" -> primaryColor
-                        "LEAVE" -> greenColor
-                        else -> textColor
+
+                val isSun = entry.dayType == "SUNDAY" || isSundayDate(entry.date)
+                val isHol = entry.dayType == "HOLIDAY" || isHolidayDate(entry.date)
+
+                val (friendlyStatus, statusColor) = run {
+                    val dtUpper = entry.dayType.uppercase()
+                    if (dtUpper in listOf("OFF", "NGHỈ", "LEAVE", "NGHỈ PHÉP", "PAID_LEAVE", "ABSENT", "VẮNG MẶT", "UNPAID_LEAVE")) {
+                        when (dtUpper) {
+                            "LEAVE", "NGHỈ PHÉP", "PAID_LEAVE" -> "Nghỉ phép" to greenColor
+                            "ABSENT", "VẮNG MẶT" -> "Vắng mặt" to redColor
+                            "UNPAID_LEAVE" -> "Nghỉ ko lương" to redColor
+                            else -> "Nghỉ" to textColor
+                        }
+                    } else {
+                        val shiftNameStr = if (isNightShift) "Ca đêm" else "Ca ngày"
+                        val dayTypeStr = when {
+                            isHol -> " (Lễ)"
+                            isSun -> " (Chủ nhật)"
+                            else -> ""
+                        }
+                        val label = shiftNameStr + dayTypeStr
+                        val color = when {
+                            isHol || isSun -> primaryColor
+                            isNightShift -> navyColor
+                            else -> textColor
+                        }
+                        label to color
                     }
+                }
+
+                canvas2.drawText(friendlyStatus, attCol4, currentY, Paint().apply {
+                    color = statusColor
                     textSize = 9f
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 })
@@ -980,14 +1020,8 @@ fun AttendanceRecord.toTimeEntry(): TimeEntry {
         date = com.example.data.SalaryCalculator.normalizeDateToDmy(this.dateString),
         checkInTime = this.clockInTime,
         checkOutTime = rawOut,
-        dayType = if (this.clockInTime > 0 && this.clockOutTime != null && this.clockOutTime > 0) {
-            "NORMAL"
-        } else if (this.status.isBlank()) {
-            "NORMAL"
-        } else {
-            this.status
-        },
-        isWorking = this.clockOutTime == null && this.clockInTime > 0, // Simplified guess
+        dayType = if (this.status.isNotBlank()) this.status else "NORMAL",
+        isWorking = this.clockOutTime == null && this.clockInTime > 0,
         note = this.notes
     )
 }

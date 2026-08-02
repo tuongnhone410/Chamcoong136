@@ -12,6 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,11 +85,25 @@ fun TabHistoryContent(
     val headerFormatter = SimpleDateFormat("MM/yyyy", Locale.getDefault())
     val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
+    val monthHolidays = remember(currentMonth) {
+        val targetMonth = currentMonth.get(Calendar.MONTH) + 1
+        val targetYear = currentMonth.get(Calendar.YEAR)
+        val list = mutableListOf<String>()
+        val maxDays = currentMonth.getActualMaximum(Calendar.DAY_OF_MONTH)
+        for (d in 1..maxDays) {
+            val dStr = String.format(Locale.US, "%02d/%02d/%04d", d, targetMonth, targetYear)
+            if (com.example.data.SalaryCalculator.isHoliday(dStr)) {
+                list.add(dStr)
+            }
+        }
+        list
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Multi-select actions header
         if (isMultiSelectMode) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -106,27 +124,81 @@ fun TabHistoryContent(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71)),
                         enabled = selectedDates.isNotEmpty()
                     ) {
-                        Text("Chấm Công")
+                        Text("Sửa Hàng Loạt")
                     }
                 }
             }
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Tháng ${headerFormatter.format(currentMonth.time)}",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(onClick = {
+                        val next = currentMonth.clone() as Calendar
+                        next.add(Calendar.MONTH, -1)
+                        currentMonth = next
+                    }) {
+                        Icon(Icons.Default.ChevronLeft, contentDescription = "Tháng trước", tint = Color.White)
+                    }
+                    Text(
+                        text = "Tháng ${headerFormatter.format(currentMonth.time)}",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = {
+                        val next = currentMonth.clone() as Calendar
+                        next.add(Calendar.MONTH, 1)
+                        currentMonth = next
+                    }) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Tháng sau", tint = Color.White)
+                    }
+                }
+
                 Button(
                     onClick = { isMultiSelectMode = true; selectedDates = emptySet() },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A86FF))
                 ) {
                     Text("Chọn Nhiều")
+                }
+            }
+        }
+
+        // Holiday Summary Banner
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = if (monthHolidays.isNotEmpty()) Color(0xFF3B2A03) else Color(0xFF1E1E1E)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = null,
+                    tint = if (monthHolidays.isNotEmpty()) Color(0xFFFFD700) else Color.Gray,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                if (monthHolidays.isNotEmpty()) {
+                    Text(
+                        text = "Tháng ${headerFormatter.format(currentMonth.time)} có ${monthHolidays.size} ngày lễ: ${monthHolidays.joinToString(", ")}",
+                        color = Color(0xFFFFD700),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = "Tháng ${headerFormatter.format(currentMonth.time)} không có ngày lễ chính thức",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }
@@ -162,6 +234,7 @@ fun TabHistoryContent(
                 
                 val isSelected = selectedDates.contains(dateStr)
                 val isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                val isHolidayDate = com.example.data.SalaryCalculator.isHoliday(dateStr)
 
                 Box(
                     modifier = Modifier
@@ -171,25 +244,25 @@ fun TabHistoryContent(
                         .background(
                             when {
                                 isSelected -> Color(0xFF3A86FF).copy(alpha = 0.5f)
-                                    record != null -> {
-                                        val hasTimes = record.clockInTime > 0 && record.clockOutTime != null && record.clockOutTime > 0
-                                        val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
-                                        val isHoliday = com.example.data.SalaryCalculator.isHoliday(record.dateString)
-                                        val stUpper = record.status.uppercase(Locale.ROOT)
-                                        val isPaidLeave = !hasTimes && (stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP")
-                                        val isUnpaidLeave = !hasTimes && (stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID")
-                                        val isUnauthorizedLeave = !hasTimes && (stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP"))
-                                        val isHolidayLeave = !hasTimes && (stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE")
-                                        
-                                        when {
-                                            isPaidLeave || stUpper.contains("PAID") || stUpper.contains("PHÉP") -> Color(0xFFF2C94C).copy(alpha = 0.2f)
-                                            isUnpaidLeave -> Color(0xFFFF9800).copy(alpha = 0.2f)
-                                            isUnauthorizedLeave -> Color(0xFFEB5757).copy(alpha = 0.2f)
-                                            isHolidayLeave -> Color(0xFF9B51E0).copy(alpha = 0.2f)
-                                            isNight || isHoliday -> Color(0xFFFF9800).copy(alpha = 0.3f)
-                                            else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
-                                        }
+                                isHolidayDate -> Color(0xFFFFD700).copy(alpha = 0.35f)
+                                record != null -> {
+                                    val hasTimes = record.clockInTime > 0 && record.clockOutTime != null && record.clockOutTime > 0
+                                    val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
+                                    val stUpper = record.status.uppercase(Locale.ROOT)
+                                    val isPaidLeave = !hasTimes && (stUpper.contains("PAIDLEAVE") || stUpper == "PAID_LEAVE" || stUpper == "NP" || stUpper == "PHEP")
+                                    val isUnpaidLeave = !hasTimes && (stUpper.contains("UNPAID_LEAVE") || stUpper == "UNPAIDLEAVE" || stUpper == "UNPAID")
+                                    val isUnauthorizedLeave = !hasTimes && (stUpper.contains("UNAUTHORIZED") || stUpper == "UNAUTHORIZED_LEAVE" || stUpper == "KP" || stUpper.contains("KHONGPHEP"))
+                                    val isHolidayLeave = !hasTimes && (stUpper.contains("HOLIDAY") || stUpper == "PAIDHOLIDAYLEAVE" || stUpper == "HOLIDAY_LEAVE")
+                                    
+                                    when {
+                                        isPaidLeave || stUpper.contains("PAID") || stUpper.contains("PHÉP") -> Color(0xFFF2C94C).copy(alpha = 0.2f)
+                                        isUnpaidLeave -> Color(0xFFFF9800).copy(alpha = 0.2f)
+                                        isUnauthorizedLeave -> Color(0xFFEB5757).copy(alpha = 0.2f)
+                                        isHolidayLeave -> Color(0xFF9B51E0).copy(alpha = 0.2f)
+                                        isNight -> Color(0xFFFF9800).copy(alpha = 0.3f)
+                                        else -> Color(0xFF2ECC71).copy(alpha = 0.2f)
                                     }
+                                }
                                 else -> Color(0xFF1E1E1E)
                             }
                         )
@@ -207,11 +280,17 @@ fun TabHistoryContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = day.toString(),
-                            color = if (isSunday) Color(0xFFFF5252) else Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = day.toString(),
+                                color = if (isHolidayDate) Color(0xFFFFD700) else if (isSunday) Color(0xFFFF5252) else Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (isHolidayDate) {
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("🚩", fontSize = 8.sp)
+                            }
+                        }
                         if (record != null) {
                             val stUpper = record.status.uppercase(Locale.ROOT)
                             val isPaidLeave = stUpper.contains("PAID") || stUpper == "NP" || stUpper.contains("PHEP") || stUpper.contains("PHÉP")
@@ -234,6 +313,8 @@ fun TabHistoryContent(
                                 } else "..."
                                 Text(text = "$inStr\n$outStr", fontSize = 9.sp, color = Color.LightGray, textAlign = TextAlign.Center)
                             }
+                        } else if (isHolidayDate) {
+                            Text(text = "Nghỉ lễ", fontSize = 8.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -250,15 +331,19 @@ fun TabHistoryContent(
             onDismiss = { showSingleDayDialog = null },
             onSave = { clockInTime, clockOutTime, finalStatus ->
                 scope.launch {
-                    val r = AttendanceRecord(
-                        id = attendanceMap[dateStr]?.id ?: 0,
-                        uid = userId,
-                        dateString = dateStr,
-                        clockInTime = clockInTime,
-                        clockOutTime = clockOutTime,
-                        status = finalStatus
-                    )
-                    dbHelper.insertManualRecord(r)
+                    if (finalStatus == "DELETE") {
+                        dbHelper.deleteAttendanceRecord(userId, dateStr)
+                    } else {
+                        val r = AttendanceRecord(
+                            id = attendanceMap[dateStr]?.id ?: 0,
+                            uid = userId,
+                            dateString = dateStr,
+                            clockInTime = clockInTime,
+                            clockOutTime = clockOutTime,
+                            status = finalStatus
+                        )
+                        dbHelper.insertManualRecord(r)
+                    }
                     onRecordsChanged()
                 }
                 showSingleDayDialog = null
@@ -270,7 +355,7 @@ fun TabHistoryContent(
         BatchEntryDialog(
             selectedDates = selectedDates.toList(),
             onDismiss = { showBatchDialog = false },
-            onSave = { inHour, inMin, outHour, outMin, skipSunday, skipHoliday ->
+            onSave = { action, inHour, inMin, outHour, outMin, skipSunday, skipHoliday ->
                 val datesToSave = selectedDates.toList()
                 showBatchDialog = false
                 isMultiSelectMode = false
@@ -290,32 +375,90 @@ fun TabHistoryContent(
                             if (skipSunday && isSun) return@forEach
                             if (skipHoliday && isHol) return@forEach
 
-                            val cIn = cal.clone() as Calendar
-                            cIn.set(Calendar.HOUR_OF_DAY, inHour)
-                            cIn.set(Calendar.MINUTE, inMin)
-                            cIn.set(Calendar.SECOND, 0)
-                            cIn.set(Calendar.MILLISECOND, 0)
+                            when (action) {
+                                "DELETE" -> {
+                                    dbHelper.deleteAttendanceRecord(userId, d)
+                                }
+                                "PAID_LEAVE" -> {
+                                    val cinCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 0) }
+                                    val coutCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 17); set(Calendar.MINUTE, 0) }
+                                    val r = AttendanceRecord(
+                                        id = attendanceMap[d]?.id ?: 0,
+                                        uid = userId,
+                                        dateString = d,
+                                        clockInTime = cinCal.timeInMillis,
+                                        clockOutTime = coutCal.timeInMillis,
+                                        status = "PAID_LEAVE"
+                                    )
+                                    recordsList.add(r)
+                                }
+                                "UNPAID_LEAVE" -> {
+                                    val cinCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 0) }
+                                    val coutCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 17); set(Calendar.MINUTE, 0) }
+                                    val r = AttendanceRecord(
+                                        id = attendanceMap[d]?.id ?: 0,
+                                        uid = userId,
+                                        dateString = d,
+                                        clockInTime = cinCal.timeInMillis,
+                                        clockOutTime = coutCal.timeInMillis,
+                                        status = "UNPAID_LEAVE"
+                                    )
+                                    recordsList.add(r)
+                                }
+                                "UNAUTHORIZED_LEAVE" -> {
+                                    val cinCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 0) }
+                                    val coutCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 17); set(Calendar.MINUTE, 0) }
+                                    val r = AttendanceRecord(
+                                        id = attendanceMap[d]?.id ?: 0,
+                                        uid = userId,
+                                        dateString = d,
+                                        clockInTime = cinCal.timeInMillis,
+                                        clockOutTime = coutCal.timeInMillis,
+                                        status = "UNAUTHORIZED_LEAVE"
+                                    )
+                                    recordsList.add(r)
+                                }
+                                "HOLIDAY_LEAVE" -> {
+                                    val cinCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 0) }
+                                    val coutCal = (cal.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 17); set(Calendar.MINUTE, 0) }
+                                    val r = AttendanceRecord(
+                                        id = attendanceMap[d]?.id ?: 0,
+                                        uid = userId,
+                                        dateString = d,
+                                        clockInTime = cinCal.timeInMillis,
+                                        clockOutTime = coutCal.timeInMillis,
+                                        status = "HOLIDAY_LEAVE"
+                                    )
+                                    recordsList.add(r)
+                                }
+                                else -> {
+                                    val cIn = cal.clone() as Calendar
+                                    cIn.set(Calendar.HOUR_OF_DAY, inHour)
+                                    cIn.set(Calendar.MINUTE, inMin)
+                                    cIn.set(Calendar.SECOND, 0)
+                                    cIn.set(Calendar.MILLISECOND, 0)
 
-                            val cOut = cal.clone() as Calendar
-                            cOut.set(Calendar.HOUR_OF_DAY, outHour)
-                            cOut.set(Calendar.MINUTE, outMin)
-                            cOut.set(Calendar.SECOND, 0)
-                            cOut.set(Calendar.MILLISECOND, 0)
-                            
-                            // if out is next day (e.g. night shift)
-                            if (cOut.timeInMillis <= cIn.timeInMillis) {
-                                cOut.add(Calendar.DAY_OF_MONTH, 1)
+                                    val cOut = cal.clone() as Calendar
+                                    cOut.set(Calendar.HOUR_OF_DAY, outHour)
+                                    cOut.set(Calendar.MINUTE, outMin)
+                                    cOut.set(Calendar.SECOND, 0)
+                                    cOut.set(Calendar.MILLISECOND, 0)
+                                    
+                                    if (cOut.timeInMillis <= cIn.timeInMillis) {
+                                        cOut.add(Calendar.DAY_OF_MONTH, 1)
+                                    }
+
+                                    val r = AttendanceRecord(
+                                        id = attendanceMap[d]?.id ?: 0,
+                                        uid = userId,
+                                        dateString = d,
+                                        clockInTime = cIn.timeInMillis,
+                                        clockOutTime = cOut.timeInMillis,
+                                        status = "Completed"
+                                    )
+                                    recordsList.add(r)
+                                }
                             }
-
-                            val r = AttendanceRecord(
-                                id = attendanceMap[d]?.id ?: 0,
-                                uid = userId,
-                                dateString = d,
-                                clockInTime = cIn.timeInMillis,
-                                clockOutTime = cOut.timeInMillis,
-                                status = "Completed"
-                            )
-                            recordsList.add(r)
                         }
                     }
                     if (recordsList.isNotEmpty()) {
@@ -528,83 +671,100 @@ fun SingleDayEntryDialog(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
-                    Button(
-                        onClick = {
-                            try {
-                                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                                val date = sdf.parse(dateStr) ?: Date()
-                                
-                                val cin = Calendar.getInstance()
-                                cin.time = date
-                                cin.set(Calendar.HOUR_OF_DAY, inHour.text.toIntOrNull() ?: 8)
-                                cin.set(Calendar.MINUTE, inMin.text.toIntOrNull() ?: 0)
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (initialRecord != null) {
+                        TextButton(
+                            onClick = { onSave(0L, null, "DELETE") }
+                        ) {
+                            Text("Xóa Ngày Này", color = Color(0xFFFF5252))
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
 
-                                val coutHour = outHour.text.toIntOrNull()
-                                val coutMin = outMin.text.toIntOrNull()
-                                
-                                var coutMillis: Long? = null
-                                if (coutHour != null && coutMin != null) {
-                                    val cout = Calendar.getInstance()
-                                    cout.time = date
-                                    cout.set(Calendar.HOUR_OF_DAY, coutHour)
-                                    cout.set(Calendar.MINUTE, coutMin)
-                                    if (cout.timeInMillis <= cin.timeInMillis) {
-                                        cout.add(Calendar.DAY_OF_MONTH, 1)
+                    Row {
+                        TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                try {
+                                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                                    val date = sdf.parse(dateStr) ?: Date()
+                                    
+                                    val cin = Calendar.getInstance()
+                                    cin.time = date
+                                    cin.set(Calendar.HOUR_OF_DAY, inHour.text.toIntOrNull() ?: 8)
+                                    cin.set(Calendar.MINUTE, inMin.text.toIntOrNull() ?: 0)
+
+                                    val coutHour = outHour.text.toIntOrNull()
+                                    val coutMin = outMin.text.toIntOrNull()
+                                    
+                                    var coutMillis: Long? = null
+                                    if (coutHour != null && coutMin != null) {
+                                        val cout = Calendar.getInstance()
+                                        cout.time = date
+                                        cout.set(Calendar.HOUR_OF_DAY, coutHour)
+                                        cout.set(Calendar.MINUTE, coutMin)
+                                        if (cout.timeInMillis <= cin.timeInMillis) {
+                                            cout.add(Calendar.DAY_OF_MONTH, 1)
+                                        }
+                                        coutMillis = cout.timeInMillis
                                     }
-                                    coutMillis = cout.timeInMillis
-                                }
 
-                                val finalStatus = if (coutHour != null && coutMin != null) {
-                                    "Completed"
-                                } else {
-                                    when (selectedStatus) {
-                                        "PaidLeave", "PAID_LEAVE" -> "PAID_LEAVE"
-                                        "UnpaidLeave", "UNPAID_LEAVE" -> "UNPAID_LEAVE"
-                                        "UNAUTHORIZED_LEAVE", "KP" -> "UNAUTHORIZED_LEAVE"
-                                        "PaidHolidayLeave", "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE"
-                                        else -> {
-                                            if (coutMillis == null) "Active" else "Completed"
+                                    val finalStatus = if (coutHour != null && coutMin != null) {
+                                        "Completed"
+                                    } else {
+                                        when (selectedStatus) {
+                                            "PaidLeave", "PAID_LEAVE" -> "PAID_LEAVE"
+                                            "UnpaidLeave", "UNPAID_LEAVE" -> "UNPAID_LEAVE"
+                                            "UNAUTHORIZED_LEAVE", "KP" -> "UNAUTHORIZED_LEAVE"
+                                            "PaidHolidayLeave", "HOLIDAY_LEAVE" -> "HOLIDAY_LEAVE"
+                                            else -> {
+                                                if (coutMillis == null) "Active" else "Completed"
+                                            }
                                         }
                                     }
-                                }
 
-                                val isLeave = finalStatus == "PAID_LEAVE" || 
-                                              finalStatus == "UNPAID_LEAVE" || 
-                                              finalStatus == "UNAUTHORIZED_LEAVE" || 
-                                              finalStatus == "HOLIDAY_LEAVE"
+                                    val isLeave = finalStatus == "PAID_LEAVE" || 
+                                                  finalStatus == "UNPAID_LEAVE" || 
+                                                  finalStatus == "UNAUTHORIZED_LEAVE" || 
+                                                  finalStatus == "HOLIDAY_LEAVE"
 
-                                val finalCin = if (isLeave) {
-                                    cin.apply { 
-                                        set(Calendar.HOUR_OF_DAY, 8)
-                                        set(Calendar.MINUTE, 0)
-                                        set(Calendar.SECOND, 0)
-                                        set(Calendar.MILLISECOND, 0)
-                                    }.timeInMillis
-                                } else {
-                                    cin.timeInMillis
-                                }
-                                
-                                val finalCout = if (isLeave) {
-                                    Calendar.getInstance().apply {
-                                        time = date
-                                        set(Calendar.HOUR_OF_DAY, 17)
-                                        set(Calendar.MINUTE, 0)
-                                        set(Calendar.SECOND, 0)
-                                        set(Calendar.MILLISECOND, 0)
-                                    }.timeInMillis
-                                } else {
-                                    coutMillis
-                                }
+                                    val finalCin = if (isLeave) {
+                                        cin.apply { 
+                                            set(Calendar.HOUR_OF_DAY, 8)
+                                            set(Calendar.MINUTE, 0)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                    } else {
+                                        cin.timeInMillis
+                                    }
+                                    
+                                    val finalCout = if (isLeave) {
+                                        Calendar.getInstance().apply {
+                                            time = date
+                                            set(Calendar.HOUR_OF_DAY, 17)
+                                            set(Calendar.MINUTE, 0)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                        }.timeInMillis
+                                    } else {
+                                        coutMillis
+                                    }
 
-                                onSave(finalCin, finalCout, finalStatus)
-                            } catch (e: Exception) {
-                                android.util.Log.e("SingleDayEntryDialog", "Failed to parse/save manual record", e)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))
-                    ) { Text("Lưu") }
+                                    onSave(finalCin, finalCout, finalStatus)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("SingleDayEntryDialog", "Failed to parse/save manual record", e)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))
+                        ) { Text("Lưu") }
+                    }
                 }
             }
         }
@@ -615,8 +775,9 @@ fun SingleDayEntryDialog(
 fun BatchEntryDialog(
     selectedDates: List<String>,
     onDismiss: () -> Unit,
-    onSave: (Int, Int, Int, Int, Boolean, Boolean) -> Unit
+    onSave: (String, Int, Int, Int, Int, Boolean, Boolean) -> Unit
 ) {
+    var selectedAction by remember { mutableStateOf("WORK") }
     var inHour by remember { mutableStateOf(TextFieldValue("08")) }
     var inMin by remember { mutableStateOf(TextFieldValue("00")) }
     var outHour by remember { mutableStateOf(TextFieldValue("17")) }
@@ -639,150 +800,121 @@ fun BatchEntryDialog(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text("Chấm công hàng loạt (${selectedDates.size} ngày)", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                fun createTextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, label: String, focusRequester: FocusRequester, nextFocusRequester: FocusRequester? = null, modifier: Modifier = Modifier): @Composable () -> Unit = {
-                    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    val isFocused by interactionSource.collectIsFocusedAsState()
-                    
-                    LaunchedEffect(isFocused) {
-                        if (isFocused) {
-                            kotlinx.coroutines.delay(50)
-                            onValueChange(value.copy(selection = TextRange(0, value.text.length)))
-                        }
-                    }
-                    
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = { 
-                            if (it.text.length <= 2) {
-                                val textChanged = it.text != value.text
-                                onValueChange(it)
-                                if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
-                                    nextFocusRequester.requestFocus()
-                                }
-                            }
-                        },
-                        interactionSource = interactionSource,
-                        modifier = modifier.focusRequester(focusRequester),
-                        label = { Text(label) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done),
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.LightGray)
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    createTextField(inHour, { 
-                        if (it.text.length <= 2) {
-                            val h = it.text.toIntOrNull() ?: 0
-                            if (h > 24) {
-                                inHour = it.copy(text = "07", selection = TextRange(2))
-                                inMin = inMin.copy(text = "30", selection = TextRange(2))
-                            } else if (h == 24 && (inMin.text.toIntOrNull() ?: 0) > 0) {
-                                inHour = it.copy(text = "07", selection = TextRange(2))
-                                inMin = inMin.copy(text = "30", selection = TextRange(2))
-                            } else {
-                                inHour = it
-                            }
-                        }
-                    }, "Giờ Vào", focusRequesters[0], focusRequesters[1], Modifier.weight(1f))()
-                    createTextField(inMin, { 
-                        if (it.text.length <= 2) {
-                            val m = it.text.toIntOrNull() ?: 0
-                            if (m > 59) {
-                                inMin = it.copy(text = "59", selection = TextRange(2))
-                            } else if (m > 0 && (inHour.text.toIntOrNull() ?: 0) == 24) {
-                                inHour = inHour.copy(text = "07", selection = TextRange(2))
-                                inMin = it.copy(text = "30", selection = TextRange(2))
-                            } else {
-                                inMin = it
-                            }
-                        }
-                    }, "Phút Vào", focusRequesters[1], focusRequesters[2], Modifier.weight(1f))()
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    createTextField(outHour, { 
-                        if (it.text.length <= 2) {
-                            val h = it.text.toIntOrNull() ?: 0
-                            if (h > 24) {
-                                outHour = it.copy(text = "07", selection = TextRange(2))
-                                outMin = outMin.copy(text = "30", selection = TextRange(2))
-                            } else if (h == 24 && (outMin.text.toIntOrNull() ?: 0) > 0) {
-                                outHour = it.copy(text = "07", selection = TextRange(2))
-                                outMin = outMin.copy(text = "30", selection = TextRange(2))
-                            } else {
-                                outHour = it
-                            }
-                        }
-                    }, "Giờ Ra", focusRequesters[2], focusRequesters[3], Modifier.weight(1f))()
-                    createTextField(outMin, { 
-                        if (it.text.length <= 2) {
-                            val m = it.text.toIntOrNull() ?: 0
-                            if (m > 59) {
-                                outMin = it.copy(text = "59", selection = TextRange(2))
-                            } else if (m > 0 && (outHour.text.toIntOrNull() ?: 0) == 24) {
-                                outHour = outHour.copy(text = "07", selection = TextRange(2))
-                                outMin = it.copy(text = "30", selection = TextRange(2))
-                            } else {
-                                outMin = it
-                            }
-                        }
-                    }, "Phút Ra", focusRequesters[3], null, Modifier.weight(1f))()
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Cấu hình nâng cao", color = Color(0xFF2ECC71), fontWeight = FontWeight.Bold)
-                
-                val isAutoEnabled = !skipSunday && !skipHoliday
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipSunday = !skipSunday }) {
-                    Checkbox(checked = skipSunday, onCheckedChange = { 
-                        skipSunday = it
-                    })
-                    Text("A. Bỏ qua ngày Chủ Nhật", color = Color.White)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipHoliday = !skipHoliday }) {
-                    Checkbox(checked = skipHoliday, onCheckedChange = { 
-                        skipHoliday = it
-                    })
-                    Text("B. Bỏ qua Ngày Lễ", color = Color.White)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically, 
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = isAutoEnabled) { autoRecognizeOT = !autoRecognizeOT }
-                ) {
-                    Checkbox(
-                        checked = autoRecognizeOT && isAutoEnabled, 
-                        onCheckedChange = { if (isAutoEnabled) autoRecognizeOT = it },
-                        enabled = isAutoEnabled
-                    )
-                    Text("C. Tự động nhận diện OT 2.0, OT 3.0", color = if (isAutoEnabled) Color.White else Color.Gray)
-                }
-                
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth()
+            ) {
                 Text(
-                    text = "* Những ngày hệ thống nhận diện là OT sẽ tự động được nhân hệ số lúc tính lương.",
-                    color = Color.Gray,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    text = "Chỉnh sửa hàng loạt (${selectedDates.size} ngày đã chọn)",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("Hành động thực hiện:", color = Color.LightGray, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "WORK", onClick = { selectedAction = "WORK" })
+                        Text("Chấm công làm việc (Vào / Ra)", color = Color.White, fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "PAID_LEAVE", onClick = { selectedAction = "PAID_LEAVE" })
+                        Text("Ghi nhận Nghỉ phép có lương", color = Color(0xFFF2C94C), fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "UNPAID_LEAVE", onClick = { selectedAction = "UNPAID_LEAVE" })
+                        Text("Ghi nhận Nghỉ không lương", color = Color(0xFFFF9800), fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "UNAUTHORIZED_LEAVE", onClick = { selectedAction = "UNAUTHORIZED_LEAVE" })
+                        Text("Ghi nhận Nghỉ không phép (Vắng)", color = Color(0xFFEB5757), fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "HOLIDAY_LEAVE", onClick = { selectedAction = "HOLIDAY_LEAVE" })
+                        Text("Ghi nhận Nghỉ lễ có lương", color = Color(0xFFBB6BD9), fontSize = 13.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selectedAction == "DELETE", onClick = { selectedAction = "DELETE" })
+                        Text("Xóa dữ liệu chấm công các ngày chọn", color = Color(0xFFFF5252), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (selectedAction == "WORK") {
+                    fun createTextField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, label: String, focusRequester: FocusRequester, nextFocusRequester: FocusRequester? = null, modifier: Modifier = Modifier): @Composable () -> Unit = {
+                        val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val isFocused by interactionSource.collectIsFocusedAsState()
+                        
+                        LaunchedEffect(isFocused) {
+                            if (isFocused) {
+                                kotlinx.coroutines.delay(50)
+                                onValueChange(value.copy(selection = TextRange(0, value.text.length)))
+                            }
+                        }
+                        
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { 
+                                if (it.text.length <= 2) {
+                                    val textChanged = it.text != value.text
+                                    onValueChange(it)
+                                    if (textChanged && it.text.length == 2 && nextFocusRequester != null) {
+                                        nextFocusRequester.requestFocus()
+                                    }
+                                }
+                            },
+                            interactionSource = interactionSource,
+                            modifier = modifier.focusRequester(focusRequester),
+                            label = { Text(label) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = if (nextFocusRequester != null) ImeAction.Next else ImeAction.Done),
+                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.LightGray)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        createTextField(inHour, { inHour = it }, "Giờ Vào", focusRequesters[0], focusRequesters[1], Modifier.weight(1f))()
+                        createTextField(inMin, { inMin = it }, "Phút Vào", focusRequesters[1], focusRequesters[2], Modifier.weight(1f))()
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        createTextField(outHour, { outHour = it }, "Giờ Ra", focusRequesters[2], focusRequesters[3], Modifier.weight(1f))()
+                        createTextField(outMin, { outMin = it }, "Phút Ra", focusRequesters[3], null, Modifier.weight(1f))()
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipSunday = !skipSunday }) {
+                        Checkbox(checked = skipSunday, onCheckedChange = { skipSunday = it })
+                        Text("Bỏ qua ngày Chủ Nhật", color = Color.White, fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { skipHoliday = !skipHoliday }) {
+                        Checkbox(checked = skipHoliday, onCheckedChange = { skipHoliday = it })
+                        Text("Bỏ qua Ngày Lễ", color = Color.White, fontSize = 12.sp)
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                     TextButton(onClick = onDismiss) { Text("Hủy", color = Color.LightGray) }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             val iH = inHour.text.toIntOrNull() ?: 8
                             val iM = inMin.text.toIntOrNull() ?: 0
                             val oH = outHour.text.toIntOrNull() ?: 17
                             val oM = outMin.text.toIntOrNull() ?: 0
-                            onSave(iH, iM, oH, oM, skipSunday, skipHoliday)
+                            onSave(selectedAction, iH, iM, oH, oM, skipSunday, skipHoliday)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71))
-                    ) { Text("Áp Dụng") }
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedAction == "DELETE") Color(0xFFFF5252) else Color(0xFF2ECC71)
+                        )
+                    ) { 
+                        Text(if (selectedAction == "DELETE") "Xóa Hàng Loạt" else "Áp Dụng") 
+                    }
                 }
             }
         }

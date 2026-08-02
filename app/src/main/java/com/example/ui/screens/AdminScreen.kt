@@ -82,6 +82,7 @@ fun AdminScreen(
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
     var showSendNotifDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var longClickedEmployee by remember { mutableStateOf<UserConfig?>(null) }
 
     val exportSuccessCount by adminViewModel.exportSuccessCount.collectAsStateWithLifecycle()
     val todayAttendanceMap by adminViewModel.todayAttendanceMap.collectAsStateWithLifecycle()
@@ -111,9 +112,9 @@ fun AdminScreen(
             TopAppBar(
                 title = { 
                     if (selectedIds.isNotEmpty()) {
-                        Text("${selectedIds.size} đã chọn", color = White, fontWeight = FontWeight.Bold)
+                        Text("${selectedIds.size}/${employees.size} đã chọn", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     } else {
-                        Text("Quản Lý Nhân Viên", color = White, fontWeight = FontWeight.Bold)
+                        Text("Quản Trị Hệ Thống", color = White, fontWeight = FontWeight.Bold)
                     }
                 },
                 navigationIcon = {
@@ -133,6 +134,22 @@ fun AdminScreen(
                 },
                 actions = {
                     if (selectedIds.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                if (selectedIds.size == employees.size) {
+                                    adminViewModel.clearSelection()
+                                } else {
+                                    adminViewModel.selectAllEmployees(employees.map { it.userId })
+                                }
+                            }
+                        ) {
+                            Text(
+                                text = if (selectedIds.size == employees.size) "Bỏ chọn" else "Chọn tất cả",
+                                color = NeonBlue,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                         IconButton(onClick = { showBatchEditDialog = true }) {
                             Icon(Icons.Default.Edit, contentDescription = "Batch Edit", tint = White)
                         }
@@ -195,7 +212,7 @@ fun AdminScreen(
                     )
                 } else {
                     EmployeeListView(
-                        employees = employees.filter { it.hoVaTen.contains(searchQuery, ignoreCase = true) || it.maNhanVien.contains(searchQuery, ignoreCase = true) },
+                        employees = employees.filter { it.hoVaTen.contains(searchQuery, ignoreCase = true) || it.maNhanVien.contains(searchQuery, ignoreCase = true) }.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen }),
                         selectedIds = selectedIds,
                         todayAttendanceMap = todayAttendanceMap,
                         searchQuery = searchQuery,
@@ -208,7 +225,7 @@ fun AdminScreen(
                             }
                         },
                         onEmployeeLongClick = { emp ->
-                            adminViewModel.toggleEmployeeSelection(emp.userId)
+                            longClickedEmployee = emp
                         }
                     )
                 }
@@ -216,52 +233,460 @@ fun AdminScreen(
         }
     }
 
-    if (showBatchEditDialog) {
-        var batchLcb by remember { mutableStateOf("") }
-        var batchPcXangXe by remember { mutableStateOf("") }
-        var batchChuyenCan by remember { mutableStateOf("") }
-        var addBatchAttendance by remember { mutableStateOf(false) }
-
+    if (longClickedEmployee != null) {
         AlertDialog(
-            onDismissRequest = { showBatchEditDialog = false },
-            title = { Text("Sửa hàng loạt (${selectedIds.size} NV)", color = White) },
+            onDismissRequest = { longClickedEmployee = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ManageAccounts, contentDescription = null, tint = NeonBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tùy chọn nhân viên", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Chỉ nhập vào ô muốn thay đổi cho tất cả đã chọn:", color = Color.Gray, fontSize = 12.sp)
-                    AdminInputField("Lương Cơ Bản mới", batchLcb, onValueChange = { batchLcb = it }, isNumeric = true)
-                    AdminInputField("Phụ cấp xăng xe mới", batchPcXangXe, onValueChange = { batchPcXangXe = it }, isNumeric = true)
-                    AdminInputField("Tiền chuyên cần mới", batchChuyenCan, onValueChange = { batchChuyenCan = it }, isNumeric = true)
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Thêm công hàng loạt cho ngày hiện tại:", color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = addBatchAttendance, onCheckedChange = { addBatchAttendance = it }, colors = CheckboxDefaults.colors(checkedColor = NeonBlue))
-                        Text("Thêm công (08:00 - 17:00)", color = White, fontSize = 13.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "${longClickedEmployee?.hoVaTen} (${longClickedEmployee?.maNhanVien})",
+                        color = NeonBlue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text("Chọn chế độ chọn hoặc chấm công:", color = Color.Gray, fontSize = 12.sp)
+
+                    // Option 1: Select All Employees
+                    Button(
+                        onClick = {
+                            val allList = employees.map { it.userId }
+                            adminViewModel.selectAllEmployees(allList)
+                            longClickedEmployee = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkContainer),
+                        border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.5f))
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Start, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.SelectAll, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Chọn tất cả nhân viên (${employees.size} NV)", color = White, fontSize = 13.sp)
+                        }
+                    }
+
+                    // Option 2: Toggle select this individual employee
+                    val isThisSelected = selectedIds.contains(longClickedEmployee?.userId)
+                    Button(
+                        onClick = {
+                            longClickedEmployee?.let { adminViewModel.toggleEmployeeSelection(it.userId) }
+                            longClickedEmployee = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkContainer),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Start, modifier = Modifier.fillMaxWidth()) {
+                            Icon(
+                                if (isThisSelected) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                contentDescription = null,
+                                tint = if (isThisSelected) AccentOrange else White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                if (isThisSelected) "Bỏ chọn nhân viên này" else "Chọn duy nhất / Thêm NV này",
+                                color = White,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    // Option 3: Quick Batch Attendance Dialog
+                    Button(
+                        onClick = {
+                            val emp = longClickedEmployee
+                            if (emp != null && !selectedIds.contains(emp.userId)) {
+                                adminViewModel.toggleEmployeeSelection(emp.userId)
+                            }
+                            longClickedEmployee = null
+                            showBatchEditDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue.copy(alpha = 0.2f)),
+                        border = BorderStroke(1.dp, NeonBlue)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Start, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.EditCalendar, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text("Chấm công & Sửa hàng loạt ngay", color = NeonBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    if (batchLcb.isNotEmpty() || batchPcXangXe.isNotEmpty() || batchChuyenCan.isNotEmpty()) {
-                        adminViewModel.batchUpdateSalaryConfig { emp ->
-                            emp.copy(
-                                luongCoBan = batchLcb.toDoubleOrNull() ?: emp.luongCoBan,
-                                pcXangXe = batchPcXangXe.toDoubleOrNull() ?: emp.pcXangXe,
-                                tienChuyenCanGoc = batchChuyenCan.toDoubleOrNull() ?: emp.tienChuyenCanGoc
+                TextButton(onClick = { longClickedEmployee = null }) {
+                    Text("Đóng", color = Color.Gray)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    if (showBatchEditDialog) {
+        var selectedMode by remember { mutableStateOf(0) } // 0: Vào ca / Thêm ca, 1: Ra ca hàng loạt, 2: Sửa Lương
+
+        var batchLcb by remember { mutableStateOf("") }
+        var batchPcXangXe by remember { mutableStateOf("") }
+        var batchChuyenCan by remember { mutableStateOf("") }
+
+        val todayDdMmYyyy = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) }
+        var batchDateInput by remember { mutableStateOf(todayDdMmYyyy.replace("/", "")) }
+        var batchClockIn by remember { mutableStateOf("07:30") }
+        var batchClockOut by remember { mutableStateOf("19:30") }
+        var batchNote by remember { mutableStateOf("Admin chấm công hàng loạt") }
+        var activeShiftPreset by remember { mutableStateOf("7:30-19:30") }
+
+        AlertDialog(
+            onDismissRequest = { showBatchEditDialog = false },
+            title = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.EditCalendar, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Chấm công hàng loạt (${selectedIds.size} NV)", color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedMode == 0,
+                            onClick = { selectedMode = 0 },
+                            label = { Text("Vào / Thêm ca", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonBlue.copy(alpha = 0.3f),
+                                selectedLabelColor = NeonBlue
                             )
+                        )
+                        FilterChip(
+                            selected = selectedMode == 1,
+                            onClick = { 
+                                selectedMode = 1
+                                if (batchNote == "Admin chấm công hàng loạt") {
+                                    batchNote = "Admin ra ca hàng loạt"
+                                }
+                            },
+                            label = { Text("Ra ca hàng loạt", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AccentOrange.copy(alpha = 0.3f),
+                                selectedLabelColor = AccentOrange
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedMode == 2,
+                            onClick = { selectedMode = 2 },
+                            label = { Text("Sửa Lương", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF00E676).copy(alpha = 0.3f),
+                                selectedLabelColor = Color(0xFF00E676)
+                            )
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    when (selectedMode) {
+                        0 -> {
+                            // MODE 0: VÀO / THÊM CA HÀNG LOẠT
+                            Surface(
+                                color = Color.White.copy(alpha = 0.04f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Chọn mẫu ca chuẩn:", color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            FilterChip(
+                                                selected = activeShiftPreset == "7:30-19:30",
+                                                onClick = {
+                                                    activeShiftPreset = "7:30-19:30"
+                                                    batchClockIn = "07:30"
+                                                    batchClockOut = "19:30"
+                                                },
+                                                label = { Text("7:30 - 19:30 (Ca ngày)", fontSize = 11.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = NeonBlue.copy(alpha = 0.25f),
+                                                    selectedLabelColor = NeonBlue
+                                                )
+                                            )
+                                            FilterChip(
+                                                selected = activeShiftPreset == "7:30-20:00",
+                                                onClick = {
+                                                    activeShiftPreset = "7:30-20:00"
+                                                    batchClockIn = "07:30"
+                                                    batchClockOut = "20:00"
+                                                },
+                                                label = { Text("7:30 - 20:00 (Ca ngày)", fontSize = 11.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = AccentOrange.copy(alpha = 0.25f),
+                                                    selectedLabelColor = AccentOrange
+                                                )
+                                            )
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            FilterChip(
+                                                selected = activeShiftPreset == "19:30-07:30",
+                                                onClick = {
+                                                    activeShiftPreset = "19:30-07:30"
+                                                    batchClockIn = "19:30"
+                                                    batchClockOut = "07:30"
+                                                },
+                                                label = { Text("19:30 - 07:30 (Ca đêm)", fontSize = 11.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFFAB47BC).copy(alpha = 0.25f),
+                                                    selectedLabelColor = Color(0xFFAB47BC)
+                                                )
+                                            )
+                                            FilterChip(
+                                                selected = activeShiftPreset == "7:30-15:30",
+                                                onClick = {
+                                                    activeShiftPreset = "7:30-15:30"
+                                                    batchClockIn = "07:30"
+                                                    batchClockOut = "15:30"
+                                                },
+                                                label = { Text("7:30 - 15:30 (Hành chính)", fontSize = 11.sp) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = Color(0xFF00E676).copy(alpha = 0.25f),
+                                                    selectedLabelColor = Color(0xFF00E676)
+                                                )
+                                            )
+                                        }
+                                        FilterChip(
+                                            selected = activeShiftPreset == "Đang làm",
+                                            onClick = {
+                                                activeShiftPreset = "Đang làm"
+                                                batchClockIn = "07:30"
+                                                batchClockOut = ""
+                                            },
+                                            label = { Text("Đang làm (Để trống giờ ra)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = Color(0xFFFFD54F).copy(alpha = 0.25f),
+                                                selectedLabelColor = Color(0xFFFFD54F)
+                                            )
+                                        )
+                                    }
+
+                                    AdminInputField(
+                                        label = "Ngày chấm công (DD/MM/YYYY)",
+                                        value = batchDateInput,
+                                        onValueChange = { input ->
+                                            val clean = input.filter { it.isDigit() }.take(8)
+                                            batchDateInput = clean
+                                        },
+                                        keyboardType = KeyboardType.Number,
+                                        visualTransformation = DateVisualTransformation()
+                                    )
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            AdminInputField(
+                                                label = "Giờ vào ca",
+                                                value = batchClockIn,
+                                                onValueChange = { batchClockIn = autoFormatTimeInput(it) },
+                                                keyboardType = KeyboardType.Number
+                                            )
+                                        }
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            AdminInputField(
+                                                label = "Giờ ra ca (Trống = đang làm)",
+                                                value = batchClockOut,
+                                                onValueChange = { batchClockOut = autoFormatTimeInput(it) },
+                                                keyboardType = KeyboardType.Number
+                                            )
+                                        }
+                                    }
+
+                                    if (batchClockOut.isEmpty()) {
+                                        Text(
+                                            "💡 Để trống giờ ra = Nhân viên đang trong ca làm (chưa ra ca).",
+                                            color = Color(0xFFFFD54F),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    AdminInputField(
+                                        label = "Ghi chú chấm công",
+                                        value = batchNote,
+                                        onValueChange = { batchNote = it }
+                                    )
+
+                                    Text(
+                                        "⚡ Tự động nhận diện giờ khi gõ số (VD: gõ 0730 -> 07:30, 1930 -> 19:30, 2000 -> 20:00)",
+                                        color = Color.Gray,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+                        1 -> {
+                            // MODE 1: RA CA HÀNG LOẠT
+                            Surface(
+                                color = Color.White.copy(alpha = 0.04f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, AccentOrange.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Cập nhật giờ RA CA hàng loạt cho NV đang làm:", color = AccentOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                                    Text("Mẫu giờ ra ca nhanh:", color = Color.Gray, fontSize = 11.sp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = batchClockOut == "19:30",
+                                            onClick = { batchClockOut = "19:30" },
+                                            label = { Text("19:30", fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentOrange.copy(alpha = 0.3f), selectedLabelColor = AccentOrange)
+                                        )
+                                        FilterChip(
+                                            selected = batchClockOut == "20:00",
+                                            onClick = { batchClockOut = "20:00" },
+                                            label = { Text("20:00", fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentOrange.copy(alpha = 0.3f), selectedLabelColor = AccentOrange)
+                                        )
+                                        FilterChip(
+                                            selected = batchClockOut == "07:30",
+                                            onClick = { batchClockOut = "07:30" },
+                                            label = { Text("07:30", fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentOrange.copy(alpha = 0.3f), selectedLabelColor = AccentOrange)
+                                        )
+                                        FilterChip(
+                                            selected = batchClockOut == "17:00",
+                                            onClick = { batchClockOut = "17:00" },
+                                            label = { Text("17:00", fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentOrange.copy(alpha = 0.3f), selectedLabelColor = AccentOrange)
+                                        )
+                                    }
+
+                                    AdminInputField(
+                                        label = "Ngày ra ca (DD/MM/YYYY)",
+                                        value = batchDateInput,
+                                        onValueChange = { input ->
+                                            val clean = input.filter { it.isDigit() }.take(8)
+                                            batchDateInput = clean
+                                        },
+                                        keyboardType = KeyboardType.Number,
+                                        visualTransformation = DateVisualTransformation()
+                                    )
+
+                                    AdminInputField(
+                                        label = "Giờ ra ca thực tế",
+                                        value = batchClockOut,
+                                        onValueChange = { batchClockOut = autoFormatTimeInput(it) },
+                                        keyboardType = KeyboardType.Number
+                                    )
+
+                                    AdminInputField(
+                                        label = "Ghi chú ra ca",
+                                        value = batchNote,
+                                        onValueChange = { batchNote = it }
+                                    )
+
+                                    Text(
+                                        "⚡ Sẽ cập nhật giờ ra ca cho tất cả ${selectedIds.size} NV đã chọn trong ngày này.",
+                                        color = Color.LightGray,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                        2 -> {
+                            // MODE 2: CẤU HÌNH LƯƠNG HÀNG LOẠT
+                            Surface(
+                                color = Color.White.copy(alpha = 0.02f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Cập nhật lương & Phụ cấp hàng loạt:", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    AdminInputField("Lương Cơ Bản mới", batchLcb, onValueChange = { batchLcb = it }, isNumeric = true)
+                                    AdminInputField("Phụ cấp xăng xe mới", batchPcXangXe, onValueChange = { batchPcXangXe = it }, isNumeric = true)
+                                    AdminInputField("Tiền chuyên cần mới", batchChuyenCan, onValueChange = { batchChuyenCan = it }, isNumeric = true)
+                                }
+                            }
                         }
                     }
-                    if (addBatchAttendance) {
-                        val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-                        adminViewModel.batchAddAttendance(today, "08:00", "17:00")
-                    }
-                    showBatchEditDialog = false
-                }) {
-                    Text("Áp dụng")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val formattedDateStr = if (batchDateInput.length == 8) {
+                            val d = batchDateInput.substring(0, 2)
+                            val m = batchDateInput.substring(2, 4)
+                            val y = batchDateInput.substring(4, 8)
+                            "$d/$m/$y"
+                        } else {
+                            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+                        }
+
+                        when (selectedMode) {
+                            0 -> {
+                                adminViewModel.batchAddAttendance(formattedDateStr, batchClockIn.trim(), batchClockOut.trim(), batchNote.trim())
+                            }
+                            1 -> {
+                                adminViewModel.batchCheckout(formattedDateStr, batchClockOut.trim(), batchNote.trim())
+                            }
+                            2 -> {
+                                if (batchLcb.isNotEmpty() || batchPcXangXe.isNotEmpty() || batchChuyenCan.isNotEmpty()) {
+                                    adminViewModel.batchUpdateSalaryConfig { emp ->
+                                        emp.copy(
+                                            luongCoBan = batchLcb.toDoubleOrNull() ?: emp.luongCoBan,
+                                            pcXangXe = batchPcXangXe.toDoubleOrNull() ?: emp.pcXangXe,
+                                            tienChuyenCanGoc = batchChuyenCan.toDoubleOrNull() ?: emp.tienChuyenCanGoc
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        showBatchEditDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when (selectedMode) {
+                            1 -> AccentOrange
+                            2 -> Color(0xFF00E676)
+                            else -> NeonBlue
+                        }
+                    )
+                ) {
+                    Text(
+                        text = when (selectedMode) {
+                            1 -> "Xác nhận Ra Ca (${selectedIds.size} NV)"
+                            2 -> "Cập nhật Lương (${selectedIds.size} NV)"
+                            else -> "Chấm Công (${selectedIds.size} NV)"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showBatchEditDialog = false }) { Text("Hủy") }
+                TextButton(onClick = { showBatchEditDialog = false }) { Text("Hủy", color = Color.Gray) }
             },
             containerColor = DarkContainer
         )
@@ -401,17 +826,38 @@ fun AdminScreen(
     }
 
     if (showBatchExportDialog) {
-        var exportMonth by remember { mutableStateOf(SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date())) }
-        
+        val defaultMonthStr = SimpleDateFormat("MM/yyyy", Locale.getDefault()).format(Date())
+        var exportInput by remember { mutableStateOf(defaultMonthStr) }
+
+        val normalizedYymm = remember(exportInput) { normalizeMonthYearInput(exportInput) }
+        val displayMonthLabel = remember(normalizedYymm) {
+            try {
+                val parts = normalizedYymm.split("-")
+                "Tháng ${parts[1]}/${parts[0]}"
+            } catch (e: Exception) {
+                "Tháng $normalizedYymm"
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { if (!isExportingByVM) showBatchExportDialog = false },
-            title = { Text("Xuất Phiếu Lương Hàng Loạt", color = White) },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Xuất Phiếu Lương Hàng Loạt", color = White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
             text = {
                 val keyboardController = LocalSoftwareKeyboardController.current
                 val focusManager = LocalFocusManager.current
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     if (isExportingByVM) {
-                        Text("Đang tổng hợp và xuất dữ liệu... ${(exportProgressByVM * 100).toInt()}%", color = White)
+                        Text("Đang tổng hợp và xuất dữ liệu phiếu lương... ${(exportProgressByVM * 100).toInt()}%", color = White, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { exportProgressByVM },
@@ -419,16 +865,19 @@ fun AdminScreen(
                             color = NeonBlue,
                             trackColor = DarkBackground
                         )
+                        Text("Vui lòng chờ trong giây lát...", color = Color.Gray, fontSize = 11.sp)
                     } else {
-                        Text("Chọn tháng muốn xuất phiếu lương:", color = White, fontSize = 14.sp)
+                        Text("Nhập tháng và năm cần xuất phiếu lương:", color = White, fontSize = 13.sp)
+
                         OutlinedTextField(
-                            value = exportMonth,
-                            onValueChange = { exportMonth = it },
-                            label = { Text("Tháng (yyyy-MM)") },
+                            value = exportInput,
+                            onValueChange = { exportInput = it },
+                            label = { Text("Nhập Tháng/Năm (VD: 08/2026, 8-2026, 082026)") },
+                            placeholder = { Text("08/2026") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Phone,
+                                keyboardType = KeyboardType.Number,
                                 imeAction = ImeAction.Done
                             ),
                             keyboardActions = KeyboardActions(
@@ -437,23 +886,80 @@ fun AdminScreen(
                                     keyboardController?.hide()
                                 }
                             ),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White)
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = White,
+                                unfocusedTextColor = White,
+                                focusedBorderColor = NeonBlue,
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f)
+                            )
                         )
-                        Text("Hệ thống sẽ tổng hợp và xuất phiếu lương cho toàn bộ ${employees.size} nhân viên dưới dạng hình ảnh (.PNG).", color = Color.Gray, fontSize = 12.sp)
-                        Text("Lưu ý: Dữ liệu được lấy từ cloud. Nếu nhân viên chưa đồng bộ, dữ liệu có thể bị thiếu.", color = AccentOrange.copy(alpha = 0.8f), fontSize = 11.sp)
+
+                        // Smart Auto-Detection Indicator Card
+                        Surface(
+                            color = NeonBlue.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Hệ thống tự động nhận diện:", color = Color.LightGray, fontSize = 11.sp)
+                                    Text("$displayMonthLabel (Mã: $normalizedYymm)", color = NeonBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                            }
+                        }
+
+                        // Quick selection buttons
+                        Text("Chọn nhanh tháng:", color = Color.Gray, fontSize = 11.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    exportInput = String.format(Locale.US, "%02d/%04d", cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+                                },
+                                label = { Text("Tháng này", fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = NeonBlue.copy(alpha = 0.2f), selectedLabelColor = NeonBlue)
+                            )
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    val cal = Calendar.getInstance()
+                                    cal.add(Calendar.MONTH, -1)
+                                    exportInput = String.format(Locale.US, "%02d/%04d", cal.get(Calendar.MONTH) + 1, cal.get(Calendar.YEAR))
+                                },
+                                label = { Text("Tháng trước", fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(selectedContainerColor = AccentOrange.copy(alpha = 0.2f), selectedLabelColor = AccentOrange)
+                            )
+                        }
+
+                        Text("⚡ Bạn có thể nhập số liền nhau (VD: 082026), cách nhau gạch (8-2026), xược (8/2026), hoặc gõ chữ (Tháng 8 năm 2026) hệ thống đều tự động nhận dạng chính xác.", color = Color.Gray, fontSize = 10.sp)
+
+                        Text("Hệ thống sẽ tổng hợp và xuất phiếu lương cho toàn bộ ${employees.size} nhân viên dưới dạng hình ảnh (.PNG) lưu vào thư mục Download/TimeSnapPro.", color = Color.LightGray, fontSize = 11.sp)
                     }
                 }
             },
             confirmButton = {
                 if (!isExportingByVM) {
-                    Button(onClick = { adminViewModel.performBatchExport(context, exportMonth) }) {
-                        Text("Bắt đầu xuất")
+                    Button(
+                        onClick = { adminViewModel.performBatchExport(context, normalizedYymm) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                    ) {
+                        Text("Xuất $displayMonthLabel (${employees.size} NV)", fontWeight = FontWeight.Bold)
                     }
                 }
             },
             dismissButton = {
                 if (!isExportingByVM) {
-                    TextButton(onClick = { showBatchExportDialog = false }) { Text("Đóng") }
+                    TextButton(onClick = { showBatchExportDialog = false }) { Text("Đóng", color = Color.Gray) }
                 }
             },
             containerColor = DarkContainer
@@ -1690,7 +2196,10 @@ fun AttendanceSummaryBoard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -1699,15 +2208,19 @@ fun AttendanceSummaryBoard(
                     ) {
                         Icon(Icons.Default.Analytics, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(18.dp))
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "TỔNG QUAN THÁNG",
                         color = White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        letterSpacing = 0.5.sp
+                        fontSize = 13.sp,
+                        letterSpacing = 0.3.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(6.dp))
 
                 Surface(
                     color = PrimaryBlue.copy(alpha = 0.12f),
@@ -1719,7 +2232,9 @@ fun AttendanceSummaryBoard(
                         color = PrimaryBlue,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -2108,6 +2623,7 @@ fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
                 workedRecords.forEach { record ->
                     val hrs = (record.clockOutTime!! - record.clockInTime) / 3600000.0
                     val barHeightFraction = (hrs / maxHours).coerceIn(0.01, 1.0).toFloat()
+                    val isNight = com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
                     
                     val dayNum = try {
                         val parts = record.dateString.split("/")
@@ -2122,7 +2638,7 @@ fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
                     ) {
                         Text(
                             text = String.format(Locale.US, "%.1f", hrs),
-                            color = White,
+                            color = if (isNight) NightPurple else White,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(bottom = 4.dp)
@@ -2134,7 +2650,13 @@ fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
                                 .fillMaxHeight(barHeightFraction)
                                 .background(
                                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                        colors = listOf(NeonBlue, NeonBlue.copy(alpha = 0.2f))
+                                        colors = if (isNight) {
+                                            listOf(NightPurple, NightPurple.copy(alpha = 0.2f))
+                                        } else if (hrs > 8.0) {
+                                            listOf(AccentGreen, AccentGreen.copy(alpha = 0.2f))
+                                        } else {
+                                            listOf(NeonBlue, NeonBlue.copy(alpha = 0.2f))
+                                        }
                                     ),
                                     shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
                                 )
@@ -2154,8 +2676,17 @@ fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
             Spacer(modifier = Modifier.height(12.dp))
             
-            val avg = hoursList.average()
-            val total = hoursList.sum()
+            val dayHours = workedRecords.filter { record ->
+                !com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
+            }.sumOf { (it.clockOutTime!! - it.clockInTime) / 3600000.0 }
+
+            val nightHours = workedRecords.filter { record ->
+                com.example.data.SalaryCalculator.isNightShift(record.clockInTime, record.clockOutTime)
+            }.sumOf { (it.clockOutTime!! - it.clockInTime) / 3600000.0 }
+
+            val total = dayHours + nightHours
+            val avg = if (workedRecords.isNotEmpty()) total / workedRecords.size else 0.0
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -2166,7 +2697,17 @@ fun MonthlyWorkHoursChart(records: List<AttendanceRecord>) {
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Tổng số giờ làm", color = Color.Gray, fontSize = 11.sp)
-                    Text(String.format(Locale.US, "%.1f giờ", total), color = SuccessGreen, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (dayHours > 0.0) {
+                            Text(String.format(Locale.US, "Ca ngày: %.1fh", dayHours), color = NeonBlue, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (nightHours > 0.0) {
+                            Text(String.format(Locale.US, "Ca đêm: %.1fh", nightHours), color = NightPurple, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (dayHours == 0.0 && nightHours == 0.0) {
+                            Text("0.0 giờ", color = White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -2249,6 +2790,7 @@ fun EmployeeConfigEdit(
     var dept by remember { mutableStateOf(employee.boPhan) }
     var schedule by remember { mutableStateOf(employee.lichTrinh) }
     var ngayVaoLam by remember { mutableStateOf(employee.ngayVaoLam) }
+    var ngayVaoLamInput by remember { mutableStateOf(convertYyyyMmDdToDdMmYyyy(employee.ngayVaoLam)) }
 
     // Salary & Insurance
     var lcb by remember { mutableStateOf(formatCurrency(employee.luongCoBan)) }
@@ -2306,10 +2848,25 @@ fun EmployeeConfigEdit(
                 AdminInputField("Email Đăng Ký", email, onValueChange = { email = it })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        AdminInputField("Lịch trình", schedule, onValueChange = { schedule = it })
+                        AdminInputField("Lịch trình", schedule, onValueChange = { schedule = it }, keyboardType = KeyboardType.Phone)
                     }
                     Box(modifier = Modifier.weight(1f)) {
-                        AdminInputField("Ngày Vào Làm", ngayVaoLam, onValueChange = { ngayVaoLam = it })
+                        AdminInputField(
+                            label = "Ngày Vào Làm", 
+                            value = ngayVaoLamInput, 
+                            onValueChange = { input ->
+                                var clean = input.filter { it.isDigit() }.take(8)
+                                if (clean.length == 8) {
+                                    val isoDate = convertDdMmYyyyToYyyyMmDd(clean)
+                                    ngayVaoLam = isoDate
+                                } else if (clean.isEmpty()) {
+                                    ngayVaoLam = ""
+                                }
+                                ngayVaoLamInput = clean
+                            },
+                            keyboardType = KeyboardType.Number,
+                            visualTransformation = DateVisualTransformation()
+                        )
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
@@ -2469,13 +3026,130 @@ fun formatCurrency(value: Double): String {
     return String.format("%,d", value.toLong()).replace(",", ".")
 }
 
+fun convertYyyyMmDdToDdMmYyyy(input: String): String {
+    if (input.isBlank()) return ""
+    val parts = input.split("-")
+    if (parts.size == 3) {
+        return "${parts[2]}${parts[1]}${parts[0]}"
+    }
+    return input
+}
+
+fun convertDdMmYyyyToYyyyMmDd(input: String): String {
+    val digits = input.filter { it.isDigit() }
+    if (digits.length == 8) {
+        val d = digits.substring(0, 2)
+        val m = digits.substring(2, 4)
+        val y = digits.substring(4, 8)
+        return "$y-$m-$d"
+    }
+    if (input.contains("/")) {
+        val parts = input.split("/")
+        if (parts.size == 3) {
+            val d = parts[0].padStart(2, '0')
+            val m = parts[1].padStart(2, '0')
+            val y = parts[2]
+            return "$y-$m-$d"
+        }
+    }
+    return input
+}
+
+fun autoFormatTimeInput(input: String): String {
+    val digits = input.filter { it.isDigit() }.take(4)
+    return when (digits.length) {
+        0 -> ""
+        1, 2 -> digits
+        3 -> "${digits.substring(0, 1).padStart(2, '0')}:${digits.substring(1)}"
+        4 -> "${digits.substring(0, 2)}:${digits.substring(2)}"
+        else -> input
+    }
+}
+
+fun normalizeMonthYearInput(input: String): String {
+    val currentCal = Calendar.getInstance()
+    val currentYear = currentCal.get(Calendar.YEAR)
+    val currentMonth = currentCal.get(Calendar.MONTH) + 1
+
+    val clean = input.trim().lowercase(Locale.getDefault())
+    if (clean.isEmpty()) {
+        return String.format(Locale.US, "%04d-%02d", currentYear, currentMonth)
+    }
+
+    val numberTokens = Regex("\\d+").findAll(clean).map { it.value }.toList()
+    if (numberTokens.isEmpty()) {
+        return String.format(Locale.US, "%04d-%02d", currentYear, currentMonth)
+    }
+
+    var year = currentYear
+    var month = currentMonth
+
+    if (numberTokens.size == 1) {
+        val numStr = numberTokens[0]
+        when (numStr.length) {
+            1, 2 -> {
+                month = numStr.toIntOrNull() ?: currentMonth
+            }
+            3 -> {
+                month = numStr.substring(0, 1).toIntOrNull() ?: currentMonth
+                val yrDigit = numStr.substring(1).toIntOrNull() ?: 26
+                year = if (yrDigit < 100) 2000 + yrDigit else yrDigit
+            }
+            4 -> {
+                val valInt = numStr.toIntOrNull() ?: 0
+                if (valInt in 2020..2035) {
+                    year = valInt
+                } else {
+                    val m = numStr.substring(0, 2).toIntOrNull() ?: currentMonth
+                    val y = numStr.substring(2, 4).toIntOrNull() ?: (currentYear % 100)
+                    month = m
+                    year = if (y < 100) 2000 + y else y
+                }
+            }
+            6 -> {
+                val first4 = numStr.substring(0, 4).toIntOrNull() ?: 0
+                if (first4 in 2020..2035) {
+                    year = first4
+                    month = numStr.substring(4, 6).toIntOrNull() ?: currentMonth
+                } else {
+                    month = numStr.substring(0, 2).toIntOrNull() ?: currentMonth
+                    year = numStr.substring(2, 6).toIntOrNull() ?: currentYear
+                }
+            }
+            else -> {
+                month = numStr.take(2).toIntOrNull() ?: currentMonth
+            }
+        }
+    } else if (numberTokens.size >= 2) {
+        val token1 = numberTokens[0].toIntOrNull() ?: 0
+        val token2 = numberTokens[1].toIntOrNull() ?: 0
+
+        if (token1 > 100) {
+            year = token1
+            month = token2
+        } else if (token2 > 100) {
+            month = token1
+            year = token2
+        } else {
+            month = token1
+            year = if (token2 < 100) 2000 + token2 else token2
+        }
+    }
+
+    val finalMonth = month.coerceIn(1, 12)
+    val finalYear = if (year in 2000..2099) year else currentYear
+
+    return String.format(Locale.US, "%04d-%02d", finalYear, finalMonth)
+}
+
 @Composable
 fun AdminInputField(
     label: String, 
     value: String, 
     onValueChange: (String) -> Unit,
     isNumeric: Boolean = false,
-    keyboardType: KeyboardType? = null
+    keyboardType: KeyboardType? = null,
+    visualTransformation: VisualTransformation? = null
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -2485,18 +3159,30 @@ fun AdminInputField(
             label.contains("%") || label.contains("giờ") || label.contains("Giờ") || 
             label.contains("Tỉ lệ") || label.contains("Tỷ lệ")
     
+    val isScheduleOrTimeOrDate = label.contains("Lịch") || label.contains("lịch") ||
+            label.contains("Ca") || label.contains("ca") ||
+            label.contains("Giờ") || label.contains("giờ") ||
+            label.contains("Ngày") || label.contains("ngày") ||
+            label.contains("Tháng") || label.contains("tháng") ||
+            label.contains("Thời gian") || label.contains("thời gian") ||
+            label.contains("Số điện thoại") || label.contains("SĐT")
+
     val effectiveKeyboardType = keyboardType ?: if (isNumeric) {
         if (isDecimal) KeyboardType.Decimal else KeyboardType.Number
     } else {
         if (label.contains("Email")) {
             KeyboardType.Email
-        } else if (label.contains("Số điện thoại") || label.contains("SĐT") || 
-                   label.contains("Ngày") || label.contains("Giờ") || 
-                   label.contains("Tháng")) {
+        } else if (isScheduleOrTimeOrDate) {
             KeyboardType.Phone
         } else {
             KeyboardType.Text
         }
+    }
+
+    val effectiveVisualTransformation = visualTransformation ?: if (isNumeric && !isDecimal && effectiveKeyboardType != KeyboardType.Decimal && effectiveKeyboardType != KeyboardType.Phone) {
+        ThousandSeparatorVisualTransformation()
+    } else {
+        VisualTransformation.None
     }
 
     OutlinedTextField(
@@ -2528,11 +3214,7 @@ fun AdminInputField(
                 keyboardController?.hide()
             }
         ),
-        visualTransformation = if (isNumeric && !isDecimal && effectiveKeyboardType != KeyboardType.Decimal && effectiveKeyboardType != KeyboardType.Phone) {
-            ThousandSeparatorVisualTransformation()
-        } else {
-            VisualTransformation.None
-        },
+        visualTransformation = effectiveVisualTransformation,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = White,
             unfocusedTextColor = White,

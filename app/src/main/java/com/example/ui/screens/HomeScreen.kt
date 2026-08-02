@@ -348,7 +348,7 @@ fun HomeScreen(
                             val alarmDesc = when {
                                 notificationsEnabled -> "Nhắc nhở chấm công: Đang bật"
                                 autoClockInOutEnabled -> "Tự động chấm công: Đang bật"
-                                else -> "Cấu hình nhắc nhở: Đang tắt"
+                                else -> "Nhắc nhở: Đang tắt"
                             }
                             
                             Icon(
@@ -1371,7 +1371,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "CẤU HÌNH NHẮC NHỞ",
+                        text = "NHẮC NHỞ CHẤM CÔNG",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = White
@@ -1817,7 +1817,7 @@ fun HomeScreen(
             },
             title = {
                 Text(
-                    text = "CẤU HÌNH NHẮC NHỞ CHẤM CÔNG",
+                    text = "NHẮC NHỞ CHẤM CÔNG",
                     color = White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
@@ -2359,6 +2359,8 @@ fun MonthlyActivityChart(data: List<DayChartPoint>, selectedMonth: String = "") 
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
             Spacer(modifier = Modifier.height(8.dp))
 
+            val dayHours = data.filter { !it.isNightShift }.sumOf { it.hours }
+            val nightHours = data.filter { it.isNightShift }.sumOf { it.hours }
             val avg = if (workedPoints.isNotEmpty()) workedPoints.map { it.hours }.average() else 0.0
             val total = hoursList.sum()
             Row(
@@ -2371,7 +2373,17 @@ fun MonthlyActivityChart(data: List<DayChartPoint>, selectedMonth: String = "") 
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Tổng số giờ làm", color = Color.Gray, fontSize = 10.sp)
-                    Text(String.format(Locale.US, "%.1f giờ", total), color = SuccessGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (dayHours > 0.0) {
+                            Text(String.format(Locale.US, "Ca ngày: %.1fh", dayHours), color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (nightHours > 0.0) {
+                            Text(String.format(Locale.US, "Ca đêm: %.1fh", nightHours), color = NightPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (dayHours == 0.0 && nightHours == 0.0) {
+                            Text("0.0 giờ", color = White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

@@ -252,6 +252,22 @@ fun PayslipScreen(
                     if (!isCurrentSelectedMonth) 1 else (lastLoggedDayOfMonth + 1).coerceAtLeast(todayDayOfMonth + 1)
                 }
 
+                val totalSundaysInMonth = remember(targetYear, targetMonth, maxDaysInMonth) {
+                    val cal = Calendar.getInstance()
+                    var count = 0
+                    for (day in 1..maxDaysInMonth) {
+                        cal.set(Calendar.YEAR, targetYear)
+                        cal.set(Calendar.MONTH, targetMonth - 1)
+                        cal.set(Calendar.DAY_OF_MONTH, day)
+                        val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                        val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+                        if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY && !isHoliday) {
+                            count++
+                        }
+                    }
+                    count
+                }
+
                 val defaultRemainingSundays = remember(targetYear, targetMonth, startProjectionDay, isCurrentSelectedMonth) {
                     if (!isCurrentSelectedMonth) 0 else {
                         val cal = Calendar.getInstance()
@@ -366,7 +382,7 @@ fun PayslipScreen(
                 val soNgayCongDuKien = if (isCurrentSelectedMonth) {
                     s.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
                 } else {
-                    s.standardWorkDays
+                    maxOf(s.workingDays, s.standardWorkDays)
                 }
                 val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
 
@@ -602,7 +618,7 @@ fun PayslipScreen(
                         if (selectedTab == 1) {
                             PayslipProfileRow(
                                 label = "Số ngày công dự kiến:", 
-                                value = "${soNgayCongDuKien.toInt()} / ${s.expectedWorkDays} ngày"
+                                value = "${soNgayCongDuKien.toInt()} / ${if (isCurrentSelectedMonth) s.expectedWorkDays else s.standardWorkDays} ngày"
                             )
                             if (isCurrentSelectedMonth) {
                                 PayslipProfileRow(
@@ -649,7 +665,7 @@ fun PayslipScreen(
                                     ) {
                                         Column {
                                             Text("Số ngày CN còn lại:", color = LightGray, fontSize = 12.sp)
-                                            Text("(Tối đa: $defaultRemainingSundays ngày)", color = Color.Gray, fontSize = 10.sp)
+                                            Text("(Tối đa lịch tháng: $totalSundaysInMonth ngày)", color = Color.Gray, fontSize = 10.sp)
                                         }
                                         
                                         var sundayInputText by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(remainingSundays.toString())) }
@@ -671,16 +687,16 @@ fun PayslipScreen(
                                                     remainingSundays = 0
                                                 } else {
                                                     cleanText.toIntOrNull()?.let { parsed ->
-                                                        if (parsed <= defaultRemainingSundays) {
+                                                        if (parsed <= totalSundaysInMonth) {
                                                             sundayInputText = newValue.copy(text = cleanText)
                                                             remainingSundays = parsed
                                                         } else {
-                                                            val cappedStr = defaultRemainingSundays.toString()
+                                                            val cappedStr = totalSundaysInMonth.toString()
                                                             sundayInputText = androidx.compose.ui.text.input.TextFieldValue(
                                                                 text = cappedStr,
                                                                 selection = androidx.compose.ui.text.TextRange(cappedStr.length)
                                                             )
-                                                            remainingSundays = defaultRemainingSundays
+                                                            remainingSundays = totalSundaysInMonth
                                                         }
                                                     }
                                                 }

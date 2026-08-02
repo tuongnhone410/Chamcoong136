@@ -64,7 +64,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoading.value = true
             val list = FirestoreService.getAllUserConfigs()
-            _employees.value = list.sortedBy { it.hoVaTen }
+            _employees.value = list.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen })
             _isLoading.value = false
             loadTodayAttendance()
         }
@@ -190,6 +190,10 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun selectAllEmployees(ids: List<String>) {
+        _selectedEmployeeIds.value = ids.toSet()
+    }
+
     fun toggleEmployeeSelection(uid: String) {
         val current = _selectedEmployeeIds.value
         if (current.contains(uid)) {
@@ -216,19 +220,70 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun batchAddAttendance(dateString: String, clockIn: String, clockOut: String) {
+    fun batchAddAttendance(dateString: String, clockIn: String, clockOut: String, notes: String = "") {
         viewModelScope.launch {
             val ids = _selectedEmployeeIds.value
             val formatPattern = if (dateString.contains("/")) "dd/MM/yyyy HH:mm" else "yyyy-MM-dd HH:mm"
             val sdf = SimpleDateFormat(formatPattern, Locale.getDefault())
             ids.forEach { uid ->
                 try {
-                    val fullIn = sdf.parse("$dateString $clockIn")?.time ?: 0L
-                    val fullOut = sdf.parse("$dateString $clockOut")?.time
-                    FirestoreService.saveAttendanceRecord(AttendanceRecord(uid = uid, dateString = dateString, clockInTime = fullIn, clockOutTime = fullOut))
-                } catch (e: Exception) {}
+                    val fullIn = sdf.parse("$dateString $clockIn")?.time ?: System.currentTimeMillis()
+                    val fullOut = if (clockOut.isNotBlank()) sdf.parse("$dateString $clockOut")?.time else null
+                    FirestoreService.saveAttendanceRecord(
+                        AttendanceRecord(
+                            uid = uid,
+                            dateString = dateString,
+                            clockInTime = fullIn,
+                            clockOutTime = fullOut,
+                            notes = notes
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("AdminViewModel", "Lỗi batchAddAttendance: ${e.message}")
+                }
             }
             _selectedEmployeeIds.value = emptySet()
+            loadTodayAttendance()
+        }
+    }
+
+    fun batchCheckout(dateString: String, clockOut: String, notes: String = "") {
+        viewModelScope.launch {
+            val ids = _selectedEmployeeIds.value
+            val formatPattern = if (dateString.contains("/")) "dd/MM/yyyy HH:mm" else "yyyy-MM-dd HH:mm"
+            val sdf = SimpleDateFormat(formatPattern, Locale.getDefault())
+            val normalizedDateStr = com.example.data.SalaryCalculator.normalizeDateToDmy(dateString)
+
+            ids.forEach { uid ->
+                try {
+                    val fullOut = if (clockOut.isNotBlank()) sdf.parse("$dateString $clockOut")?.time else System.currentTimeMillis()
+                    val existingLogs = FirestoreService.getAttendanceLogsForUser(uid)
+                    val existing = existingLogs.find { com.example.data.SalaryCalculator.normalizeDateToDmy(it.dateString) == normalizedDateStr }
+
+                    val recordToSave = if (existing != null) {
+                        existing.copy(
+                            clockOutTime = fullOut,
+                            notes = if (notes.isNotBlank()) {
+                                if (existing.notes.isNullOrBlank()) notes else "${existing.notes} | $notes"
+                            } else existing.notes
+                        )
+                    } else {
+                        val defaultIn = sdf.parse("$dateString 07:30")?.time ?: System.currentTimeMillis()
+                        AttendanceRecord(
+                            uid = uid,
+                            dateString = dateString,
+                            clockInTime = defaultIn,
+                            clockOutTime = fullOut,
+                            notes = if (notes.isNotBlank()) notes else "Admin ra ca hàng loạt"
+                        )
+                    }
+                    FirestoreService.saveAttendanceRecord(recordToSave)
+                } catch (e: Exception) {
+                    android.util.Log.e("AdminViewModel", "Lỗi batchCheckout: ${e.message}")
+                }
+            }
+            _selectedEmployeeIds.value = emptySet()
+            loadTodayAttendance()
         }
     }
 

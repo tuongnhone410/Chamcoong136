@@ -24,6 +24,10 @@ class TimeRepository(
         return timeEntryDao.getActiveEntry(userId)
     }
 
+    fun getActiveEntryFlow(userId: String): Flow<TimeEntry?> {
+        return timeEntryDao.getActiveEntryFlow(userId)
+    }
+
     suspend fun insertOrUpdate(entry: TimeEntry) {
         timeEntryDao.insertOrUpdate(entry)
     }

@@ -174,6 +174,10 @@ class DatabaseHelper private constructor(private val database: AppDatabase) {
         }
     }
 
+    suspend fun deleteAttendanceRecord(uid: String, dateString: String) {
+        deleteRecordsForDates(uid, listOf(dateString))
+    }
+
     suspend fun deleteRecordsForDates(uid: String, dates: List<String>) {
         if (dates.isEmpty()) return
         withContext(Dispatchers.IO) {

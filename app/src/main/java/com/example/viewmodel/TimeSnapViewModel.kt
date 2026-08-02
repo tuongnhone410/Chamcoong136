@@ -288,15 +288,15 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
         // Run reactive worker to fetch active working shift
         viewModelScope.launch(Dispatchers.IO) {
-            combine(currentUserSession, _triggerRefresh) { s, r -> s }
-                .collectLatest { session ->
-                    if (session != null) {
-                        val active = repository.getActiveEntry(session.uid)
-                        _activeWorkingEntry.value = active
-                    } else {
-                        _activeWorkingEntry.value = null
-                    }
+            currentUserSession.flatMapLatest { session ->
+                if (session != null) {
+                    repository.getActiveEntryFlow(session.uid)
+                } else {
+                    kotlinx.coroutines.flow.flowOf(null)
                 }
+            }.collect { active ->
+                _activeWorkingEntry.value = active
+            }
         }
 
         // Ticker loop for the active working shift text
