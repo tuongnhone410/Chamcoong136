@@ -288,70 +288,30 @@ object NotificationHelper {
 
     // Ước tính giờ ra ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
     suspend fun estimateHistoricalCheckoutTime(context: Context, uid: String, activeEntry: TimeEntry): Long {
-        val checkInMs = activeEntry.checkInTime ?: System.currentTimeMillis()
-        val customTime = getEffectiveCheckOutTime(context, checkInMs)
-        
-        if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
-            try {
-                val parts = customTime.split(":")
-                val h = parts.getOrNull(0)?.toIntOrNull() ?: 19
-                val m = parts.getOrNull(1)?.toIntOrNull() ?: 30
-                val cal = Calendar.getInstance().apply {
-                    timeInMillis = checkInMs
-                    set(Calendar.HOUR_OF_DAY, h)
-                    set(Calendar.MINUTE, m)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                if (cal.timeInMillis <= checkInMs) cal.add(Calendar.DAY_OF_YEAR, 1)
-                return cal.timeInMillis
-            } catch (e: Exception) {}
-        }
-
         var targetHour = -1
         var targetMin = -1
 
         try {
-            val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
-            val block1Days = rotationWeeks * 7L
-
             val db = com.example.data.db.AppDatabase.getInstance(context)
-            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
+            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 100)
             
             if (entries.isNotEmpty()) {
-                val calCheckIn = Calendar.getInstance().apply { timeInMillis = checkInMs }
-                val isTodayNight = calCheckIn.get(Calendar.HOUR_OF_DAY) >= 15
-                val nowMs = System.currentTimeMillis()
-
-                val block1CurrentWeeks = entries.filter { entry ->
+                val activeCi = activeEntry.checkInTime ?: System.currentTimeMillis()
+                val activeCal = java.util.Calendar.getInstance().apply { timeInMillis = activeCi }
+                val isNightShift = activeCal.get(java.util.Calendar.HOUR_OF_DAY) >= 15
+                
+                val targetEntries = entries.filter { entry ->
                     val ci = entry.checkInTime ?: return@filter false
-                    (nowMs - ci) <= block1Days * 24 * 3600 * 1000
-                }
-
-                val matchingShiftBlock1 = block1CurrentWeeks.filter { entry ->
-                    val ci = entry.checkInTime ?: return@filter false
-                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                    val hour = cal.get(Calendar.HOUR_OF_DAY)
-                    if (isTodayNight) hour >= 15 else hour < 15
-                }
-
-                val targetEntries = if (matchingShiftBlock1.isNotEmpty()) {
-                    matchingShiftBlock1
-                } else {
-                    entries.filter { entry ->
-                        val ci = entry.checkInTime ?: return@filter false
-                        val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                        val hour = cal.get(Calendar.HOUR_OF_DAY)
-                        if (isTodayNight) hour >= 15 else hour < 15
-                    }.ifEmpty { entries }
-                }
-
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = ci }
+                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                    if (isNightShift) hour >= 15 else hour < 15
+                }.ifEmpty { entries }
+                
                 val frequencyMap = mutableMapOf<Int, Int>()
                 for (entry in targetEntries) {
                     val co = entry.checkOutTime ?: continue
-                    val cal = Calendar.getInstance().apply { timeInMillis = co }
-                    val rawMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = co }
+                    val rawMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
                     val roundedMins = ((rawMins + 7) / 15) * 15 % 1440
                     frequencyMap[roundedMins] = (frequencyMap[roundedMins] ?: 0) + 1
                 }
@@ -362,138 +322,62 @@ object NotificationHelper {
                     targetMin = mostFrequentMins % 60
                 }
             }
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         if (targetHour == -1) {
-            return checkInMs + 8 * 3600 * 1000L
-        }
-
-        val targetCal = Calendar.getInstance().apply {
-            timeInMillis = checkInMs
-            set(Calendar.HOUR_OF_DAY, targetHour)
-            set(Calendar.MINUTE, targetMin)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        if (targetCal.timeInMillis <= checkInMs) {
-            targetCal.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        return targetCal.timeInMillis
-    }
-
-    // Ước tính giờ vào ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
-    suspend fun estimateHistoricalCheckInTime(context: Context, uid: String): Long {
-        var targetHour = -1
-        var targetMin = -1
-
-        try {
-            val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
-            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
-            val block1Days = rotationWeeks * 7L
-
-            val db = com.example.data.db.AppDatabase.getInstance(context)
-            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 60)
-            if (entries.isNotEmpty()) {
-                val nowMs = System.currentTimeMillis()
-
-                val block1CurrentWeeks = entries.filter { entry ->
-                    val ci = entry.checkInTime ?: return@filter false
-                    (nowMs - ci) <= block1Days * 24 * 3600 * 1000
-                }
-
-                val recentEntries = block1CurrentWeeks.ifEmpty { entries.take(5) }
-                var nightCount = 0
-                var dayCount = 0
-                for (entry in recentEntries) {
-                    val ci = entry.checkInTime ?: continue
-                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                    if (cal.get(Calendar.HOUR_OF_DAY) >= 15) nightCount++ else dayCount++
-                }
-                val isNightShift = nightCount > dayCount
-
-                val matchingShiftBlock1 = block1CurrentWeeks.filter { entry ->
-                    val ci = entry.checkInTime ?: return@filter false
-                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                    val hour = cal.get(Calendar.HOUR_OF_DAY)
-                    if (isNightShift) hour >= 15 else hour < 15
-                }
-
-                val targetEntries = if (matchingShiftBlock1.isNotEmpty()) {
-                    matchingShiftBlock1
-                } else {
-                    entries.filter { entry ->
-                        val ci = entry.checkInTime ?: return@filter false
-                        val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                        val hour = cal.get(Calendar.HOUR_OF_DAY)
-                        if (isNightShift) hour >= 15 else hour < 15
-                    }.ifEmpty { entries }
-                }
-
-                val frequencyMap = mutableMapOf<Int, Int>()
-                for (entry in targetEntries) {
-                    val ci = entry.checkInTime ?: continue
-                    val cal = Calendar.getInstance().apply { timeInMillis = ci }
-                    val rawMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-                    val roundedMins = ((rawMins + 7) / 15) * 15 % 1440
-                    frequencyMap[roundedMins] = (frequencyMap[roundedMins] ?: 0) + 1
-                }
-
-                val mostFrequentMins = frequencyMap.maxByOrNull { it.value }?.key
-                if (mostFrequentMins != null) {
-                    targetHour = mostFrequentMins / 60
-                    targetMin = mostFrequentMins % 60
-                }
-            }
-        } catch (e: Exception) {}
-
-        if (targetHour == -1) {
-            targetHour = 7
+            targetHour = 17
             targetMin = 30
         }
         val fallbackTargetHour = targetHour
         val fallbackTargetMin = targetMin
 
-        var currentTargetMs = System.currentTimeMillis()
-        var cal = Calendar.getInstance()
+        val ciMs = activeEntry.checkInTime ?: System.currentTimeMillis()
+        var currentTargetMs = ciMs
+        
+        var cal = java.util.Calendar.getInstance()
         var found = false
         var loopCount = 0
         
         while (!found && loopCount < 14) {
-            val customTime = getEffectiveCheckInTime(context, currentTargetMs)
+            val customTime = getEffectiveCheckOutTime(context, currentTargetMs)
             
             if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
                 val parts = customTime.split(":")
-                targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 7
+                targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 17
                 targetMin = parts.getOrNull(1)?.toIntOrNull() ?: 30
             } else {
                 targetHour = fallbackTargetHour
                 targetMin = fallbackTargetMin
             }
             
-            cal = Calendar.getInstance().apply {
+            cal = java.util.Calendar.getInstance().apply {
                 timeInMillis = currentTargetMs
-                set(Calendar.HOUR_OF_DAY, targetHour)
-                set(Calendar.MINUTE, targetMin)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
+                set(java.util.Calendar.HOUR_OF_DAY, targetHour)
+                set(java.util.Calendar.MINUTE, targetMin)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
             }
             
-            val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-            val isSunday = SalaryCalculator.isSunday(dateStr)
-            val isHoliday = SalaryCalculator.isHoliday(dateStr)
+            // CheckOut có thể qua ngày hôm sau nếu là ca đêm. 
+            // Ta đảm bảo Checkout > Checkin. Nếu cal < ciMs, cộng 1 ngày
+            if (cal.timeInMillis < ciMs + 4 * 3600 * 1000L) { // Tối thiểu làm 4 tiếng
+                cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
             
-            if (!isSunday && !isHoliday && cal.timeInMillis > System.currentTimeMillis()) {
+            if (cal.timeInMillis > System.currentTimeMillis()) {
                 found = true
                 break
             }
             
-            val nextDay = Calendar.getInstance().apply {
+            val nextDay = java.util.Calendar.getInstance().apply {
                 timeInMillis = currentTargetMs
-                add(Calendar.DAY_OF_YEAR, 1)
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
             }
             currentTargetMs = nextDay.timeInMillis
             loopCount++
@@ -591,5 +475,162 @@ object NotificationHelper {
                 }
             } catch (e: Exception) {}
         }
+    }
+
+    // Ước tính giờ vào ca dựa trên Mode (Tần suất xuất hiện nhiều nhất) và chu kỳ đổi ca
+    suspend fun estimateHistoricalCheckInTime(context: Context, uid: String): Long {
+        var targetHour = -1
+        var targetMin = -1
+
+        try {
+            val sharedPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+            val rotationWeeks = sharedPrefs.getInt("shift_rotation_weeks", 2).coerceIn(0, 5)
+
+            val db = com.example.data.db.AppDatabase.getInstance(context)
+            val entries = db.timeEntryDao().getLastCompletedEntries(uid, 100)
+            
+            if (entries.isNotEmpty()) {
+                val nowMs = System.currentTimeMillis()
+                
+                fun getWeekIndex(timeMs: Long): Long {
+                    val tz = java.util.TimeZone.getDefault()
+                    val localMs = timeMs + tz.getOffset(timeMs)
+                    val offsetMs = 3L * 24 * 3600 * 1000L
+                    return (localMs + offsetMs) / (7L * 24 * 3600 * 1000L)
+                }
+                
+                val currentWeek = getWeekIndex(nowMs)
+                
+                val weekShifts = mutableMapOf<Long, String>()
+                val weekEntries = entries.groupBy { getWeekIndex(it.checkInTime ?: 0L) }
+                
+                for ((w, list) in weekEntries) {
+                    if (w == 0L) continue
+                    var nightCount = 0
+                    var dayCount = 0
+                    for (e in list) {
+                        val ci = e.checkInTime ?: continue
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = ci }
+                        if (cal.get(java.util.Calendar.HOUR_OF_DAY) >= 15) nightCount++ else dayCount++
+                    }
+                    weekShifts[w] = if (nightCount > dayCount) "NIGHT" else "DAY"
+                }
+                
+                var predictedShift = "DAY"
+                
+                if (rotationWeeks == 0) {
+                    val lastWeek = weekShifts.keys.filter { it <= currentWeek }.maxOrNull()
+                    if (lastWeek != null) predictedShift = weekShifts[lastWeek] ?: "DAY"
+                } else {
+                    val maxWeek = weekShifts.keys.maxOrNull() ?: currentWeek
+                    
+                    if (maxWeek >= currentWeek) {
+                        predictedShift = weekShifts[maxWeek] ?: "DAY"
+                    } else {
+                        val lastShift = weekShifts[maxWeek] ?: "DAY"
+                        var consecutive = 0
+                        var currW = maxWeek
+                        
+                        while (weekShifts.containsKey(currW) && weekShifts[currW] == lastShift) {
+                            consecutive++
+                            currW--
+                        }
+                        
+                        val weeksDiff = (currentWeek - maxWeek).toInt()
+                        var simShift = lastShift
+                        var simConsecutive = consecutive
+                        
+                        for (i in 1..weeksDiff) {
+                            if (simConsecutive >= rotationWeeks) {
+                                simShift = if (simShift == "NIGHT") "DAY" else "NIGHT"
+                                simConsecutive = 1
+                            } else {
+                                simConsecutive++
+                            }
+                        }
+                        predictedShift = simShift
+                    }
+                }
+                
+                val targetEntries = entries.filter { entry ->
+                    val ci = entry.checkInTime ?: return@filter false
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = ci }
+                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                    if (predictedShift == "NIGHT") hour >= 15 else hour < 15
+                }.ifEmpty { entries }
+                
+                val frequencyMap = mutableMapOf<Int, Int>()
+                for (entry in targetEntries) {
+                    val ci = entry.checkInTime ?: continue
+                    val cal = java.util.Calendar.getInstance().apply { timeInMillis = ci }
+                    val rawMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+                    val roundedMins = ((rawMins + 7) / 15) * 15 % 1440
+                    frequencyMap[roundedMins] = (frequencyMap[roundedMins] ?: 0) + 1
+                }
+
+                val mostFrequentMins = frequencyMap.maxByOrNull { it.value }?.key
+                if (mostFrequentMins != null) {
+                    targetHour = mostFrequentMins / 60
+                    targetMin = mostFrequentMins % 60
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        if (targetHour == -1) {
+            targetHour = 7
+            targetMin = 30
+        }
+        val fallbackTargetHour = targetHour
+        val fallbackTargetMin = targetMin
+
+        var currentTargetMs = System.currentTimeMillis()
+        var cal = java.util.Calendar.getInstance()
+        var found = false
+        var loopCount = 0
+        
+        while (!found && loopCount < 14) {
+            val customTime = getEffectiveCheckInTime(context, currentTargetMs)
+            
+            if (customTime.isNotBlank() && customTime.contains(":") && customTime.length == 5) {
+                val parts = customTime.split(":")
+                targetHour = parts.getOrNull(0)?.toIntOrNull() ?: 7
+                targetMin = parts.getOrNull(1)?.toIntOrNull() ?: 30
+            } else {
+                targetHour = fallbackTargetHour
+                targetMin = fallbackTargetMin
+            }
+            
+            cal = java.util.Calendar.getInstance().apply {
+                timeInMillis = currentTargetMs
+                set(java.util.Calendar.HOUR_OF_DAY, targetHour)
+                set(java.util.Calendar.MINUTE, targetMin)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            
+            val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
+            val isSunday = com.example.data.SalaryCalculator.isSunday(dateStr)
+            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+            
+            if (!isSunday && !isHoliday && cal.timeInMillis > System.currentTimeMillis()) {
+                found = true
+                break
+            }
+            
+            val nextDay = java.util.Calendar.getInstance().apply {
+                timeInMillis = currentTargetMs
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            currentTargetMs = nextDay.timeInMillis
+            loopCount++
+        }
+        
+        return cal.timeInMillis
     }
 }
