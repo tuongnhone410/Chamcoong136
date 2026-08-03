@@ -32,6 +32,10 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     // Current logged-in UI session state
     val currentUserSession: StateFlow<UserSession?> = authController.currentUserFlow
 
+    // Dynamic company shifts from DB / Firestore
+    private val _companyShifts = MutableStateFlow<List<com.example.data.model.CompanyShift>>(emptyList())
+    val companyShifts: StateFlow<List<com.example.data.model.CompanyShift>> = _companyShifts
+
     // Live sync status text
     private val _cloudSyncStatus = MutableStateFlow("Đang cập nhật")
     val cloudSyncStatus: StateFlow<String> = _cloudSyncStatus
@@ -286,6 +290,36 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
+        // Observe company shifts from local Room DB and sync from Firestore if empty; seed default data if missing
+        viewModelScope.launch(Dispatchers.IO) {
+            database.companyShiftDao().getShiftsByCompany("DEFAULT").collect { shifts ->
+                if (shifts.isNotEmpty()) {
+                    _companyShifts.value = shifts
+                } else {
+                    try {
+                        val remoteShifts = com.example.data.FirestoreService.getCompanyShiftsFromFirestore("DEFAULT")
+                        if (remoteShifts.isNotEmpty()) {
+                            database.companyShiftDao().insertShifts(remoteShifts)
+                            _companyShifts.value = remoteShifts
+                        } else {
+                            // Seed default company shifts for legacy data migration
+                            val seedShifts = com.example.data.SalaryCalculator.DEFAULT_COMPANY_SHIFTS
+                            database.companyShiftDao().insertShifts(seedShifts)
+                            _companyShifts.value = seedShifts
+                            seedShifts.forEach { shift ->
+                                com.example.data.FirestoreService.saveCompanyShiftToFirestore(shift)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TimeSnapViewModel", "Failed to load remote shifts: ${e.message}")
+                        val seedShifts = com.example.data.SalaryCalculator.DEFAULT_COMPANY_SHIFTS
+                        database.companyShiftDao().insertShifts(seedShifts)
+                        _companyShifts.value = seedShifts
+                    }
+                }
+            }
+        }
+
         // Run reactive worker to fetch active working shift
         viewModelScope.launch(Dispatchers.IO) {
             currentUserSession.flatMapLatest { session ->
@@ -412,14 +446,18 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     else -> "NORMAL"
                 }
 
-                val sId = if (hour >= 18) "ca_dem" else "ca1"
-                val sType = if (sId == "ca_dem") "NIGHT" else "DAY"
+                val activeShifts = _companyShifts.value
+                val nowMs = System.currentTimeMillis()
+                val matchedShift = if (activeShifts.isNotEmpty()) com.example.data.SalaryCalculator.detectCompanyShift(nowMs, activeShifts) else null
+                
+                val sId = matchedShift?.shift_code ?: (if (hour >= 18) "ca_dem" else "ca1")
+                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else "DAY")
 
                 val newEntry = TimeEntry(
                     id = existing?.id ?: 0,
                     userId = session.uid,
                     date = todayStr,
-                    checkInTime = System.currentTimeMillis(),
+                    checkInTime = nowMs,
                     checkOutTime = null,
                     isWorking = true,
                     dayType = dayType,
@@ -427,7 +465,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value, activeShifts)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
@@ -486,9 +524,13 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 // Perform check-out
                 val cal = Calendar.getInstance()
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
+                val activeShifts = _companyShifts.value
+                val matchedShift = if (activeShifts.isNotEmpty() && active.checkInTime != null) {
+                    com.example.data.SalaryCalculator.detectCompanyShift(active.checkInTime, activeShifts)
+                } else null
                 
-                val sId = if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
-                val sType = if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
+                val sId = matchedShift?.shift_code ?: (if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1")
+                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY")
 
                 val updated = active.copy(
                     checkOutTime = System.currentTimeMillis(),
@@ -497,7 +539,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value, activeShifts)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
@@ -1153,9 +1195,14 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
+            val activeShifts = _companyShifts.value
             val isLeave = finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "UNAUTHORIZED_LEAVE" || finalDayType == "HOLIDAY_LEAVE"
-            val sId = if (isLeave) null else if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"
-            val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null
+            val matchedShift = if (!isLeave && checkInMs != null && activeShifts.isNotEmpty()) {
+                com.example.data.SalaryCalculator.detectCompanyShift(checkInMs, activeShifts)
+            } else null
+            
+            val sId = if (isLeave) null else (matchedShift?.shift_code ?: (if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"))
+            val sType = if (isLeave) null else (matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null))
 
             val newEntry = TimeEntry(
                 id = existing?.id ?: 0,
@@ -1171,7 +1218,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 customBreakDeduction = customBreakDeduction
             )
 
-            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
+            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value, activeShifts)
             repository.insertOrUpdate(calculated)
             syncTimeEntryToLegacyLog(calculated)
             triggerSync()
@@ -1261,8 +1308,11 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                val sId = if (isNightShiftOverride || isAutoNightShift) "ca_dem" else if (checkOutHour >= 20) "ca2" else "ca1"
-                val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else "DAY"
+                val activeShifts = _companyShifts.value
+                val matchedShift = if (activeShifts.isNotEmpty()) com.example.data.SalaryCalculator.detectCompanyShift(checkInMs, activeShifts) else null
+                
+                val sId = matchedShift?.shift_code ?: (if (isNightShiftOverride || isAutoNightShift) "ca_dem" else if (checkOutHour >= 20) "ca2" else "ca1")
+                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else "DAY")
 
                 val entry = TimeEntry(
                     id = existing?.id ?: 0,
@@ -1275,7 +1325,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value, activeShifts)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
             }
@@ -1557,7 +1607,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             selectedMonth = selectedMonth,
             todayStr = todayStr,
             isCurrentSelectedMonth = isCurrentSelectedMonth,
-            holidayDatesInMonth = holidayDatesInMonth
+            holidayDatesInMonth = holidayDatesInMonth,
+            companyShifts = _companyShifts.value
         )
     }
 

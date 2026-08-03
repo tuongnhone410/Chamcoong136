@@ -81,6 +81,7 @@ fun AdminScreen(
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
     var showSendNotifDialog by remember { mutableStateOf(false) }
+    var showManageShiftsDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var longClickedEmployee by remember { mutableStateOf<UserConfig?>(null) }
 
@@ -166,6 +167,9 @@ fun AdminScreen(
                                 Icon(Icons.Default.FileDownload, contentDescription = "Xuất phiếu lương cá nhân", tint = NeonBlue)
                             }
                         } else {
+                            IconButton(onClick = { showManageShiftsDialog = true }) {
+                                Icon(Icons.Default.Schedule, contentDescription = "Quản lý ca làm việc", tint = White)
+                            }
                             IconButton(onClick = { showSendNotifDialog = true }) {
                                 Icon(Icons.Default.Campaign, contentDescription = "Gửi thông báo", tint = White)
                             }
@@ -766,6 +770,13 @@ fun AdminScreen(
                     showSendNotifDialog = false
                 }
             }
+        )
+    }
+
+    if (showManageShiftsDialog) {
+        CompanyShiftManagementDialog(
+            adminViewModel = adminViewModel,
+            onDismiss = { showManageShiftsDialog = false }
         )
     }
 
@@ -4011,4 +4022,370 @@ fun SendAdminNotificationDialog(
             }
         }
     )
+}
+
+@Composable
+fun CompanyShiftManagementDialog(
+    adminViewModel: AdminViewModel,
+    onDismiss: () -> Unit
+) {
+    val shifts by adminViewModel.companyShifts.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    var editingShiftCode by remember { mutableStateOf<String?>(null) }
+    var shiftCodeInput by remember { mutableStateOf("") }
+    var shiftNameInput by remember { mutableStateOf("") }
+    var startTimeInput by remember { mutableStateOf("06:00") }
+    var endTimeInput by remember { mutableStateOf("14:00") }
+    var checkinStartInput by remember { mutableStateOf("05:00") }
+    var checkinEndInput by remember { mutableStateOf("07:00") }
+    var otBufferInput by remember { mutableStateOf("30") }
+    var isActiveInput by remember { mutableStateOf(true) }
+
+    fun resetForm() {
+        editingShiftCode = null
+        shiftCodeInput = ""
+        shiftNameInput = ""
+        startTimeInput = "06:00"
+        endTimeInput = "14:00"
+        checkinStartInput = "05:00"
+        checkinEndInput = "07:00"
+        otBufferInput = "30"
+        isActiveInput = true
+    }
+
+    fun populateForm(shift: com.example.data.model.CompanyShift) {
+        editingShiftCode = shift.shift_code
+        shiftCodeInput = shift.shift_code
+        shiftNameInput = shift.shift_name
+        startTimeInput = shift.start_time
+        endTimeInput = shift.end_time
+        checkinStartInput = shift.checkin_start_windowTime
+        checkinEndInput = shift.checkin_end_windowTime
+        otBufferInput = shift.ot_start_buffer_minutes.toString()
+        isActiveInput = shift.is_active
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.9f)
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = DarkContainer,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, contentDescription = null, tint = NeonBlue)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Quản lý Ca làm việc (Shifts)",
+                            color = White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = if (editingShiftCode == null) "➕ Thêm Ca Làm Việc Mới" else "✏️ Chỉnh Sửa Ca: $editingShiftCode",
+                                    color = NeonBlue,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = shiftNameInput,
+                                        onValueChange = { shiftNameInput = it },
+                                        label = { Text("Tên ca (e.g. Ca Sáng)", color = LightGray) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = shiftCodeInput,
+                                        onValueChange = { if (editingShiftCode == null) shiftCodeInput = it.uppercase() },
+                                        label = { Text("Mã ca (e.g. CA_01)", color = LightGray) },
+                                        enabled = editingShiftCode == null,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = startTimeInput,
+                                        onValueChange = { startTimeInput = it },
+                                        label = { Text("Giờ vào (HH:mm)", color = LightGray) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = endTimeInput,
+                                        onValueChange = { endTimeInput = it },
+                                        label = { Text("Giờ ra (HH:mm)", color = LightGray) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                }
+
+                                Text(
+                                    text = "Khung giờ Check-in hợp lệ (Window)",
+                                    color = LightGray,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = checkinStartInput,
+                                        onValueChange = { checkinStartInput = it },
+                                        label = { Text("Mở từ (HH:mm)", color = LightGray) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = checkinEndInput,
+                                        onValueChange = { checkinEndInput = it },
+                                        label = { Text("Hạn đến (HH:mm)", color = LightGray) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = otBufferInput,
+                                        onValueChange = { otBufferInput = it.filter { c -> c.isDigit() } },
+                                        label = { Text("OT Buffer (phút)", color = LightGray) },
+                                        modifier = Modifier.width(160.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f)
+                                        ),
+                                        singleLine = true
+                                    )
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Trạng thái:", color = White, fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Switch(
+                                            checked = isActiveInput,
+                                            onCheckedChange = { isActiveInput = it }
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (editingShiftCode != null) {
+                                        TextButton(onClick = { resetForm() }) {
+                                            Text("Hủy sửa", color = LightGray)
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                    }
+                                    Button(
+                                        onClick = {
+                                            if (shiftNameInput.isBlank() || shiftCodeInput.isBlank()) {
+                                                android.widget.Toast.makeText(context, "Vui lòng nhập đầy đủ tên ca và mã ca", android.widget.Toast.LENGTH_SHORT).show()
+                                                return@Button
+                                            }
+                                            val shift = com.example.data.model.CompanyShift(
+                                                shift_code = shiftCodeInput.trim().uppercase(),
+                                                company_id = "DEFAULT",
+                                                shift_name = shiftNameInput.trim(),
+                                                start_time = startTimeInput.trim(),
+                                                end_time = endTimeInput.trim(),
+                                                checkin_start_windowTime = checkinStartInput.trim(),
+                                                checkin_end_windowTime = checkinEndInput.trim(),
+                                                ot_start_buffer_minutes = otBufferInput.toIntOrNull() ?: 30,
+                                                is_active = isActiveInput
+                                            )
+                                            adminViewModel.saveCompanyShift(shift) { success ->
+                                                if (success) {
+                                                    android.widget.Toast.makeText(context, "Lưu ca làm việc thành công", android.widget.Toast.LENGTH_SHORT).show()
+                                                    resetForm()
+                                                } else {
+                                                    android.widget.Toast.makeText(context, "Lỗi khi lưu ca làm việc", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                                    ) {
+                                        Text("Lưu Ca", color = White)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Text(
+                            text = "Danh sách ca làm việc (${shifts.size})",
+                            color = White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    if (shifts.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Chưa có ca làm việc nào.",
+                                color = LightGray,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
+                        }
+                    } else {
+                        items(shifts, key = { it.shift_code }) { shift ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = DarkBackground),
+                                border = BorderStroke(1.dp, if (shift.is_active) Color.White.copy(alpha = 0.15f) else Color.DarkGray)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "${shift.shift_name} (${shift.shift_code})",
+                                                color = if (shift.is_active) White else LightGray,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                color = if (shift.is_active) NeonBlue.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (shift.is_active) "ACTIVE" else "INACTIVE",
+                                                    color = if (shift.is_active) NeonBlue else LightGray,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "⏱️ Giờ ca: ${shift.start_time} - ${shift.end_time}",
+                                            color = LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            text = "🚪 Mở check-in: ${shift.checkin_start_windowTime} - ${shift.checkin_end_windowTime}",
+                                            color = LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            text = "⌛ OT Buffer: ${shift.ot_start_buffer_minutes} phút",
+                                            color = LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(onClick = { populateForm(shift) }) {
+                                            Icon(Icons.Default.Edit, contentDescription = "Sửa", tint = NeonBlue)
+                                        }
+                                        IconButton(onClick = {
+                                            adminViewModel.deleteCompanyShift(shift.shift_code) { success ->
+                                                if (success) {
+                                                    android.widget.Toast.makeText(context, "Đã xóa ca ${shift.shift_code}", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Xóa", tint = AccentOrange)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

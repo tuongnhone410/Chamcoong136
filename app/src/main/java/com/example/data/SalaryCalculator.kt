@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.data.model.CompanyShift
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
 import com.example.viewmodel.SalarySummary
@@ -22,6 +23,70 @@ data class ShiftConfig(
 )
 
 object SalaryCalculator {
+
+    fun toShiftConfig(shift: CompanyShift): ShiftConfig {
+        val codeLower = shift.shift_code.lowercase()
+        val nameLower = shift.shift_name.lowercase()
+        val isNight = codeLower.contains("dem") || codeLower.contains("night") || nameLower.contains("đêm") || nameLower.contains("dem") || nameLower.contains("tối")
+        val isDayRest = codeLower == "ca2" || codeLower.contains("rest") || nameLower.contains("nghỉ")
+        
+        val sType = when {
+            isNight -> "NIGHT"
+            isDayRest -> "DAY_REST"
+            else -> "DAY"
+        }
+
+        val breakHrs = if (isDayRest) 1.5 else 0.0
+
+        return ShiftConfig(
+            shiftId = shift.shift_code,
+            shiftType = sType,
+            startTime = shift.start_time,
+            endTime = shift.end_time,
+            checkInWindowStart = shift.checkin_start_windowTime,
+            checkInWindowEnd = shift.checkin_end_windowTime,
+            checkOutWindowStart = shift.end_time,
+            checkOutWindowEnd = "23:59",
+            breakHours = breakHrs,
+            standardHours = 8.0
+        )
+    }
+
+    val DEFAULT_COMPANY_SHIFTS = listOf(
+        com.example.data.model.CompanyShift(
+            shift_code = "ca1",
+            company_id = "DEFAULT",
+            shift_name = "Ca 1 (Hành chính 8h)",
+            start_time = "07:30",
+            end_time = "16:30",
+            checkin_start_windowTime = "06:00",
+            checkin_end_windowTime = "08:30",
+            ot_start_buffer_minutes = 15,
+            is_active = true
+        ),
+        com.example.data.model.CompanyShift(
+            shift_code = "ca2",
+            company_id = "DEFAULT",
+            shift_name = "Ca 2 (Tăng ca / Nghỉ ngày 8h)",
+            start_time = "07:30",
+            end_time = "18:00",
+            checkin_start_windowTime = "06:00",
+            checkin_end_windowTime = "08:30",
+            ot_start_buffer_minutes = 15,
+            is_active = true
+        ),
+        com.example.data.model.CompanyShift(
+            shift_code = "ca_dem",
+            company_id = "DEFAULT",
+            shift_name = "Ca Đêm",
+            start_time = "18:00",
+            end_time = "06:00",
+            checkin_start_windowTime = "17:00",
+            checkin_end_windowTime = "19:30",
+            ot_start_buffer_minutes = 15,
+            is_active = true
+        )
+    )
 
     val SHIFTS = mapOf(
         "ca1" to ShiftConfig(
@@ -62,7 +127,73 @@ object SalaryCalculator {
         )
     )
 
-    fun getShiftForEntry(entry: TimeEntry): ShiftConfig {
+    /**
+     * Dynamically detects matching CompanyShift from DB based on check-in timestamp.
+     */
+    fun detectCompanyShift(checkInTimeMs: Long, companyShifts: List<CompanyShift>): CompanyShift? {
+        val activeShifts = companyShifts.filter { it.is_active }
+        if (activeShifts.isEmpty()) return null
+
+        val cal = Calendar.getInstance().apply { timeInMillis = checkInTimeMs }
+        val checkInMinOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+
+        // 1. Match checkin window
+        val windowMatch = activeShifts.find { shift ->
+            val startParts = shift.checkin_start_windowTime.split(":")
+            val endParts = shift.checkin_end_windowTime.split(":")
+            if (startParts.size >= 2 && endParts.size >= 2) {
+                val startMin = (startParts[0].toIntOrNull() ?: 0) * 60 + (startParts[1].toIntOrNull() ?: 0)
+                val endMin = (endParts[0].toIntOrNull() ?: 0) * 60 + (endParts[1].toIntOrNull() ?: 0)
+                if (startMin <= endMin) {
+                    checkInMinOfDay in startMin..endMin
+                } else {
+                    checkInMinOfDay >= startMin || checkInMinOfDay <= endMin
+                }
+            } else false
+        }
+        if (windowMatch != null) return windowMatch
+
+        // 2. Match shift work duration
+        val durationMatch = activeShifts.find { shift ->
+            val startParts = shift.start_time.split(":")
+            val endParts = shift.end_time.split(":")
+            if (startParts.size >= 2 && endParts.size >= 2) {
+                val startMin = (startParts[0].toIntOrNull() ?: 0) * 60 + (startParts[1].toIntOrNull() ?: 0)
+                val endMin = (endParts[0].toIntOrNull() ?: 0) * 60 + (endParts[1].toIntOrNull() ?: 0)
+                if (startMin <= endMin) {
+                    checkInMinOfDay in startMin..endMin
+                } else {
+                    checkInMinOfDay >= startMin || checkInMinOfDay <= endMin
+                }
+            } else false
+        }
+        if (durationMatch != null) return durationMatch
+
+        // 3. Fallback: select shift with start_time closest to checkInTimeMs
+        return activeShifts.minByOrNull { shift ->
+            val parts = shift.start_time.split(":")
+            if (parts.size >= 2) {
+                val shiftStartMin = (parts[0].toIntOrNull() ?: 0) * 60 + (parts[1].toIntOrNull() ?: 0)
+                val diff = Math.abs(checkInMinOfDay - shiftStartMin)
+                Math.min(diff, 1440 - diff)
+            } else Int.MAX_VALUE
+        }
+    }
+
+    fun getShiftForEntry(entry: TimeEntry, companyShifts: List<CompanyShift>? = null): ShiftConfig {
+        if (!companyShifts.isNullOrEmpty()) {
+            val shiftId = entry.shiftId
+            if (shiftId != null) {
+                val match = companyShifts.find { it.shift_code == shiftId }
+                if (match != null) return toShiftConfig(match)
+            }
+            val inTime = entry.checkInTime
+            if (inTime != null) {
+                val dynamicShift = detectCompanyShift(inTime, companyShifts)
+                if (dynamicShift != null) return toShiftConfig(dynamicShift)
+            }
+        }
+
         val shiftId = entry.shiftId
         if (shiftId != null && SHIFTS.containsKey(shiftId)) {
             return SHIFTS[shiftId]!!
@@ -152,7 +283,7 @@ object SalaryCalculator {
      * Step 1 - 6: Process and calculate single record details.
      * Returns a new TimeEntry with populated/re-calculated fields.
      */
-    fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null): TimeEntry {
+    fun calculateSingleEntry(entry: TimeEntry, config: UserConfig? = null, companyShifts: List<CompanyShift>? = null): TimeEntry {
         if (isLeaveType(entry.dayType)) {
             val upper = entry.dayType.uppercase(Locale.ROOT)
             val workD = if (upper.contains("PAID") || upper == "NP" || upper.contains("PHEP") || upper.contains("PHÉP") || upper.contains("HOLIDAY") || upper.contains("LỄ") || upper.contains("LE")) 1.0 else 0.0
@@ -178,7 +309,7 @@ object SalaryCalculator {
         val rawOut = rawOutRaw?.let { Math.round(it / 60000.0) * 60000L }
 
         // 1. Load Shift configuration
-        val shift = getShiftForEntry(workingEntry)
+        val shift = getShiftForEntry(workingEntry, companyShifts)
 
         // 2. Normalization
         val stdInMs = getMillisForTime(rawIn, shift.startTime, 0)
@@ -335,14 +466,15 @@ object SalaryCalculator {
         selectedMonth: String,
         todayStr: String,
         isCurrentSelectedMonth: Boolean,
-        holidayDatesInMonth: Set<String>
+        holidayDatesInMonth: Set<String>,
+        companyShifts: List<CompanyShift>? = null
     ): SalarySummary {
         val luongBasic = config.luongCoBan
         val dailySalary = luongBasic / 26.0
         val hourlySalary = dailySalary / 8.0
 
         // Process all entries through steps 1-6
-        val processedEntries = entries.map { calculateSingleEntry(it, config) }
+        val processedEntries = entries.map { calculateSingleEntry(it, config, companyShifts) }
 
         // Identify which holiday dates have been worked (have check-in logged)
         val workedHolidayDates = processedEntries.filter { e ->

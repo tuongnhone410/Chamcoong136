@@ -1014,6 +1014,66 @@ object FirestoreService {
             Log.e(TAG, "Error deleting user $userId: ${e.message}")
         }
     }
+
+    suspend fun saveCompanyShiftToFirestore(shift: com.example.data.model.CompanyShift): Boolean {
+        val firestore = getDb() ?: return false
+        val data = mapOf(
+            "shift_code" to shift.shift_code,
+            "company_id" to shift.company_id,
+            "shift_name" to shift.shift_name,
+            "start_time" to shift.start_time,
+            "end_time" to shift.end_time,
+            "checkin_start_windowTime" to shift.checkin_start_windowTime,
+            "checkin_end_windowTime" to shift.checkin_end_windowTime,
+            "ot_start_buffer_minutes" to shift.ot_start_buffer_minutes,
+            "is_active" to shift.is_active
+        )
+        return try {
+            firestore.collection("companies")
+                .document(shift.company_id)
+                .collection("shifts")
+                .document(shift.shift_code)
+                .set(data, SetOptions.merge())
+                .awaitTaskFirestore()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving company shift to firestore: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun getCompanyShiftsFromFirestore(companyId: String = "DEFAULT"): List<com.example.data.model.CompanyShift> {
+        val firestore = getDb() ?: return emptyList()
+        return try {
+            val snapshot = firestore.collection("companies")
+                .document(companyId)
+                .collection("shifts")
+                .get()
+                .awaitTaskFirestore()
+            snapshot?.documents?.mapNotNull { doc ->
+                doc.toCompanyShift()
+            } ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting company shifts: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun deleteCompanyShiftFromFirestore(shiftCode: String, companyId: String = "DEFAULT"): Boolean {
+        val firestore = getDb() ?: return false
+        return try {
+            firestore.collection("companies")
+                .document(companyId)
+                .collection("shifts")
+                .document(shiftCode)
+                .delete()
+                .awaitTaskFirestore()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting company shift: ${e.message}")
+            false
+        }
+    }
 }
 
 fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.UserConfig {
@@ -1152,5 +1212,21 @@ fun DocumentSnapshot.toAttendanceRecord(uid: String): AttendanceRecord {
         clockOutTime = getLong("clockOutTime"),
         status = getString("status") ?: "Active",
         notes = getString("notes") ?: ""
+    )
+}
+
+fun DocumentSnapshot.toCompanyShift(): com.example.data.model.CompanyShift? {
+    val code = getString("shift_code") ?: id
+    val name = getString("shift_name") ?: return null
+    return com.example.data.model.CompanyShift(
+        shift_code = code,
+        company_id = getString("company_id") ?: "DEFAULT",
+        shift_name = name,
+        start_time = getString("start_time") ?: "07:30",
+        end_time = getString("end_time") ?: "19:30",
+        checkin_start_windowTime = getString("checkin_start_windowTime") ?: "07:00",
+        checkin_end_windowTime = getString("checkin_end_windowTime") ?: "07:30",
+        ot_start_buffer_minutes = getLong("ot_start_buffer_minutes")?.toInt() ?: 30,
+        is_active = getBoolean("is_active") ?: true
     )
 }
