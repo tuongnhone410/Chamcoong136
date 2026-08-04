@@ -27,7 +27,7 @@ data class ShiftConfig(
 object SalaryCalculator {
 
     val legacyEngine: CalculationEngine = LegacyCalculationEngine()
-    val configurableEngine: CalculationEngine = ConfigurableCalculationEngine()
+    val configurableEngine: ConfigurableCalculationEngine = ConfigurableCalculationEngine()
 
     fun getEngine(entry: TimeEntry? = null): CalculationEngine {
         if (entry != null && (entry.workRuleId != null || entry.overtimeRuleId != null || entry.snapshotStandardHours != null)) {

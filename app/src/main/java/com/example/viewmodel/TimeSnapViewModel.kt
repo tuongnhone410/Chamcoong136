@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.auth.AuthController
 import com.example.auth.UserSession
 import com.example.data.db.AppDatabase
+import com.example.data.AttendanceRecord
 import com.example.data.model.TimeEntry
 import com.example.data.model.UserConfig
 import com.example.data.repository.TimeRepository
@@ -78,6 +79,24 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val currentCompanyIdFlow: kotlinx.coroutines.flow.Flow<String> = userConfig.map { config ->
+        if (config?.isAdmin == true) {
+            config.userId
+        } else {
+            config?.companyId ?: "default_company"
+        }
+    }.distinctUntilChanged()
+
+    val currentCompanyId: String
+        get() {
+            val config = userConfig.value
+            return if (config?.isAdmin == true) {
+                config.userId
+            } else {
+                config?.companyId ?: "default_company"
+            }
+        }
 
     // Reactive flow of user's earliest recorded entry date (used for auto-detecting new user start date)
     val userEarliestEntryDate: StateFlow<String?> = currentUserSession
@@ -184,7 +203,62 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    val isCompanyShiftsConfigured: StateFlow<Boolean> = currentCompanyIdFlow
+        .flatMapLatest { cid ->
+            shiftRepository.getShiftsFlow(cid).map { list ->
+                val sharedPrefs = getApplication<Application>().getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+                val explicitlyConfigured = sharedPrefs.getBoolean("company_shifts_configured_$cid", false)
+                explicitlyConfigured || list.any { !it.id.startsWith("shift_sang_") && !it.id.startsWith("shift_hanh_chinh_") && !it.id.startsWith("shift_chieu_") && !it.id.startsWith("shift_dem_") }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun useDefaultCompanyShifts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cid = currentCompanyId
+            shiftRepository.seedDefaultShifts(cid)
+            val sharedPrefs = getApplication<Application>().getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+            sharedPrefs.edit().putBoolean("company_shifts_configured_$cid", true).apply()
+        }
+    }
+
     init {
+        // Collect and sync rules to configurable calculation engine dynamically
+        viewModelScope.launch(Dispatchers.IO) {
+            currentCompanyIdFlow.flatMapLatest { cid ->
+                combine(
+                    workRuleRepository.getWorkRules(cid),
+                    overtimeRuleRepository.getOvertimeRules(cid),
+                    shiftRepository.getShiftsFlow(cid)
+                ) { workRules, overtimeRules, dbShifts ->
+                    Triple(workRules, overtimeRules, dbShifts)
+                }
+            }.collect { (workRules, overtimeRules, dbShifts) ->
+                val activeWorkRule = workRules.firstOrNull { it.enabled } ?: workRules.firstOrNull()
+                val activeOvertimeRule = overtimeRules.firstOrNull { it.enabled } ?: overtimeRules.firstOrNull()
+                
+                val mappedShifts = dbShifts.filter { it.enabled }.associate { entity ->
+                    entity.id to com.example.data.ShiftConfig(
+                        shiftId = entity.id,
+                        shiftType = if (entity.crossesMidnight || com.example.data.model.ShiftEntity.isOvernight(entity.startTime, entity.endTime)) "NIGHT" else "DAY",
+                        startTime = entity.startTime,
+                        endTime = entity.endTime,
+                        checkInWindowStart = entity.startTime,
+                        checkInWindowEnd = entity.startTime,
+                        checkOutWindowStart = entity.endTime,
+                        checkOutWindowEnd = entity.endTime,
+                        breakHours = entity.breakMinutes / 60.0,
+                        standardHours = entity.standardHours
+                    )
+                }
+                
+                com.example.data.SalaryCalculator.configurableEngine.updateRules(activeWorkRule, activeOvertimeRule)
+                if (mappedShifts.isNotEmpty()) {
+                    com.example.data.SalaryCalculator.configurableEngine.updateShifts(mappedShifts)
+                }
+            }
+        }
+
         // Automatic monthly phepNamConLai increment (+1 per month) - Runs once at startup
         viewModelScope.launch(Dispatchers.IO) {
             val config = userConfig.filterNotNull().first()
@@ -229,9 +303,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 realtimeLogsJob?.cancel()
                 if (session != null && !session.uid.startsWith("demo")) {
                     realtimeLogsJob = viewModelScope.launch(Dispatchers.IO) {
-                        com.example.data.FirestoreService.getAttendanceLogsFlow(session.uid).collect { _ ->
+                        com.example.data.FirestoreService.getAttendanceLogsFlow(session.uid).collect { logs ->
                             android.util.Log.d("TimeSnapViewModel", "Realtime attendance logs update received from server for ${session.uid}")
-                            syncAttendanceLogsFromFirestore(session.uid)
+                            syncAttendanceLogsFromFirestore(session.uid, logs)
                         }
                     }
                 }
@@ -404,16 +478,25 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     }
 
     // Toggle Check-In / Check-Out
+    private var isToggling = false
+
     fun toggleCheckIn(
         note: String = "",
         enableAutoCheckout: Boolean? = null,
         customCheckoutTime: String? = null
     ) {
-        val session = currentUserSession.value ?: return
+        if (isToggling) return
+        isToggling = true
+        val session = currentUserSession.value
+        if (session == null) {
+            isToggling = false
+            return
+        }
         val todayStr = dateFormatter.format(Date())
 
         viewModelScope.launch(Dispatchers.IO) {
-            val sharedPrefs = getApplication<Application>().getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+            try {
+                val sharedPrefs = getApplication<Application>().getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
             val isAutoCheckoutEnabled = enableAutoCheckout ?: sharedPrefs.getBoolean("auto_checkout_enabled", false)
             val storedCustomTime = customCheckoutTime ?: sharedPrefs.getString("custom_checkout_time", "") ?: ""
             val active = repository.getActiveEntry(session.uid)
@@ -537,6 +620,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
             triggerSync()
+            } finally {
+                isToggling = false
+            }
         }
     }
     
@@ -630,18 +716,18 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private suspend fun syncAttendanceLogsFromFirestore(userId: String) {
+    private suspend fun syncAttendanceLogsFromFirestore(userId: String, remoteRecords: List<AttendanceRecord>? = null) {
         if (userId.startsWith("demo") || userId.contains("demo")) return
         try {
             android.util.Log.d("TimeSnapViewModel", "Syncing attendance logs from Firestore for $userId")
-            val remoteRecords = com.example.data.FirestoreService.getAttendanceLogsForUser(userId)
-            if (remoteRecords.isEmpty()) return
+            val recordsToSync = remoteRecords ?: com.example.data.FirestoreService.getAttendanceLogsForUser(userId)
+            if (recordsToSync.isEmpty()) return
 
             val currentEntries = repository.getEntries(userId).first().toMutableList()
             val config = repository.getConfigDirect(userId) ?: UserConfig(userId = userId)
 
             // Group remote records by normalized date and merge duplicates
-            val remoteRecordsGrouped = remoteRecords.groupBy { log ->
+            val remoteRecordsGrouped = recordsToSync.groupBy { log ->
                 var formattedDate = com.example.data.SalaryCalculator.normalizeDateToDmy(log.dateString)
                 if (formattedDate.isBlank() && log.clockInTime > 0) {
                     formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.US).format(Date(log.clockInTime))
@@ -1737,14 +1823,32 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun recalculateAllHistory(onComplete: (Int) -> Unit) {
+    fun recalculateAllHistory(
+        mode: String = "ALL",
+        singleDay: String? = null,
+        month: String? = null,
+        startDate: String? = null,
+        endDate: String? = null,
+        onComplete: (Int) -> Unit
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val session = currentUserSession.value ?: return@launch
             val allEntries = repository.getAllEntriesForUserDirect(session.uid)
-            val workRule = workRuleRepository.getActiveWorkRule("default_company")
-            val otRule = overtimeRuleRepository.getActiveOvertimeRule("default_company")
+            val filteredEntries = when (mode) {
+                "SINGLE_DAY" -> allEntries.filter { it.date == singleDay }
+                "MONTH" -> allEntries.filter { it.date.startsWith(month ?: "") }
+                "RANGE" -> {
+                    val start = startDate ?: ""
+                    val end = endDate ?: ""
+                    allEntries.filter { it.date >= start && it.date <= end }
+                }
+                else -> allEntries
+            }
+            val cid = currentCompanyId
+            val workRule = workRuleRepository.getActiveWorkRule(cid)
+            val otRule = overtimeRuleRepository.getActiveOvertimeRule(cid)
             var count = 0
-            for (entry in allEntries) {
+            for (entry in filteredEntries) {
                 val otMultiplier = when (entry.dayType) {
                     "SUNDAY", "WEEKLY_OFF" -> otRule?.weeklyOffMultiplier ?: 2.0
                     "HOLIDAY" -> otRule?.holidayMultiplier ?: 3.0

@@ -81,6 +81,7 @@ fun AdminScreen(
     var showBatchEditDialog by remember { mutableStateOf(false) }
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
+    var deleteKeepAttendanceHistory by remember { mutableStateOf(true) }
     var showSendNotifDialog by remember { mutableStateOf(false) }
     var showShiftManagementDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -701,11 +702,31 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { showBatchDeleteConfirm = false },
             title = { Text("Xác nhận xóa", color = White) },
-            text = { Text("Bạn có chắc chắn muốn xóa ${selectedIds.size} nhân viên đã chọn? Hành động này không thể hoàn tác.", color = Color.Gray) },
+            text = {
+                Column {
+                    Text("Bạn có chắc chắn muốn xóa ${selectedIds.size} nhân viên đã chọn? Hành động này không thể hoàn tác.", color = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { deleteKeepAttendanceHistory = !deleteKeepAttendanceHistory }
+                    ) {
+                        Checkbox(
+                            checked = deleteKeepAttendanceHistory,
+                            onCheckedChange = { deleteKeepAttendanceHistory = it },
+                            colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Giữ lại lịch sử chấm công", color = White, fontWeight = FontWeight.SemiBold)
+                            Text("Không xóa dữ liệu chuyên cần và giờ công lịch sử", color = Color.Gray, fontSize = 11.sp)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        adminViewModel.batchDeleteEmployees()
+                        adminViewModel.batchDeleteEmployees(deleteKeepAttendanceHistory)
                         showBatchDeleteConfirm = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
@@ -724,11 +745,31 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { showSingleDeleteConfirm = false },
             title = { Text("Xác nhận xóa", color = White) },
-            text = { Text("Bạn có chắc chắn muốn xóa nhân viên '${selectedEmployee?.hoVaTen}'? Tất cả dữ liệu chấm công và cấu hình sẽ bị mất.", color = Color.Gray) },
+            text = {
+                Column {
+                    Text("Bạn có chắc chắn muốn xóa nhân viên '${selectedEmployee?.hoVaTen}'?", color = Color.Gray)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { deleteKeepAttendanceHistory = !deleteKeepAttendanceHistory }
+                    ) {
+                        Checkbox(
+                            checked = deleteKeepAttendanceHistory,
+                            onCheckedChange = { deleteKeepAttendanceHistory = it },
+                            colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Giữ lại lịch sử chấm công", color = White, fontWeight = FontWeight.SemiBold)
+                            Text("Không xóa dữ liệu chuyên cần và giờ công lịch sử", color = Color.Gray, fontSize = 11.sp)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        adminViewModel.deleteEmployee(selectedEmployee!!.userId)
+                        adminViewModel.deleteEmployee(selectedEmployee!!.userId, deleteKeepAttendanceHistory)
                         showSingleDeleteConfirm = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
@@ -779,7 +820,7 @@ fun AdminScreen(
         val shiftRepo = remember { com.example.data.repository.ShiftRepository(db.shiftDao()) }
         ShiftManagementDialog(
             shiftRepository = shiftRepo,
-            companyId = "default_company",
+            companyId = adminViewModel.currentAdminUid,
             onDismiss = { showShiftManagementDialog = false }
         )
     }
@@ -1106,7 +1147,7 @@ fun EmployeeListView(
                         }
                     }
                 }
-                items(employees) { employee ->
+                items(employees, key = { it.userId }) { employee ->
                     EmployeeCard(
                         employee = employee, 
                         isSelected = selectedIds.contains(employee.userId),
@@ -1821,7 +1862,7 @@ fun EmployeeDetailView(
                             }
                         }
                     } else {
-                        items(filteredRecords.sortedByDescending { it.dateString }) { record ->
+                        items(filteredRecords.sortedByDescending { it.dateString }, key = { "${it.uid}_${it.dateString}" }) { record ->
                             AttendanceRecordItem(record = record, employee = employee, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
                         }
                     }
@@ -2407,7 +2448,7 @@ fun AttendanceSummaryBoard(
                             .heightIn(max = 350.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(leaveRecords) { r ->
+                        items(leaveRecords, key = { "${it.uid}_${it.dateString}" }) { r ->
                             val statusUpper = r.status.uppercase(Locale.ROOT)
                             val typeLabel = when {
                                 statusUpper == "PAID_LEAVE" || statusUpper == "PAID" || statusUpper == "NP" || statusUpper == "PHEP" -> "Phép năm"
@@ -2557,7 +2598,7 @@ fun AttendanceSummaryBoard(
                             .heightIn(max = 350.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(lateRecords) { r ->
+                        items(lateRecords, key = { "${it.uid}_${it.dateString}" }) { r ->
                             val calc = com.example.data.SalaryCalculator.calculateSingleEntry(r.toTimeEntry(), employee)
                             val lateMins = calc.lateMinutes
                             val inTimeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(r.clockInTime))
@@ -3313,7 +3354,7 @@ fun EmployeeAttendanceEdit(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            items(records.sortedByDescending { it.dateString }) { record ->
+            items(records.sortedByDescending { it.dateString }, key = { "${it.uid}_${it.dateString}" }) { record ->
                 AttendanceRecordItem(record = record, employee = employee, onDelete = { onDeleteRecord(record.dateString) })
             }
         }

@@ -77,6 +77,13 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import com.example.util.ThousandSeparatorVisualTransformation
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.focus.onFocusChanged
@@ -465,8 +472,8 @@ fun SettingsScreen(
                 }
             }
 
-            // CATEGORY 0: HỒ SƠ NHÂN VIÊN
-            CategoryLayout(title = "HỒ SƠ CÁ NHÂN NHÂN VIÊN", icon = Icons.Default.VerifiedUser) {
+            // CATEGORY 1: TÀI KHOẢN & HỒ SƠ
+            CategoryLayout(title = "👤 TÀI KHOẢN & HỒ SƠ", icon = Icons.Default.Person) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     ConfigInputField(
                         label = "Họ và tên",
@@ -517,7 +524,7 @@ fun SettingsScreen(
 
 
 
-            // CATEGORY 5: CẤU HÌNH NHẮC NHỞ CHẤM CÔNG (Notification Config)
+            // CATEGORY 2: THÔNG BÁO NHẮC NHỞ
             val keyboardController = LocalSoftwareKeyboardController.current
             val focusManager = LocalFocusManager.current
             val notificationPrefs = LocalContext.current.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
@@ -544,7 +551,8 @@ fun SettingsScreen(
                 }
             }
 
-            CategoryLayout(title = "NHẮC NHỞ CHẤM CÔNG", icon = Icons.Default.AlarmOn) {
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "🔔 THÔNG BÁO NHẮC NHỞ", icon = Icons.Default.Notifications) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     // 1. Bật thông báo nhắc nhở
                     Row(
@@ -631,17 +639,52 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+            Spacer(modifier = Modifier.height(16.dp))
 
-                    // 2. Tự động Vào/Ra Ca
+            // CATEGORY 3: TỰ ĐỘNG CHẤM CÔNG (CA THAM CHIẾU)
+            CategoryLayout(title = "🤖 TỰ ĐỘNG CHẤM CÔNG (CA THAM CHIẾU)", icon = Icons.Default.Android) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Thông tin giải thích Ca tham chiếu
+                    androidx.compose.material3.Card(
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = DarkContainer.copy(alpha = 0.6f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "⚠️ Lưu ý quan trọng về Ca tham chiếu:",
+                                color = AccentOrange,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            Text(
+                                text = "Ca tham chiếu chỉ được sử dụng cho chức năng tự động chấm công và thông báo. Không phải nơi cấu hình ca làm việc chính thức của công ty.",
+                                color = LightGray,
+                                fontSize = 12.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "• Ca làm việc chính thức: Cài đặt → Trung tâm cấu hình công ty → Ca làm việc.",
+                                color = NeonBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "🤖 Tự động vào/ra ca (Hẹn giờ)",
+                            text = "Tự động vào/ra ca (Hẹn giờ)",
                             color = White,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
@@ -712,12 +755,12 @@ fun SettingsScreen(
                                     val formatted = when {
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
-                                            val h = hours.toIntOrNull() ?: 0
-                                            if (h > 23) hours = "23"
-                                            var minutes = digits.substring(2)
-                                            val m = minutes.toIntOrNull() ?: 0
-                                            if (m > 59) minutes = "59"
-                                            "$hours:$minutes"
+                                             val h = hours.toIntOrNull() ?: 0
+                                             if (h > 23) hours = "23"
+                                             var minutes = digits.substring(2)
+                                             val m = minutes.toIntOrNull() ?: 0
+                                             if (m > 59) minutes = "59"
+                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
@@ -736,7 +779,7 @@ fun SettingsScreen(
                                         }
                                     }
                                 },
-                                label = { Text("Giờ vào ca", fontSize = 12.sp, color = LightGray) },
+                                label = { Text("Giờ vào ca tham chiếu", fontSize = 12.sp, color = LightGray) },
                                 placeholder = { Text(text = estimatedInTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
@@ -764,12 +807,12 @@ fun SettingsScreen(
                                     val formatted = when {
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
-                                            val h = hours.toIntOrNull() ?: 0
-                                            if (h > 23) hours = "23"
-                                            var minutes = digits.substring(2)
-                                            val m = minutes.toIntOrNull() ?: 0
-                                            if (m > 59) minutes = "59"
-                                            "$hours:$minutes"
+                                             val h = hours.toIntOrNull() ?: 0
+                                             if (h > 23) hours = "23"
+                                             var minutes = digits.substring(2)
+                                             val m = minutes.toIntOrNull() ?: 0
+                                             if (m > 59) minutes = "59"
+                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
@@ -781,7 +824,7 @@ fun SettingsScreen(
                                     customCheckoutTime = formatted
                                     notificationPrefs.edit().putString("custom_checkout_time", formatted).apply()
                                 },
-                                label = { Text("Giờ ra ca", fontSize = 12.sp, color = LightGray) },
+                                label = { Text("Giờ ra ca tham chiếu", fontSize = 12.sp, color = LightGray) },
                                 placeholder = { Text(text = estimatedOutTime, fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
@@ -831,7 +874,7 @@ fun SettingsScreen(
                                         }
                                     }
                                 },
-                                label = { Text("Chu kỳ đổi ca (tuần)", fontSize = 12.sp, color = LightGray) },
+                                label = { Text("Chu kỳ đổi ca tham chiếu (tuần)", fontSize = 12.sp, color = LightGray) },
                                 placeholder = { Text("2", fontSize = 14.sp, color = LightGray.copy(alpha = 0.4f)) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
@@ -852,7 +895,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Ngày mốc bắt đầu:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                Text("Ngày mốc bắt đầu ca tham chiếu:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
                                 val anchorDateStr = java.text.SimpleDateFormat("EEEE, dd/MM/yyyy", java.util.Locale("vi", "VN")).format(java.util.Date(shiftAnchorTime))
                                 OutlinedButton(
                                     onClick = {
@@ -897,7 +940,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Ca tại ngày mốc:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
+                                Text("Ca tham chiếu tại ngày mốc:", fontSize = 12.sp, color = LightGray, fontWeight = FontWeight.Medium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     val isNight = shiftAnchorType == "NIGHT"
                                     Button(
@@ -987,7 +1030,7 @@ fun SettingsScreen(
             var showCompanyRulesHub by remember { mutableStateOf(false) }
 
             Spacer(modifier = Modifier.height(16.dp))
-            CategoryLayout(title = "TRUNG TÂM CẤU HÌNH CÔNG TY & QUY TẮC", icon = Icons.Default.Settings) {
+            CategoryLayout(title = "🏢 TRUNG TÂM CẤU HÌNH CÔNG TY", icon = Icons.Default.Business) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "Mở trung tâm quản lý 7 chuyên mục cấu hình (Thông tin công ty, Ca làm việc, Quy tắc giờ công, OT, Ngày nghỉ, Phụ cấp, Nâng cao).",
@@ -1012,7 +1055,7 @@ fun SettingsScreen(
             if (showCompanyRulesHub) {
                 CompanyRulesHubDialog(
                     viewModel = viewModel,
-                    companyId = "default_company",
+                    companyId = viewModel.currentCompanyId,
                     onDismiss = { showCompanyRulesHub = false }
                 )
             }
@@ -1020,26 +1063,136 @@ fun SettingsScreen(
 
 
             var showRecalculateWarning by remember { mutableStateOf(false) }
+            var showRestoreWarning by remember { mutableStateOf(false) }
+
+            var recalcMode by remember { mutableStateOf("ALL") } // "ALL", "SINGLE_DAY", "MONTH", "RANGE"
+            var selectedSingleDay by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
+            var selectedMonthYear by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.getDefault()).format(java.util.Date())) }
+            var selectedStartDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
+            var selectedEndDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
 
             Spacer(modifier = Modifier.height(16.dp))
-            CategoryLayout(title = "TÍNH LẠI LỊCH SỬ CHẤM CÔNG", icon = Icons.Default.Refresh) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Lịch sử chấm công cũ giữ nguyên theo version quy tắc lúc tính. Nếu bạn muốn tính lại toàn bộ lịch sử theo quy tắc hiện tại, hãy dùng chức năng này.",
-                        color = LightGray,
-                        fontSize = 12.sp
-                    )
-                    Button(
-                        onClick = { showRecalculateWarning = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("open_recalculate_history_button"),
-                        shape = RoundedCornerShape(10.dp)
+            CategoryLayout(title = "🗂️ DỮ LIỆU & LỊCH SỬ", icon = Icons.Default.Storage) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Trạng thái sao lưu hiện tại
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Tính lại lịch sử chấm công (Recalculate)", color = White, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Trạng thái sao lưu đám mây:",
+                            color = LightGray,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = syncStatus,
+                            color = if (syncStatus.contains("Lỗi") || syncStatus.contains("yêu cầu")) AccentRed else NeonBlue,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+
+                    // 1. Tính lại lịch sử
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Tính lại lịch sử chấm công",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Lịch sử cũ lưu giữ theo version quy tắc lúc tính. Nếu muốn tính toán lại toàn bộ lịch sử theo bộ quy tắc hiện tại, hãy bấm nút dưới đây.",
+                            color = LightGray,
+                            fontSize = 12.sp
+                        )
+                        Button(
+                            onClick = { showRecalculateWarning = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("open_recalculate_history_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Tính lại lịch sử chấm công (Recalculate)", color = White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+
+                    // 2. Sao lưu đám mây
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Sao lưu dữ liệu (Backup)",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Gửi toàn bộ lịch sử chấm công và cấu hình hiện tại của bạn lên máy chủ đám mây an toàn để bảo vệ dữ liệu.",
+                            color = LightGray,
+                            fontSize = 12.sp
+                        )
+                        Button(
+                            onClick = {
+                                val session = sessionState
+                                if (session != null) {
+                                    Toast.makeText(context, "Bắt đầu sao lưu dữ liệu...", Toast.LENGTH_SHORT).show()
+                                    viewModel.triggerSync()
+                                } else {
+                                    Toast.makeText(context, "Vui lòng đăng nhập để thực hiện sao lưu đám mây!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("manual_backup_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, tint = White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sao lưu lên đám mây ngay", color = White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.1f)))
+
+                    // 3. Đồng bộ / Khôi phục từ đám mây
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Đồng bộ & Khôi phục (Restore)",
+                            color = White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Tải xuống dữ liệu đã lưu từ đám mây và ghi đè lên máy này. Dùng khi bạn chuyển đổi thiết bị hoặc muốn khôi phục dữ liệu cũ.",
+                            color = LightGray,
+                            fontSize = 12.sp
+                        )
+                        Button(
+                            onClick = {
+                                val session = sessionState
+                                if (session != null) {
+                                    showRestoreWarning = true
+                                } else {
+                                    Toast.makeText(context, "Vui lòng đăng nhập để thực hiện đồng bộ đám mây!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("manual_restore_button"),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.CloudDownload, contentDescription = null, tint = White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Đồng bộ & Tải từ đám mây về", color = White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -1047,18 +1200,194 @@ fun SettingsScreen(
             if (showRecalculateWarning) {
                 AlertDialog(
                     onDismissRequest = { showRecalculateWarning = false },
-                    title = { Text("Cảnh báo tính lại lịch sử", color = White) },
+                    title = { Text("Tính lại lịch sử chấm công", color = White, fontWeight = FontWeight.Bold) },
                     text = {
-                        Text(
-                            "Thao tác này sẽ áp dụng các quy tắc giờ công (WorkRule) và tăng ca (OvertimeRule) hiện tại cho toàn bộ lịch sử chấm công trước đó. Các phiên bản quy tắc cũ đã lưu trong lịch sử sẽ bị ghi đè. Bạn có chắc chắn muốn tính lại?",
-                            color = LightGray
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                "Chọn phạm vi tính lại lịch sử. Thao tác này sẽ áp dụng các quy tắc giờ công (WorkRule) và tăng ca (OvertimeRule) hiện tại cho các bản ghi được chọn.",
+                                color = LightGray,
+                                fontSize = 13.sp
+                            )
+                            
+                            val modes = listOf(
+                                "ALL" to "Tất cả lịch sử",
+                                "SINGLE_DAY" to "Một ngày cụ thể",
+                                "MONTH" to "Một tháng cụ thể",
+                                "RANGE" to "Khoảng ngày"
+                            )
+                            
+                            modes.forEach { (m, label) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { recalcMode = m }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = (recalcMode == m),
+                                        onClick = { recalcMode = m },
+                                        colors = RadioButtonDefaults.colors(selectedColor = NeonBlue)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(label, color = White, fontSize = 14.sp)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            if (recalcMode == "SINGLE_DAY") {
+                                Text("Chọn ngày để tính lại:", color = LightGray, fontSize = 12.sp)
+                                OutlinedButton(
+                                    onClick = {
+                                        val parts = selectedSingleDay.split("-")
+                                        val curCal = java.util.Calendar.getInstance().apply {
+                                            if (parts.size == 3) {
+                                                set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                            }
+                                        }
+                                        android.app.DatePickerDialog(
+                                            context,
+                                            { _, yr, mo, dy ->
+                                                selectedSingleDay = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                            },
+                                            curCal.get(java.util.Calendar.YEAR),
+                                            curCal.get(java.util.Calendar.MONTH),
+                                            curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                        ).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    border = BorderStroke(1.dp, NeonBlue)
+                                ) {
+                                    Icon(imageVector = Icons.Default.DateRange, contentDescription = null, tint = NeonBlue)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Ngày: $selectedSingleDay", color = NeonBlue)
+                                }
+                            }
+
+                            if (recalcMode == "MONTH") {
+                                Text("Chọn tháng để tính lại:", color = LightGray, fontSize = 12.sp)
+                                OutlinedButton(
+                                    onClick = {
+                                        val parts = selectedMonthYear.split("-")
+                                        val curCal = java.util.Calendar.getInstance().apply {
+                                            if (parts.size == 2) {
+                                                set(parts[0].toInt(), parts[1].toInt() - 1, 1)
+                                            }
+                                        }
+                                        android.app.DatePickerDialog(
+                                            context,
+                                            { _, yr, mo, _ ->
+                                                selectedMonthYear = String.format("%04d-%02d", yr, mo + 1)
+                                            },
+                                            curCal.get(java.util.Calendar.YEAR),
+                                            curCal.get(java.util.Calendar.MONTH),
+                                            1
+                                        ).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    border = BorderStroke(1.dp, NeonBlue)
+                                ) {
+                                    Icon(imageVector = Icons.Default.DateRange, contentDescription = null, tint = NeonBlue)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Tháng: $selectedMonthYear", color = NeonBlue)
+                                }
+                            }
+
+                            if (recalcMode == "RANGE") {
+                                Text("Chọn khoảng thời gian:", color = LightGray, fontSize = 12.sp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val parts = selectedStartDate.split("-")
+                                            val curCal = java.util.Calendar.getInstance().apply {
+                                                if (parts.size == 3) {
+                                                    set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                                }
+                                            }
+                                            android.app.DatePickerDialog(
+                                                context,
+                                                { _, yr, mo, dy ->
+                                                    selectedStartDate = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                                },
+                                                curCal.get(java.util.Calendar.YEAR),
+                                                curCal.get(java.util.Calendar.MONTH),
+                                                curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                            ).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        border = BorderStroke(1.dp, NeonBlue),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("Từ: $selectedStartDate", color = NeonBlue, fontSize = 11.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val parts = selectedEndDate.split("-")
+                                            val curCal = java.util.Calendar.getInstance().apply {
+                                                if (parts.size == 3) {
+                                                    set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                                }
+                                            }
+                                            android.app.DatePickerDialog(
+                                                context,
+                                                { _, yr, mo, dy ->
+                                                    selectedEndDate = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                                },
+                                                curCal.get(java.util.Calendar.YEAR),
+                                                curCal.get(java.util.Calendar.MONTH),
+                                                curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                            ).show()
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        border = BorderStroke(1.dp, NeonBlue),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                    ) {
+                                        Text("Đến: $selectedEndDate", color = NeonBlue, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+
+                            if (recalcMode == "ALL") {
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                                    border = BorderStroke(1.dp, AccentRed),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = AccentRed)
+                                        Text(
+                                            "Cảnh báo: Thao tác này sẽ ghi đè toàn bộ dữ liệu công, tăng ca lịch sử bằng quy tắc hiện tại.",
+                                            color = White,
+                                            fontSize = 11.sp,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     },
                     confirmButton = {
                         Button(
                             onClick = {
                                 showRecalculateWarning = false
-                                viewModel.recalculateAllHistory { count ->
+                                viewModel.recalculateAllHistory(
+                                    mode = recalcMode,
+                                    singleDay = if (recalcMode == "SINGLE_DAY") selectedSingleDay else null,
+                                    month = if (recalcMode == "MONTH") selectedMonthYear else null,
+                                    startDate = if (recalcMode == "RANGE") selectedStartDate else null,
+                                    endDate = if (recalcMode == "RANGE") selectedEndDate else null
+                                ) { count ->
                                     Toast.makeText(context, "Đã tính lại thành công $count bản ghi lịch sử!", Toast.LENGTH_LONG).show()
                                 }
                             },
@@ -1077,8 +1406,43 @@ fun SettingsScreen(
                 )
             }
 
+            if (showRestoreWarning) {
+                AlertDialog(
+                    onDismissRequest = { showRestoreWarning = false },
+                    title = { Text("Xác nhận khôi phục dữ liệu?", color = White) },
+                    text = {
+                        Text(
+                            "Thao tác này sẽ tải dữ liệu đã lưu trên đám mây về máy này và ghi đè hoàn toàn dữ liệu hiện tại (bao gồm lịch sử chấm công và các thiết lập). Bạn có chắc chắn muốn tiếp tục?",
+                            color = LightGray
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showRestoreWarning = false
+                                val session = sessionState
+                                if (session != null) {
+                                    viewModel.restoreDataFromServer(session.uid)
+                                    Toast.makeText(context, "Đang khôi phục dữ liệu từ đám mây...", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                            modifier = Modifier.testTag("confirm_restore_button")
+                        ) {
+                            Text("Đồng ý khôi phục", color = White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRestoreWarning = false }) {
+                            Text("Hủy", color = LightGray)
+                        }
+                    },
+                    containerColor = DarkContainer
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
-            CategoryLayout(title = "THÔNG TIN PHIÊN BẢN", icon = Icons.Default.Info) {
+            CategoryLayout(title = "ℹ️ ỨNG DỤNG", icon = Icons.Default.Info) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

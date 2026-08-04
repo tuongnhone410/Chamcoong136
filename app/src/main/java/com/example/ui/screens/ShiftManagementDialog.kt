@@ -8,6 +8,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -377,8 +379,47 @@ fun ShiftEditFormDialog(
     var standardHoursStr by remember { mutableStateOf(shiftToEdit?.standardHours?.toString() ?: "8.0") }
     var crossesMidnight by remember { mutableStateOf(shiftToEdit?.crossesMidnight ?: false) }
     var enabled by remember { mutableStateOf(shiftToEdit?.enabled ?: true) }
-
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    
+    var showUnsavedDialog by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = name != (shiftToEdit?.name ?: "") ||
+        startTimeRaw != (shiftToEdit?.startTime?.replace(":", "") ?: "0730") ||
+        endTimeRaw != (shiftToEdit?.endTime?.replace(":", "") ?: "1630") ||
+        breakMinutesStr != (shiftToEdit?.breakMinutes?.toString() ?: "60") ||
+        standardHoursStr != (shiftToEdit?.standardHours?.toString() ?: "8.0") ||
+        crossesMidnight != (shiftToEdit?.crossesMidnight ?: false) ||
+        enabled != (shiftToEdit?.enabled ?: true)
+
+    val handleBack = {
+        if (hasUnsavedChanges) {
+            showUnsavedDialog = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text("Bạn có thay đổi chưa lưu", color = White) },
+            text = { Text("Bạn có chắc chắn muốn thoát? Các thay đổi sẽ bị mất.", color = LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    onDismiss()
+                }) {
+                    Text("Thoát", color = AccentRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Ở lại", color = NeonBlue)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
 
     fun formatRawToHhMm(raw: String): String {
         val digits = raw.filter { it.isDigit() }
@@ -404,7 +445,7 @@ fun ShiftEditFormDialog(
         breakMinutes = breakMinutesStr.toIntOrNull() ?: 0
     )
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = handleBack) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -414,6 +455,7 @@ fun ShiftEditFormDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 Text(

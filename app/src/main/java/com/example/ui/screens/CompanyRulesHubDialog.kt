@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.UserConfig
 import com.example.data.repository.OvertimeRuleRepository
 import com.example.data.repository.ShiftRepository
@@ -42,7 +44,7 @@ fun CompanyRulesHubDialog(
 ) {
     val context = LocalContext.current
     var selectedSection by remember { mutableStateOf<HubSection?>(null) }
-    val userConfig by viewModel.userConfig.collectAsState()
+    val userConfig by viewModel.userConfig.collectAsStateWithLifecycle()
     val defaultConfig = userConfig ?: UserConfig(userId = "default_user")
 
     Dialog(
@@ -171,35 +173,16 @@ fun CompanyRulesHubDialog(
                             )
                         }
                     }
-                } else {
-                    // Sub-screen for the selected section
-                    Column(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = { selectedSection = null }) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = NeonBlue)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Quay lại danh mục", color = NeonBlue, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        when (selectedSection) {
-                            HubSection.COMPANY_INFO -> CompanyInfoSection(defaultConfig, viewModel)
-                            HubSection.SHIFTS -> ShiftManagementDialogContent(viewModel.shiftRepository, companyId, onDismiss = { selectedSection = null })
-                            HubSection.WORK_RULES -> WorkRuleManagementDialogContent(viewModel.workRuleRepository, companyId, onDismiss = { selectedSection = null })
-                            HubSection.OVERTIME_RULES -> OvertimeRuleManagementDialogContent(viewModel.overtimeRuleRepository, companyId, onDismiss = { selectedSection = null })
-                            HubSection.HOLIDAYS -> HolidaysSection(companyId)
-                            HubSection.ALLOWANCES -> AllowancesSection(defaultConfig, viewModel)
-                            HubSection.ADVANCED -> AdvancedSection(defaultConfig, viewModel)
-                            null -> {}
-                        }
-                    }
+                }
+                when (selectedSection) {
+                    HubSection.COMPANY_INFO -> CompanyInfoSection(defaultConfig, viewModel) { selectedSection = null }
+                    HubSection.SHIFTS -> ShiftManagementDialogContent(viewModel.shiftRepository, companyId) { selectedSection = null }
+                    HubSection.WORK_RULES -> WorkRuleManagementDialogContent(viewModel.workRuleRepository, companyId) { selectedSection = null }
+                    HubSection.OVERTIME_RULES -> OvertimeRuleManagementDialogContent(viewModel.overtimeRuleRepository, companyId) { selectedSection = null }
+                    HubSection.HOLIDAYS -> HolidaysSection(companyId) { selectedSection = null }
+                    HubSection.ALLOWANCES -> AllowancesSection(defaultConfig, viewModel) { selectedSection = null }
+                    HubSection.ADVANCED -> AdvancedSection(defaultConfig, viewModel) { selectedSection = null }
+                    null -> {}
                 }
             }
         }
@@ -253,7 +236,7 @@ fun HubCategoryCard(
 }
 
 @Composable
-fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
+fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var companyName by remember { mutableStateOf(userConfig.hoVaTen) }
     var companyCode by remember { mutableStateOf(userConfig.maNhanVien) }
@@ -268,9 +251,50 @@ fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
     var emailError by remember { mutableStateOf<String?>(null) }
     var baseSalaryError by remember { mutableStateOf<String?>(null) }
 
+    var showUnsavedDialog by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = companyName != userConfig.hoVaTen ||
+        companyCode != userConfig.maNhanVien ||
+        phone != userConfig.soDienThoai ||
+        email != userConfig.emailDangKy ||
+        baseSalary != userConfig.luongCoBan.toString() ||
+        insSalary != userConfig.luongDongBaoHiem.toString() ||
+        insRate != userConfig.tiLeDongBaoHiem.toString() ||
+        cutoffDay != userConfig.ngayChotLuong.toString()
+
+    val handleBack = {
+        if (hasUnsavedChanges) {
+            showUnsavedDialog = true
+        } else {
+            onDismiss()
+        }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text("Bạn có thay đổi chưa lưu", color = White) },
+            text = { Text("Bạn có chắc chắn muốn thoát? Các thay đổi sẽ bị mất.", color = LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    onDismiss()
+                }) {
+                    Text("Thoát", color = AccentRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Ở lại", color = NeonBlue)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
     fun validate(): Boolean {
         var isValid = true
-        if (phone.isNotBlank() && (!phone.all { it.isDigit() } || phone.length < 9)) {
+        if (phone.isNotBlank() && (!phone.all { it.isDigit() || it == '+' || it == ' ' } || phone.filter { it.isDigit() }.length < 9)) {
             phoneError = "Số điện thoại không hợp lệ"
             isValid = false
         } else {
@@ -294,17 +318,53 @@ fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
         return isValid
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("1. Thông tin công ty & Hợp đồng", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
-            Text("Cấu hình tên, thông tin liên hệ và lương cơ bản của nhân viên/công ty.", fontSize = 12.sp, color = LightGray)
-            Spacer(modifier = Modifier.height(4.dp))
-        }
+    Dialog(onDismissRequest = handleBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.92f).clip(RoundedCornerShape(24.dp)),
+            color = DarkContainer,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = handleBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại", tint = NeonBlue)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Thông tin công ty", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = White)
+                            Text("Hợp đồng & liên hệ", fontSize = 12.sp, color = LightGray)
+                        }
+                    }
+                    TextButton(onClick = {
+                        if (validate()) {
+                            val updated = userConfig.copy(
+                                hoVaTen = companyName,
+                                maNhanVien = companyCode,
+                                soDienThoai = phone,
+                                emailDangKy = email,
+                                luongCoBan = baseSalary.toDoubleOrNull() ?: userConfig.luongCoBan,
+                                luongDongBaoHiem = insSalary.toDoubleOrNull() ?: userConfig.luongDongBaoHiem,
+                                tiLeDongBaoHiem = insRate.toDoubleOrNull() ?: userConfig.tiLeDongBaoHiem,
+                                ngayChotLuong = cutoffDay.toIntOrNull() ?: userConfig.ngayChotLuong
+                            )
+                            viewModel.updateSalaryConfig(updated)
+                            Toast.makeText(context, "Đã lưu thành công!", Toast.LENGTH_SHORT).show()
+                            onDismiss()
+                        }
+                    }) {
+                        Text("Lưu", color = NeonBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
         item {
             OutlinedTextField(
                 value = companyName,
@@ -411,32 +471,8 @@ fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
                 singleLine = true
             )
         }
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    if (validate()) {
-                        val updated = userConfig.copy(
-                            hoVaTen = companyName,
-                            maNhanVien = companyCode,
-                            soDienThoai = phone,
-                            emailDangKy = email,
-                            luongCoBan = baseSalary.toDoubleOrNull() ?: userConfig.luongCoBan,
-                            luongDongBaoHiem = insSalary.toDoubleOrNull() ?: userConfig.luongDongBaoHiem,
-                            tiLeDongBaoHiem = insRate.toDoubleOrNull() ?: userConfig.tiLeDongBaoHiem,
-                            ngayChotLuong = cutoffDay.toIntOrNull() ?: userConfig.ngayChotLuong
-                        )
-                        viewModel.updateSalaryConfig(updated)
-                        Toast.makeText(context, "Đã lưu thông tin công ty thành công!", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("save_company_info_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Lưu thông tin công ty", color = White, fontWeight = FontWeight.Bold)
+                }
             }
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -457,62 +493,198 @@ fun OvertimeRuleManagementDialogContent(overtimeRuleRepository: OvertimeRuleRepo
 }
 
 @Composable
-fun HolidaysSection(companyId: String) {
+fun HolidaysSection(companyId: String, onDismiss: () -> Unit) {
     var holidayListStr by remember { mutableStateOf("01/01 (Tết Dương lịch), 30/04 (Giải phóng miền Nam), 01/05 (Quốc tế Lao động), 02/09 (Quốc khánh)") }
     val context = LocalContext.current
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("5. Cấu hình Ngày nghỉ / Ngày lễ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
-            Text("Danh sách các ngày lễ chính thức trong năm áp dụng tính lương nhân viên.", fontSize = 12.sp, color = LightGray)
-            Spacer(modifier = Modifier.height(4.dp))
+    var showUnsavedDialog by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = holidayListStr != "01/01 (Tết Dương lịch), 30/04 (Giải phóng miền Nam), 01/05 (Quốc tế Lao động), 02/09 (Quốc khánh)"
+
+    val handleBack = {
+        if (hasUnsavedChanges) {
+            showUnsavedDialog = true
+        } else {
+            onDismiss()
         }
-        item {
-            OutlinedTextField(
-                value = holidayListStr,
-                onValueChange = { holidayListStr = it },
-                label = { Text("Danh sách ngày lễ (dd/MM - Mô tả)") },
-                modifier = Modifier.fillMaxWidth().testTag("input_holidays_list"),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
-                minLines = 3
-            )
-        }
-        item {
-            Button(
-                onClick = {
-                    Toast.makeText(context, "Đã cập nhật danh sách ngày lễ thành công!", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("save_holidays_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Lưu cấu hình ngày lễ", color = White, fontWeight = FontWeight.Bold)
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text("Bạn có thay đổi chưa lưu", color = White) },
+            text = { Text("Bạn có chắc chắn muốn thoát? Các thay đổi sẽ bị mất.", color = LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    onDismiss()
+                }) {
+                    Text("Thoát", color = AccentRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Ở lại", color = NeonBlue)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    Dialog(onDismissRequest = handleBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.92f).clip(RoundedCornerShape(24.dp)),
+            color = DarkContainer,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = handleBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại", tint = NeonBlue)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Ngày nghỉ / Ngày lễ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = White)
+                            Text("Danh sách ngày lễ chính thức", fontSize = 12.sp, color = LightGray)
+                        }
+                    }
+                    TextButton(onClick = {
+                        Toast.makeText(context, "Đã cập nhật danh sách ngày lễ thành công!", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }) {
+                        Text("Lưu", color = NeonBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        OutlinedTextField(
+                            value = holidayListStr,
+                            onValueChange = { holidayListStr = it },
+                            label = { Text("Danh sách ngày lễ (dd/MM - Mô tả)") },
+                            modifier = Modifier.fillMaxWidth().testTag("input_holidays_list"),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
+                            minLines = 3
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun AllowancesSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
+fun AllowancesSection(userConfig: UserConfig, viewModel: TimeSnapViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var pcXangXe by remember { mutableStateOf(userConfig.pcXangXe.toString()) }
     var pcDienThoai by remember { mutableStateOf(userConfig.pcDtDoanhThu.toString()) }
     var pcNhaO by remember { mutableStateOf(userConfig.pcNhaO.toString()) }
     var pcChuyenCan by remember { mutableStateOf(userConfig.tienChuyenCanGoc.toString()) }
     var pcTrachNhiem by remember { mutableStateOf(userConfig.pcTrachNhiem.toString()) }
+    var pcKyThuat by remember { mutableStateOf(userConfig.pcKyThuat.toString()) }
+    var pcHieuSuat by remember { mutableStateOf(userConfig.pcHieuSuat.toString()) }
+    var pcCaDem by remember { mutableStateOf(userConfig.pcCaDem.toString()) }
     var pcComCa by remember { mutableStateOf(userConfig.pcComCa.toString()) }
+    var pcComOt by remember { mutableStateOf(userConfig.pcComOt.toString()) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("6. Cấu hình Phụ cấp", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
-            Text("Cấu hình mức tiền cho các khoản phụ cấp (Xăng xe, điện thoại, nhà ở, chuyên cần...).", fontSize = 12.sp, color = LightGray)
-            Spacer(modifier = Modifier.height(4.dp))
+    var showUnsavedDialog by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = pcXangXe != userConfig.pcXangXe.toString() ||
+        pcDienThoai != userConfig.pcDtDoanhThu.toString() ||
+        pcNhaO != userConfig.pcNhaO.toString() ||
+        pcChuyenCan != userConfig.tienChuyenCanGoc.toString() ||
+        pcTrachNhiem != userConfig.pcTrachNhiem.toString() ||
+        pcKyThuat != userConfig.pcKyThuat.toString() ||
+        pcHieuSuat != userConfig.pcHieuSuat.toString() ||
+        pcCaDem != userConfig.pcCaDem.toString() ||
+        pcComCa != userConfig.pcComCa.toString() ||
+        pcComOt != userConfig.pcComOt.toString()
+
+    val handleBack = {
+        if (hasUnsavedChanges) {
+            showUnsavedDialog = true
+        } else {
+            onDismiss()
         }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text("Bạn có thay đổi chưa lưu", color = White) },
+            text = { Text("Bạn có chắc chắn muốn thoát? Các thay đổi sẽ bị mất.", color = LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    onDismiss()
+                }) {
+                    Text("Thoát", color = AccentRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Ở lại", color = NeonBlue)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    Dialog(onDismissRequest = handleBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.92f).clip(RoundedCornerShape(24.dp)),
+            color = DarkContainer,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = handleBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại", tint = NeonBlue)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Phụ cấp & Tiền cơm", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = White)
+                            Text("Phụ cấp cố định, cơm ca", fontSize = 12.sp, color = LightGray)
+                        }
+                    }
+                    TextButton(onClick = {
+                        val updated = userConfig.copy(
+                            pcXangXe = pcXangXe.toDoubleOrNull() ?: userConfig.pcXangXe,
+                            pcDtDoanhThu = pcDienThoai.toDoubleOrNull() ?: userConfig.pcDtDoanhThu,
+                            pcNhaO = pcNhaO.toDoubleOrNull() ?: userConfig.pcNhaO,
+                            tienChuyenCanGoc = pcChuyenCan.toDoubleOrNull() ?: userConfig.tienChuyenCanGoc,
+                            pcTrachNhiem = pcTrachNhiem.toDoubleOrNull() ?: userConfig.pcTrachNhiem,
+                            pcKyThuat = pcKyThuat.toDoubleOrNull() ?: userConfig.pcKyThuat,
+                            pcHieuSuat = pcHieuSuat.toDoubleOrNull() ?: userConfig.pcHieuSuat,
+                            pcCaDem = pcCaDem.toDoubleOrNull() ?: userConfig.pcCaDem,
+                            pcComCa = pcComCa.toDoubleOrNull() ?: userConfig.pcComCa,
+                            pcComOt = pcComOt.toDoubleOrNull() ?: userConfig.pcComOt
+                        )
+                        viewModel.updateSalaryConfig(updated)
+                        Toast.makeText(context, "Đã lưu phụ cấp thành công!", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }) {
+                        Text("Lưu", color = NeonBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+
         item {
             OutlinedTextField(
                 value = pcXangXe,
@@ -570,6 +742,39 @@ fun AllowancesSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
         }
         item {
             OutlinedTextField(
+                value = pcKyThuat,
+                onValueChange = { pcKyThuat = it.filter { c -> c.isDigit() } },
+                label = { Text("Phụ cấp Kỹ thuật (VND)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().testTag("input_pc_kythuat"),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
+                singleLine = true
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = pcHieuSuat,
+                onValueChange = { pcHieuSuat = it.filter { c -> c.isDigit() } },
+                label = { Text("Phụ cấp Hiệu suất (VND)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().testTag("input_pc_hieusuat"),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
+                singleLine = true
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = pcCaDem,
+                onValueChange = { pcCaDem = it.filter { c -> c.isDigit() } },
+                label = { Text("Phụ cấp Ca đêm (VND)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().testTag("input_pc_cadem"),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
+                singleLine = true
+            )
+        }
+        item {
+            OutlinedTextField(
                 value = pcComCa,
                 onValueChange = { pcComCa = it.filter { c -> c.isDigit() } },
                 label = { Text("Phụ cấp Cơm ca (mỗi ngày công) (VND)") },
@@ -580,33 +785,25 @@ fun AllowancesSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
             )
         }
         item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    val updated = userConfig.copy(
-                        pcXangXe = pcXangXe.toDoubleOrNull() ?: userConfig.pcXangXe,
-                        pcDtDoanhThu = pcDienThoai.toDoubleOrNull() ?: userConfig.pcDtDoanhThu,
-                        pcNhaO = pcNhaO.toDoubleOrNull() ?: userConfig.pcNhaO,
-                        tienChuyenCanGoc = pcChuyenCan.toDoubleOrNull() ?: userConfig.tienChuyenCanGoc,
-                        pcTrachNhiem = pcTrachNhiem.toDoubleOrNull() ?: userConfig.pcTrachNhiem,
-                        pcComCa = pcComCa.toDoubleOrNull() ?: userConfig.pcComCa
-                    )
-                    viewModel.updateSalaryConfig(updated)
-                    Toast.makeText(context, "Đã lưu cấu hình phụ cấp thành công!", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("save_allowances_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Lưu cấu hình phụ cấp", color = White, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = pcComOt,
+                onValueChange = { pcComOt = it.filter { c -> c.isDigit() } },
+                label = { Text("Phụ cấp Cơm OT (mỗi ngày công tăng ca >= 10h) (VND)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().testTag("input_pc_comot"),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = NeonBlue, unfocusedBorderColor = LightGray),
+                singleLine = true
+            )
+        }
+
+                }
             }
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
+fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var unionFee by remember { mutableStateOf(userConfig.doanPhiCongDoan.toString()) }
     var annualLeave by remember { mutableStateOf(userConfig.soNgayPhepNam.toString()) }
@@ -614,16 +811,85 @@ fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
     var tinhKhauTru by remember { mutableStateOf(userConfig.tinhKhauTruNghi) }
 
     var showRecalculateWarning by remember { mutableStateOf(false) }
+    var showUnsavedDialog by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("7. Cấu hình Nâng cao", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
-            Text("Đoàn phí công đoàn, phép năm, trừ giờ nghỉ và công cụ tính lại lịch sử.", fontSize = 12.sp, color = LightGray)
-            Spacer(modifier = Modifier.height(4.dp))
+    val hasUnsavedChanges = unionFee != userConfig.doanPhiCongDoan.toString() ||
+        annualLeave != userConfig.soNgayPhepNam.toString() ||
+        breakHours != userConfig.soGioNghiGiaiLao.toString() ||
+        tinhKhauTru != userConfig.tinhKhauTruNghi
+
+    val handleBack = {
+        if (hasUnsavedChanges) {
+            showUnsavedDialog = true
+        } else {
+            onDismiss()
         }
+    }
+
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            title = { Text("Bạn có thay đổi chưa lưu", color = White) },
+            text = { Text("Bạn có chắc chắn muốn thoát? Các thay đổi sẽ bị mất.", color = LightGray) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsavedDialog = false
+                    onDismiss()
+                }) {
+                    Text("Thoát", color = AccentRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedDialog = false }) {
+                    Text("Ở lại", color = NeonBlue)
+                }
+            },
+            containerColor = DarkContainer
+        )
+    }
+
+    Dialog(onDismissRequest = handleBack, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.92f).clip(RoundedCornerShape(24.dp)),
+            color = DarkContainer,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = handleBack) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Quay lại", tint = NeonBlue)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Cấu hình nâng cao", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = White)
+                            Text("Đoàn phí, phép năm, tính lại", fontSize = 12.sp, color = LightGray)
+                        }
+                    }
+                    TextButton(onClick = {
+                        val updated = userConfig.copy(
+                            doanPhiCongDoan = unionFee.toDoubleOrNull() ?: userConfig.doanPhiCongDoan,
+                            soNgayPhepNam = annualLeave.toIntOrNull() ?: userConfig.soNgayPhepNam,
+                            soGioNghiGiaiLao = breakHours.toDoubleOrNull() ?: userConfig.soGioNghiGiaiLao,
+                            tinhKhauTruNghi = tinhKhauTru
+                        )
+                        viewModel.updateSalaryConfig(updated)
+                        Toast.makeText(context, "Đã lưu cài đặt nâng cao thành công!", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }) {
+                        Text("Lưu", color = NeonBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+
         item {
             OutlinedTextField(
                 value = unionFee,
@@ -671,26 +937,7 @@ fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
                 )
             }
         }
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    val updated = userConfig.copy(
-                        doanPhiCongDoan = unionFee.toDoubleOrNull() ?: userConfig.doanPhiCongDoan,
-                        soNgayPhepNam = annualLeave.toIntOrNull() ?: userConfig.soNgayPhepNam,
-                        soGioNghiGiaiLao = breakHours.toDoubleOrNull() ?: userConfig.soGioNghiGiaiLao,
-                        tinhKhauTruNghi = tinhKhauTru
-                    )
-                    viewModel.updateSalaryConfig(updated)
-                    Toast.makeText(context, "Đã lưu cài đặt nâng cao thành công!", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp).testTag("save_advanced_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Lưu cài đặt nâng cao", color = White, fontWeight = FontWeight.Bold)
-            }
-        }
+
         item {
             Spacer(modifier = Modifier.height(12.dp))
             Button(
@@ -706,21 +953,203 @@ fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
         }
     }
 
+    var recalcMode by remember { mutableStateOf("ALL") } // "ALL", "SINGLE_DAY", "MONTH", "RANGE"
+    var selectedSingleDay by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
+    var selectedMonthYear by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.getDefault()).format(java.util.Date())) }
+    var selectedStartDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
+    var selectedEndDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
+
     if (showRecalculateWarning) {
         AlertDialog(
             onDismissRequest = { showRecalculateWarning = false },
-            title = { Text("Cảnh báo tính lại lịch sử", color = White) },
+            title = { Text("Tính lại lịch sử chấm công", color = White, fontWeight = FontWeight.Bold) },
             text = {
-                Text(
-                    "Thao tác này sẽ áp dụng các quy tắc giờ công và tăng ca hiện tại cho toàn bộ lịch sử chấm công trước đó. Bạn có chắc chắn muốn tính lại?",
-                    color = LightGray
-                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Chọn phạm vi tính lại lịch sử. Thao tác này sẽ áp dụng các quy tắc giờ công và tăng ca hiện tại cho các bản ghi được chọn.",
+                        color = LightGray,
+                        fontSize = 13.sp
+                    )
+                    
+                    val modes = listOf(
+                        "ALL" to "Tất cả lịch sử",
+                        "SINGLE_DAY" to "Một ngày cụ thể",
+                        "MONTH" to "Một tháng cụ thể",
+                        "RANGE" to "Khoảng ngày"
+                    )
+                    
+                    modes.forEach { (m, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { recalcMode = m }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (recalcMode == m),
+                                onClick = { recalcMode = m },
+                                colors = RadioButtonDefaults.colors(selectedColor = NeonBlue)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(label, color = White, fontSize = 14.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (recalcMode == "SINGLE_DAY") {
+                        Text("Chọn ngày để tính lại:", color = LightGray, fontSize = 12.sp)
+                        OutlinedButton(
+                            onClick = {
+                                val parts = selectedSingleDay.split("-")
+                                val curCal = java.util.Calendar.getInstance().apply {
+                                    if (parts.size == 3) {
+                                        set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                    }
+                                }
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, yr, mo, dy ->
+                                        selectedSingleDay = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                    },
+                                    curCal.get(java.util.Calendar.YEAR),
+                                    curCal.get(java.util.Calendar.MONTH),
+                                    curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                ).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, NeonBlue)
+                        ) {
+                            Icon(imageVector = Icons.Default.DateRange, contentDescription = null, tint = NeonBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Ngày: $selectedSingleDay", color = NeonBlue)
+                        }
+                    }
+
+                    if (recalcMode == "MONTH") {
+                        Text("Chọn tháng để tính lại:", color = LightGray, fontSize = 12.sp)
+                        OutlinedButton(
+                            onClick = {
+                                val parts = selectedMonthYear.split("-")
+                                val curCal = java.util.Calendar.getInstance().apply {
+                                    if (parts.size == 2) {
+                                        set(parts[0].toInt(), parts[1].toInt() - 1, 1)
+                                    }
+                                }
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, yr, mo, _ ->
+                                        selectedMonthYear = String.format("%04d-%02d", yr, mo + 1)
+                                    },
+                                    curCal.get(java.util.Calendar.YEAR),
+                                    curCal.get(java.util.Calendar.MONTH),
+                                    1
+                                ).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(1.dp, NeonBlue)
+                        ) {
+                            Icon(imageVector = Icons.Default.DateRange, contentDescription = null, tint = NeonBlue)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Tháng: $selectedMonthYear", color = NeonBlue)
+                        }
+                    }
+
+                    if (recalcMode == "RANGE") {
+                        Text("Chọn khoảng thời gian:", color = LightGray, fontSize = 12.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val parts = selectedStartDate.split("-")
+                                    val curCal = java.util.Calendar.getInstance().apply {
+                                        if (parts.size == 3) {
+                                            set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                        }
+                                    }
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, yr, mo, dy ->
+                                            selectedStartDate = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                        },
+                                        curCal.get(java.util.Calendar.YEAR),
+                                        curCal.get(java.util.Calendar.MONTH),
+                                        curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, NeonBlue),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Text("Từ: $selectedStartDate", color = NeonBlue, fontSize = 11.sp)
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val parts = selectedEndDate.split("-")
+                                    val curCal = java.util.Calendar.getInstance().apply {
+                                        if (parts.size == 3) {
+                                            set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+                                        }
+                                    }
+                                    android.app.DatePickerDialog(
+                                        context,
+                                        { _, yr, mo, dy ->
+                                            selectedEndDate = String.format("%04d-%02d-%02d", yr, mo + 1, dy)
+                                        },
+                                        curCal.get(java.util.Calendar.YEAR),
+                                        curCal.get(java.util.Calendar.MONTH),
+                                        curCal.get(java.util.Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, NeonBlue),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                            ) {
+                                Text("Đến: $selectedEndDate", color = NeonBlue, fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    if (recalcMode == "ALL") {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = AccentRed.copy(alpha = 0.15f)),
+                            border = BorderStroke(1.dp, AccentRed),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = AccentRed)
+                                Text(
+                                    "Cảnh báo: Thao tác này sẽ ghi đè toàn bộ dữ liệu công, tăng ca lịch sử bằng quy tắc hiện tại.",
+                                    color = White,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showRecalculateWarning = false
-                        viewModel.recalculateAllHistory { count ->
+                        viewModel.recalculateAllHistory(
+                            mode = recalcMode,
+                            singleDay = if (recalcMode == "SINGLE_DAY") selectedSingleDay else null,
+                            month = if (recalcMode == "MONTH") selectedMonthYear else null,
+                            startDate = if (recalcMode == "RANGE") selectedStartDate else null,
+                            endDate = if (recalcMode == "RANGE") selectedEndDate else null
+                        ) { count ->
                             Toast.makeText(context, "Đã tính lại thành công $count bản ghi lịch sử!", Toast.LENGTH_LONG).show()
                         }
                     },
@@ -739,3 +1168,6 @@ fun AdvancedSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
         )
     }
 }
+            }
+        }
+    }

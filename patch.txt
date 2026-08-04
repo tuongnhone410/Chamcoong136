@@ -1,0 +1,10 @@
+--- app/src/main/java/com/example/viewmodel/TimeSnapViewModel.kt
++++ app/src/main/java/com/example/viewmodel/TimeSnapViewModel.kt
+@@ -10,6 +10,7 @@
+ import androidx.lifecycle.viewModelScope
+ import com.example.data.db.AppDatabase
+ import com.example.data.model.TimeEntry
++import com.example.data.AttendanceRecord
+ import com.example.data.model.UserConfig
+ import com.example.data.repository.TimeEntryRepository
+ import com.example.data.repository.UserConfigRepository

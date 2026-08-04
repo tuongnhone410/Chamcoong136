@@ -60,11 +60,15 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    val currentAdminUid: String
+        get() = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "default_company"
+
     fun loadEmployees() {
         viewModelScope.launch {
             _isLoading.value = true
             val list = FirestoreService.getAllUserConfigs()
-            _employees.value = list.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen })
+            val filtered = list.filter { it.companyId == currentAdminUid || it.userId == currentAdminUid }
+            _employees.value = filtered.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen })
             _isLoading.value = false
             loadTodayAttendance()
         }
@@ -287,9 +291,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deleteEmployee(userId: String) {
+    fun deleteEmployee(userId: String, keepAttendanceHistory: Boolean = true) {
         viewModelScope.launch {
-            FirestoreService.deleteUserFully(userId)
+            FirestoreService.deleteUserFully(userId, keepAttendanceHistory)
             loadEmployees()
             if (_selectedEmployee.value?.userId == userId) {
                 _selectedEmployee.value = null
@@ -297,11 +301,11 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun batchDeleteEmployees() {
+    fun batchDeleteEmployees(keepAttendanceHistory: Boolean = true) {
         viewModelScope.launch {
             val ids = _selectedEmployeeIds.value
             ids.forEach { userId ->
-                FirestoreService.deleteUserFully(userId)
+                FirestoreService.deleteUserFully(userId, keepAttendanceHistory)
             }
             loadEmployees()
             _selectedEmployeeIds.value = emptySet()
@@ -310,7 +314,12 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveEmployeeConfig(config: UserConfig) {
         viewModelScope.launch {
-            FirestoreService.saveUserSalaryConfigToFirestore(config)
+            val configWithCompany = if (config.companyId == "default_company" && config.userId != currentAdminUid) {
+                config.copy(companyId = currentAdminUid)
+            } else {
+                config
+            }
+            FirestoreService.saveUserSalaryConfigToFirestore(configWithCompany)
             loadEmployees() // refresh list
         }
     }

@@ -944,6 +944,7 @@ object FirestoreService {
             "heSoOtDem" to config.heSoOtDem,
             "caDemStart" to config.caDemStart,
             "caDemEnd" to config.caDemEnd,
+            "companyId" to config.companyId,
             "isAdmin" to config.isAdmin
         )
         firestore.collection("users").document(config.userId).collection("salary_config").document("settings")
@@ -987,7 +988,7 @@ object FirestoreService {
         }
     }
 
-    suspend fun deleteUserFully(userId: String) {
+    suspend fun deleteUserFully(userId: String, keepAttendanceHistory: Boolean = true) {
         if (userId.startsWith("demo") || userId.contains("demo")) return
         val firestore = getDb() ?: return
         try {
@@ -998,9 +999,11 @@ object FirestoreService {
             }
             
             // 2. Delete attendance_logs subcollection documents
-            val logs = firestore.collection("users").document(userId).collection("attendance_logs").get().awaitTaskFirestore()
-            logs?.documents?.forEach { doc ->
-                doc.reference.delete().awaitTaskFirestore()
+            if (!keepAttendanceHistory) {
+                val logs = firestore.collection("users").document(userId).collection("attendance_logs").get().awaitTaskFirestore()
+                logs?.documents?.forEach { doc ->
+                    doc.reference.delete().awaitTaskFirestore()
+                }
             }
             
             // 3. Delete the main user document
@@ -1077,6 +1080,7 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         heSoOtDem = getDouble("heSoOtDem") ?: getDouble("he_so_ot_dem") ?: 1.75,
         caDemStart = getString("caDemStart") ?: getString("thoi_gian_ca_dem") ?: "22:00",
         caDemEnd = getString("caDemEnd") ?: "06:00",
+        companyId = getString("companyId") ?: "default_company",
         isAdmin = getBoolean("isAdmin") ?: false
     )
 }

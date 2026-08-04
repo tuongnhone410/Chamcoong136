@@ -61,6 +61,7 @@ data class UserConfig(
     val heSoOtDem: Double = 1.75,
     val caDemStart: String = "22:00",
     val caDemEnd: String = "06:00",
+    val companyId: String = "default_company",
     val isAdmin: Boolean = false
 ) {
     fun getCalcTypeFor(field: String): String {

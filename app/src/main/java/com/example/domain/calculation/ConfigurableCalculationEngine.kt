@@ -20,7 +20,7 @@ class ConfigurableCalculationEngine(
     customShifts: Map<String, ShiftConfig>? = null
 ) : CalculationEngine {
 
-    override val shifts: Map<String, ShiftConfig> = customShifts ?: mapOf(
+    private var activeShifts: Map<String, ShiftConfig> = customShifts ?: mapOf(
         "ca1" to ShiftConfig(
             shiftId = "ca1",
             shiftType = "DAY",
@@ -59,6 +59,13 @@ class ConfigurableCalculationEngine(
         )
     )
 
+    override val shifts: Map<String, ShiftConfig>
+        get() = activeShifts
+
+    fun updateShifts(newShifts: Map<String, ShiftConfig>) {
+        this.activeShifts = newShifts
+    }
+
     fun updateRules(workRule: WorkRule?, overtimeRule: OvertimeRule?) {
         this.defaultWorkRule = workRule
         this.defaultOvertimeRule = overtimeRule
@@ -69,16 +76,42 @@ class ConfigurableCalculationEngine(
         if (shiftId != null && shifts.containsKey(shiftId)) {
             return shifts[shiftId]!!
         }
-        if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") {
-            return shifts["ca_dem"]!!
+        
+        if (shifts.isEmpty()) {
+            return ShiftConfig(
+                shiftId = "fallback",
+                shiftType = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "NIGHT" else "DAY",
+                startTime = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "19:30" else "07:30",
+                endTime = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "07:30" else "19:30",
+                checkInWindowStart = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "19:00" else "07:00",
+                checkInWindowEnd = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "19:30" else "07:30",
+                checkOutWindowStart = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "07:30" else "19:30",
+                checkOutWindowEnd = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") "08:00" else "20:00",
+                breakHours = if (entry.shiftType == "NIGHT" || entry.dayType == "NIGHT") 0.0 else 1.5,
+                standardHours = defaultWorkRule?.standardHoursPerDay ?: 8.0
+            )
         }
-        val inTime = entry.checkInTime ?: return shifts.values.firstOrNull() ?: shifts["ca1"]!!
+
+        val isNightRequired = entry.shiftType == "NIGHT" || entry.dayType == "NIGHT"
+        if (isNightRequired) {
+            val nightShift = shifts.values.firstOrNull { it.shiftType == "NIGHT" || com.example.data.model.ShiftEntity.isOvernight(it.startTime, it.endTime) }
+            if (nightShift != null) return nightShift
+        }
+
+        val inTime = entry.checkInTime ?: return shifts.values.first()
         val cal = Calendar.getInstance().apply { timeInMillis = inTime }
         val hour = cal.get(Calendar.HOUR_OF_DAY)
-        if (hour >= 18 || hour < 6) {
-            return shifts["ca_dem"] ?: shifts.values.first()
+        val wantNight = hour >= 18 || hour < 6
+
+        if (wantNight) {
+            val nightShift = shifts.values.firstOrNull { it.shiftType == "NIGHT" || com.example.data.model.ShiftEntity.isOvernight(it.startTime, it.endTime) }
+            if (nightShift != null) return nightShift
+        } else {
+            val dayShift = shifts.values.firstOrNull { it.shiftType == "DAY" || !com.example.data.model.ShiftEntity.isOvernight(it.startTime, it.endTime) }
+            if (dayShift != null) return dayShift
         }
-        return shifts["ca1"] ?: shifts.values.first()
+
+        return shifts.values.first()
     }
 
     private fun getMillisForTime(baseTimeMs: Long, timeStr: String, dayOffset: Int = 0): Long {
