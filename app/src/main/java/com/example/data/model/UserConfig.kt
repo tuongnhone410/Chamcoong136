@@ -88,12 +88,13 @@ data class UserConfig(
     companion object {
         fun getDefaultCalcType(field: String): String {
             return when (field) {
-                "pcComCa" -> "PER_WORK_DAY"
-                "pcComOt" -> "OT_MEAL_GE_1H"
-                "pcCaDem" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
-                "pcThamNien" -> "MONTHLY_FLAT"
-                "tienChuyenCanGoc" -> "MONTHLY_PRO_RATED"
-                else -> "MONTHLY_PRO_RATED"
+                "pcComCa" -> "PER_SHIFT"
+                "pcComOt" -> "PER_SHIFT"
+                "pcCaDem" -> "PER_SHIFT"
+                "pcThamNien" -> "FIXED_MONTHLY"
+                "tienChuyenCanGoc" -> "ATTENDANCE_CONDITION"
+                "pcKyThuat", "pcTrachNhiem", "pcChucVu" -> "FIXED_MONTHLY"
+                else -> "DAILY_RATE"
             }
         }
     }

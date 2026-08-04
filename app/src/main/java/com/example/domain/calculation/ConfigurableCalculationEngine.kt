@@ -282,9 +282,21 @@ class ConfigurableCalculationEngine(
         totalScheduledDaysInMonth: Int
     ): Double {
         return when (calcType) {
+            "FIXED_MONTHLY" -> allowanceValue
+            "DAILY_RATE" -> {
+                val expectedDays = if (totalScheduledDaysInMonth > 0) totalScheduledDaysInMonth.toDouble() else 26.0
+                (allowanceValue / expectedDays) * totalWorkDays
+            }
+            "PER_SHIFT" -> {
+                if (fieldName == "pcCaDem") nightShiftsCount * allowanceValue
+                else if (fieldName == "pcComOt") comOtCount * allowanceValue
+                else comCaCount * allowanceValue
+            }
+            "PER_DAY" -> totalWorkDays * allowanceValue
+            "ATTENDANCE_CONDITION" -> if (totalWorkDays >= (if (totalScheduledDaysInMonth > 0) totalScheduledDaysInMonth else 26)) allowanceValue else 0.0
             "MONTHLY_PRO_RATED" -> {
                 val expectedDays = if (totalScheduledDaysInMonth > 0) totalScheduledDaysInMonth.toDouble() else 26.0
-                val ratio = (totalWorkDays / expectedDays).coerceAtMost(1.0)
+                val ratio = (totalWorkDays / expectedDays)
                 allowanceValue * ratio
             }
             "MONTHLY_FLAT" -> allowanceValue
@@ -294,7 +306,7 @@ class ConfigurableCalculationEngine(
             "OT_MEAL_GE_2H", "OT_MEAL_GE_1H" -> comOtCount * allowanceValue
             "PER_NIGHT_SHIFT" -> nightShiftsCount * allowanceValue
             else -> {
-                val ratio = (totalWorkDays / 26.0).coerceAtMost(1.0)
+                val ratio = (totalWorkDays / 26.0)
                 allowanceValue * ratio
             }
         }
