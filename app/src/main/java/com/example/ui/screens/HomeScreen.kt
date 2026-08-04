@@ -1266,19 +1266,15 @@ fun HomeScreen(
                                 digits.length >= 3 -> {
                                     var hours = digits.substring(0, 2)
                                     val h = hours.toIntOrNull() ?: 0
-                                    if (h > 24) hours = "24"
+                                    if (h > 23) hours = "23"
                                     var minutes = digits.substring(2)
-                                    if (hours == "24" && minutes.isNotEmpty()) {
-                                        minutes = "00".take(minutes.length)
-                                    } else {
-                                        val m = minutes.toIntOrNull() ?: 0
-                                        if (m > 59) minutes = "59"
-                                    }
+                                    val m = minutes.toIntOrNull() ?: 0
+                                    if (m > 59) minutes = "59"
                                     "$hours:$minutes"
                                 }
                                 digits.length == 2 -> {
                                     val h = digits.toIntOrNull() ?: 0
-                                    if (h > 24) "24" else digits
+                                    if (h > 23) "23" else digits
                                 }
                                 else -> digits
                             }
@@ -1514,19 +1510,15 @@ fun HomeScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 24) hours = "24"
+                                            if (h > 23) hours = "23"
                                             var minutes = digits.substring(2)
-                                            if (hours == "24" && minutes.isNotEmpty()) {
-                                                minutes = "00".take(minutes.length)
-                                            } else {
-                                                val m = minutes.toIntOrNull() ?: 0
-                                                if (m > 59) minutes = "59"
-                                            }
+                                            val m = minutes.toIntOrNull() ?: 0
+                                            if (m > 59) minutes = "59"
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 24) "24" else digits
+                                            if (h > 23) "23" else digits
                                         }
                                         else -> digits
                                     }
@@ -1571,19 +1563,15 @@ fun HomeScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 24) hours = "24"
+                                            if (h > 23) hours = "23"
                                             var minutes = digits.substring(2)
-                                            if (hours == "24" && minutes.isNotEmpty()) {
-                                                minutes = "00".take(minutes.length)
-                                            } else {
-                                                val m = minutes.toIntOrNull() ?: 0
-                                                if (m > 59) minutes = "59"
-                                            }
+                                            val m = minutes.toIntOrNull() ?: 0
+                                            if (m > 59) minutes = "59"
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 24) "24" else digits
+                                            if (h > 23) "23" else digits
                                         }
                                         else -> digits
                                     }

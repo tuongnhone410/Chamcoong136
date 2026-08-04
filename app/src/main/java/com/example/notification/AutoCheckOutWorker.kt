@@ -43,16 +43,11 @@ class AutoCheckOutWorker(
                 val inCal = Calendar.getInstance().apply { timeInMillis = inTime }
                 val inHour = inCal.get(Calendar.HOUR_OF_DAY)
 
-                val activeShifts = database.companyShiftDao().getActiveShiftsByCompany("DEFAULT")
-                val matchedShift = if (activeShifts.isNotEmpty() && active.checkInTime != null) {
-                    SalaryCalculator.detectCompanyShift(active.checkInTime, activeShifts)
-                } else null
+                val isNight = active.shiftId == "ca_dem" || active.shiftType == "NIGHT" || active.dayType == "NIGHT" || inHour >= 15 || inHour < 6
 
-                val isNight = matchedShift?.let { SalaryCalculator.toShiftConfig(it).shiftType == "NIGHT" } ?: (active.shiftId == "ca_dem" || active.shiftType == "NIGHT" || active.dayType == "NIGHT" || inHour >= 15 || inHour < 6)
-
-                val sId = matchedShift?.shift_code ?: (if (isNight) "ca_dem" else if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1")
-                val sType = matchedShift?.let { SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY")
-                val dayType = if (sType == "NIGHT") "NIGHT" else active.dayType
+                val sId = if (isNight) "ca_dem" else if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
+                val dayType = if (isNight) "NIGHT" else active.dayType
 
                 val updated = active.copy(
                     checkOutTime = checkoutMs,
@@ -64,7 +59,7 @@ class AutoCheckOutWorker(
                 )
 
                 val userConfig = database.userConfigDao().getConfigForUser(uid) ?: UserConfig(userId = uid)
-                val calculated = SalaryCalculator.calculateSingleEntry(updated, userConfig, activeShifts)
+                val calculated = SalaryCalculator.calculateSingleEntry(updated, userConfig)
 
                 database.timeEntryDao().insertOrUpdate(calculated)
 

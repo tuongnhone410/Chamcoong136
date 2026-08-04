@@ -48,6 +48,10 @@ class TimeRepository(
         return timeEntryDao.getEntriesForUserInMonthDirect(userId, monthPattern, altMonthPattern)
     }
 
+    suspend fun getAllEntriesForUserDirect(userId: String): List<TimeEntry> {
+        return timeEntryDao.getAllEntriesForUserDirect(userId)
+    }
+
     suspend fun getLastCompletedEntries(userId: String, limit: Int): List<TimeEntry> {
         return timeEntryDao.getLastCompletedEntries(userId, limit)
     }

@@ -25,5 +25,12 @@ data class TimeEntry(
     val lateMinutes: Int = 0,
     val earlyLeaveMinutes: Int = 0,
     val customBreakDeduction: Boolean? = null,
-    val customBreakHours: Double? = null
+    val customBreakHours: Double? = null,
+    val workRuleId: String? = null,
+    val workRuleVersion: Int? = null,
+    val overtimeRuleId: String? = null,
+    val overtimeRuleVersion: Int? = null,
+    val snapshotStandardHours: Double? = null,
+    val snapshotOtMultiplier: Double? = null,
+    val snapshotRoundingMinutes: Int? = null
 )

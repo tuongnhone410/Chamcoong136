@@ -63,11 +63,8 @@ class AutoCheckInWorker(
                 val cal = Calendar.getInstance().apply { timeInMillis = checkInMs }
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
 
-                val activeShifts = database.companyShiftDao().getActiveShiftsByCompany("DEFAULT")
-                val matchedShift = if (activeShifts.isNotEmpty()) SalaryCalculator.detectCompanyShift(checkInMs, activeShifts) else null
-
-                val sId = matchedShift?.shift_code ?: (if (hour >= 15 || hour < 6) "ca_dem" else "ca1")
-                val sType = matchedShift?.let { SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else "DAY")
+                val sId = if (hour >= 15 || hour < 6) "ca_dem" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else "DAY"
 
                 val dayType = when {
                     sType == "NIGHT" -> "NIGHT"
@@ -89,7 +86,7 @@ class AutoCheckInWorker(
                 )
 
                 val userConfig = database.userConfigDao().getConfigForUser(uid) ?: UserConfig(userId = uid)
-                val calculated = SalaryCalculator.calculateSingleEntry(newEntry, userConfig, activeShifts)
+                val calculated = SalaryCalculator.calculateSingleEntry(newEntry, userConfig)
 
                 database.timeEntryDao().insertOrUpdate(calculated)
 

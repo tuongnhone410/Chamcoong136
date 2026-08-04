@@ -8,6 +8,8 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Update
 import androidx.room.Delete
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -47,4 +49,16 @@ interface AttendanceDao {
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userConfigDao(): UserConfigDao
     abstract fun attendanceDao(): AttendanceDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE user_config ADD COLUMN last_accumulated_month INTEGER NOT NULL DEFAULT -1")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+            }
+        }
+    }
 }

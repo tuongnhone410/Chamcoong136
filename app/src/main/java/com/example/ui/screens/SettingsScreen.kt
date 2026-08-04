@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlarmOn
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Settings
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.clickable
@@ -1187,19 +1189,15 @@ fun SettingsScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 24) hours = "24"
+                                            if (h > 23) hours = "23"
                                             var minutes = digits.substring(2)
-                                            if (hours == "24" && minutes.isNotEmpty()) {
-                                                minutes = "00".take(minutes.length)
-                                            } else {
-                                                val m = minutes.toIntOrNull() ?: 0
-                                                if (m > 59) minutes = "59"
-                                            }
+                                            val m = minutes.toIntOrNull() ?: 0
+                                            if (m > 59) minutes = "59"
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 24) "24" else digits
+                                            if (h > 23) "23" else digits
                                         }
                                         else -> digits
                                     }
@@ -1243,19 +1241,15 @@ fun SettingsScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 24) hours = "24"
+                                            if (h > 23) hours = "23"
                                             var minutes = digits.substring(2)
-                                            if (hours == "24" && minutes.isNotEmpty()) {
-                                                minutes = "00".take(minutes.length)
-                                            } else {
-                                                val m = minutes.toIntOrNull() ?: 0
-                                                if (m > 59) minutes = "59"
-                                            }
+                                            val m = minutes.toIntOrNull() ?: 0
+                                            if (m > 59) minutes = "59"
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 24) "24" else digits
+                                            if (h > 23) "23" else digits
                                         }
                                         else -> digits
                                     }
@@ -1463,6 +1457,196 @@ fun SettingsScreen(
                         Toast.makeText(context, "Đã cập nhật thời gian nhắc nhở thành $newMinutes phút trước khi vào ca", Toast.LENGTH_SHORT).show()
                         showMinutesPickerDialog = false
                     }
+                )
+            }
+
+            var showCompanyRulesHub by remember { mutableStateOf(false) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "TRUNG TÂM CẤU HÌNH CÔNG TY & QUY TẮC", icon = Icons.Default.Settings) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Mở trung tâm quản lý 7 chuyên mục cấu hình (Thông tin công ty, Ca làm việc, Quy tắc giờ công, OT, Ngày nghỉ, Phụ cấp, Nâng cao).",
+                        color = LightGray,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showCompanyRulesHub = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_company_rules_hub_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mở Trung tâm Thiết lập (7 chuyên mục)", color = White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (showCompanyRulesHub) {
+                CompanyRulesHubDialog(
+                    viewModel = viewModel,
+                    companyId = "default_company",
+                    onDismiss = { showCompanyRulesHub = false }
+                )
+            }
+
+            var showShiftManagementDialog by remember { mutableStateOf(false) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "CẤU HÌNH CA LÀM VIỆC", icon = Icons.Default.Schedule) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Tạo và tùy chỉnh các ca làm việc cho công ty (Ca sáng, ca hành chính, ca chiều, ca đêm qua ngày, ca 12h...).",
+                        color = LightGray,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showShiftManagementDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_shift_management_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Schedule, contentDescription = null, tint = White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Quản lý danh sách ca làm việc", color = White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (showShiftManagementDialog) {
+                ShiftManagementDialog(
+                    shiftRepository = viewModel.shiftRepository,
+                    companyId = "default_company",
+                    onDismiss = { showShiftManagementDialog = false }
+                )
+            }
+
+            var showWorkRuleDialog by remember { mutableStateOf(false) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "QUY TẮC GIỜ CÔNG & PHIÊN BẢN", icon = Icons.Default.Settings) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Cấu hình quy tắc tính giờ công, giờ chuẩn, OT, làm tròn và phiên bản cho công ty.",
+                        color = LightGray,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showWorkRuleDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_work_rule_management_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Quản lý Quy tắc giờ công (WorkRule)", color = White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (showWorkRuleDialog) {
+                WorkRuleManagementDialog(
+                    workRuleRepository = viewModel.workRuleRepository,
+                    companyId = "default_company",
+                    onDismiss = { showWorkRuleDialog = false }
+                )
+            }
+
+            var showOvertimeRuleDialog by remember { mutableStateOf(false) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "QUY TẮC TĂNG CA (OVERTIME)", icon = Icons.Default.Schedule) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Cấu hình hệ số tăng ca ngày thường, ngày nghỉ, ngày lễ và phiên bản quy tắc OT cho công ty.",
+                        color = LightGray,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showOvertimeRuleDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_overtime_rule_management_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Schedule, contentDescription = null, tint = White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Quản lý Quy tắc tăng ca (OvertimeRule)", color = White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (showOvertimeRuleDialog) {
+                OvertimeRuleManagementDialog(
+                    overtimeRuleRepository = viewModel.overtimeRuleRepository,
+                    companyId = "default_company",
+                    onDismiss = { showOvertimeRuleDialog = false }
+                )
+            }
+
+            var showRecalculateWarning by remember { mutableStateOf(false) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            CategoryLayout(title = "TÍNH LẠI LỊCH SỬ CHẤM CÔNG", icon = Icons.Default.Refresh) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Lịch sử chấm công cũ giữ nguyên theo version quy tắc lúc tính. Nếu bạn muốn tính lại toàn bộ lịch sử theo quy tắc hiện tại, hãy dùng chức năng này.",
+                        color = LightGray,
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { showRecalculateWarning = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_recalculate_history_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Tính lại lịch sử chấm công (Recalculate)", color = White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            if (showRecalculateWarning) {
+                AlertDialog(
+                    onDismissRequest = { showRecalculateWarning = false },
+                    title = { Text("Cảnh báo tính lại lịch sử", color = White) },
+                    text = {
+                        Text(
+                            "Thao tác này sẽ áp dụng các quy tắc giờ công (WorkRule) và tăng ca (OvertimeRule) hiện tại cho toàn bộ lịch sử chấm công trước đó. Các phiên bản quy tắc cũ đã lưu trong lịch sử sẽ bị ghi đè. Bạn có chắc chắn muốn tính lại?",
+                            color = LightGray
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showRecalculateWarning = false
+                                viewModel.recalculateAllHistory { count ->
+                                    Toast.makeText(context, "Đã tính lại thành công $count bản ghi lịch sử!", Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                            modifier = Modifier.testTag("confirm_recalculate_button")
+                        ) {
+                            Text("Đồng ý tính lại", color = White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRecalculateWarning = false }) {
+                            Text("Hủy", color = LightGray)
+                        }
+                    },
+                    containerColor = DarkContainer
                 )
             }
 

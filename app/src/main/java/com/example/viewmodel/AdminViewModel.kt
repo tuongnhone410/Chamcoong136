@@ -50,7 +50,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     init {
         loadEmployees()
         observeTodayAttendanceRealtime()
-        loadCompanyShifts()
     }
 
     private fun observeTodayAttendanceRealtime() {
@@ -452,67 +451,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 android.widget.Toast.makeText(context, "Lỗi khi xuất phiếu lương: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             } finally {
                 _isExportingSingle.value = false
-            }
-        }
-    }
-
-    private val _companyShifts = MutableStateFlow<List<com.example.data.model.CompanyShift>>(emptyList())
-    val companyShifts: StateFlow<List<com.example.data.model.CompanyShift>> = _companyShifts
-
-    fun loadCompanyShifts(companyId: String = "DEFAULT") {
-        viewModelScope.launch {
-            try {
-                val db = com.example.data.db.AppDatabase.getInstance(getApplication())
-                db.companyShiftDao().getShiftsByCompany(companyId).collect { localShifts ->
-                    if (localShifts.isNotEmpty()) {
-                        _companyShifts.value = localShifts
-                    } else {
-                        val remoteShifts = FirestoreService.getCompanyShiftsFromFirestore(companyId)
-                        if (remoteShifts.isNotEmpty()) {
-                            db.companyShiftDao().insertShifts(remoteShifts)
-                            _companyShifts.value = remoteShifts
-                        } else if (companyId == "DEFAULT") {
-                            val seedShifts = com.example.data.SalaryCalculator.DEFAULT_COMPANY_SHIFTS
-                            db.companyShiftDao().insertShifts(seedShifts)
-                            _companyShifts.value = seedShifts
-                            seedShifts.forEach { shift ->
-                                FirestoreService.saveCompanyShiftToFirestore(shift)
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("AdminViewModel", "Error loading shifts: ${e.message}")
-            }
-        }
-    }
-
-    fun saveCompanyShift(shift: com.example.data.model.CompanyShift, onComplete: ((Boolean) -> Unit)? = null) {
-        viewModelScope.launch {
-            try {
-                val db = com.example.data.db.AppDatabase.getInstance(getApplication())
-                db.companyShiftDao().insertOrUpdateShift(shift)
-                FirestoreService.saveCompanyShiftToFirestore(shift)
-                loadCompanyShifts(shift.company_id)
-                onComplete?.invoke(true)
-            } catch (e: Exception) {
-                android.util.Log.e("AdminViewModel", "Error saving shift: ${e.message}")
-                onComplete?.invoke(false)
-            }
-        }
-    }
-
-    fun deleteCompanyShift(shiftCode: String, companyId: String = "DEFAULT", onComplete: ((Boolean) -> Unit)? = null) {
-        viewModelScope.launch {
-            try {
-                val db = com.example.data.db.AppDatabase.getInstance(getApplication())
-                db.companyShiftDao().deleteShiftByCode(shiftCode)
-                FirestoreService.deleteCompanyShiftFromFirestore(shiftCode, companyId)
-                loadCompanyShifts(companyId)
-                onComplete?.invoke(true)
-            } catch (e: Exception) {
-                android.util.Log.e("AdminViewModel", "Error deleting shift: ${e.message}")
-                onComplete?.invoke(false)
             }
         }
     }

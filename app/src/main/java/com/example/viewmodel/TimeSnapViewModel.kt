@@ -12,6 +12,7 @@ import com.example.data.model.UserConfig
 import com.example.data.repository.TimeRepository
 import com.example.data.repository.CloudSyncManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -24,17 +25,33 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
 
     private val database = AppDatabase.getInstance(application)
     val repository = TimeRepository(database.timeEntryDao(), database.userConfigDao())
+    val shiftRepository = com.example.data.repository.ShiftRepository(database.shiftDao())
+    val workRuleRepository = com.example.data.repository.WorkRuleRepository(database.workRuleDao())
+    val overtimeRuleRepository = com.example.data.repository.OvertimeRuleRepository(database.overtimeRuleDao())
     val authController = AuthController(application, repository)
     val cloudSyncManager = CloudSyncManager(application)
     private var syncJob: kotlinx.coroutines.Job? = null
     val hasRestoredForSession = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
+    // Notification Center Management & Persistent Local Caching
+    private val _adminNotifications = MutableStateFlow<List<com.example.data.model.AdminNotification>>(emptyList())
+    val adminNotifications: StateFlow<List<com.example.data.model.AdminNotification>> = _adminNotifications.asStateFlow()
+
+    private val _readNotificationIds = MutableStateFlow<Set<String>>(emptySet())
+    val readNotificationIds: StateFlow<Set<String>> = _readNotificationIds.asStateFlow()
+
+    private val _deletedNotificationIds = MutableStateFlow<Set<String>>(emptySet())
+    val deletedNotificationIds: StateFlow<Set<String>> = _deletedNotificationIds.asStateFlow()
+
+    private val _isRefreshingNotifications = MutableStateFlow(false)
+    val isRefreshingNotifications: StateFlow<Boolean> = _isRefreshingNotifications.asStateFlow()
+
+    val unreadNotificationCount: StateFlow<Int> = combine(_adminNotifications, _readNotificationIds) { list, readSet ->
+        list.count { it.id !in readSet }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     // Current logged-in UI session state
     val currentUserSession: StateFlow<UserSession?> = authController.currentUserFlow
-
-    // Dynamic company shifts from DB / Firestore
-    private val _companyShifts = MutableStateFlow<List<com.example.data.model.CompanyShift>>(emptyList())
-    val companyShifts: StateFlow<List<com.example.data.model.CompanyShift>> = _companyShifts
 
     // Live sync status text
     private val _cloudSyncStatus = MutableStateFlow("Đang cập nhật")
@@ -290,36 +307,6 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        // Observe company shifts from local Room DB and sync from Firestore if empty; seed default data if missing
-        viewModelScope.launch(Dispatchers.IO) {
-            database.companyShiftDao().getShiftsByCompany("DEFAULT").collect { shifts ->
-                if (shifts.isNotEmpty()) {
-                    _companyShifts.value = shifts
-                } else {
-                    try {
-                        val remoteShifts = com.example.data.FirestoreService.getCompanyShiftsFromFirestore("DEFAULT")
-                        if (remoteShifts.isNotEmpty()) {
-                            database.companyShiftDao().insertShifts(remoteShifts)
-                            _companyShifts.value = remoteShifts
-                        } else {
-                            // Seed default company shifts for legacy data migration
-                            val seedShifts = com.example.data.SalaryCalculator.DEFAULT_COMPANY_SHIFTS
-                            database.companyShiftDao().insertShifts(seedShifts)
-                            _companyShifts.value = seedShifts
-                            seedShifts.forEach { shift ->
-                                com.example.data.FirestoreService.saveCompanyShiftToFirestore(shift)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("TimeSnapViewModel", "Failed to load remote shifts: ${e.message}")
-                        val seedShifts = com.example.data.SalaryCalculator.DEFAULT_COMPANY_SHIFTS
-                        database.companyShiftDao().insertShifts(seedShifts)
-                        _companyShifts.value = seedShifts
-                    }
-                }
-            }
-        }
-
         // Run reactive worker to fetch active working shift
         viewModelScope.launch(Dispatchers.IO) {
             currentUserSession.flatMapLatest { session ->
@@ -446,18 +433,14 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     else -> "NORMAL"
                 }
 
-                val activeShifts = _companyShifts.value
-                val nowMs = System.currentTimeMillis()
-                val matchedShift = if (activeShifts.isNotEmpty()) com.example.data.SalaryCalculator.detectCompanyShift(nowMs, activeShifts) else null
-                
-                val sId = matchedShift?.shift_code ?: (if (hour >= 18) "ca_dem" else "ca1")
-                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else "DAY")
+                val sId = if (hour >= 18) "ca_dem" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else "DAY"
 
                 val newEntry = TimeEntry(
                     id = existing?.id ?: 0,
                     userId = session.uid,
                     date = todayStr,
-                    checkInTime = nowMs,
+                    checkInTime = System.currentTimeMillis(),
                     checkOutTime = null,
                     isWorking = true,
                     dayType = dayType,
@@ -465,7 +448,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value, activeShifts)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
@@ -524,13 +507,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 // Perform check-out
                 val cal = Calendar.getInstance()
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
-                val activeShifts = _companyShifts.value
-                val matchedShift = if (activeShifts.isNotEmpty() && active.checkInTime != null) {
-                    com.example.data.SalaryCalculator.detectCompanyShift(active.checkInTime, activeShifts)
-                } else null
                 
-                val sId = matchedShift?.shift_code ?: (if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1")
-                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY")
+                val sId = if (active.shiftId == "ca1" && hour >= 20) "ca2" else active.shiftId ?: "ca1"
+                val sType = if (sId == "ca2") "DAY_REST" else active.shiftType ?: "DAY"
 
                 val updated = active.copy(
                     checkOutTime = System.currentTimeMillis(),
@@ -539,7 +518,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value, activeShifts)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
 
@@ -1195,14 +1174,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 }
             }
 
-            val activeShifts = _companyShifts.value
             val isLeave = finalDayType == "PAID_LEAVE" || finalDayType == "UNPAID_LEAVE" || finalDayType == "UNAUTHORIZED_LEAVE" || finalDayType == "HOLIDAY_LEAVE"
-            val matchedShift = if (!isLeave && checkInMs != null && activeShifts.isNotEmpty()) {
-                com.example.data.SalaryCalculator.detectCompanyShift(checkInMs, activeShifts)
-            } else null
-            
-            val sId = if (isLeave) null else (matchedShift?.shift_code ?: (if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"))
-            val sType = if (isLeave) null else (matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null))
+            val sId = if (isLeave) null else if (isAutoNightShift) "ca_dem" else if (checkOutHour != null && checkOutHour >= 20) "ca2" else "ca1"
+            val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else if (sId == "ca1") "DAY" else null
 
             val newEntry = TimeEntry(
                 id = existing?.id ?: 0,
@@ -1218,7 +1192,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 customBreakDeduction = customBreakDeduction
             )
 
-            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value, activeShifts)
+            val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(newEntry, userConfig.value)
             repository.insertOrUpdate(calculated)
             syncTimeEntryToLegacyLog(calculated)
             triggerSync()
@@ -1308,11 +1282,8 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
 
-                val activeShifts = _companyShifts.value
-                val matchedShift = if (activeShifts.isNotEmpty()) com.example.data.SalaryCalculator.detectCompanyShift(checkInMs, activeShifts) else null
-                
-                val sId = matchedShift?.shift_code ?: (if (isNightShiftOverride || isAutoNightShift) "ca_dem" else if (checkOutHour >= 20) "ca2" else "ca1")
-                val sType = matchedShift?.let { com.example.data.SalaryCalculator.toShiftConfig(it).shiftType } ?: (if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else "DAY")
+                val sId = if (isNightShiftOverride || isAutoNightShift) "ca_dem" else if (checkOutHour >= 20) "ca2" else "ca1"
+                val sType = if (sId == "ca_dem") "NIGHT" else if (sId == "ca2") "DAY_REST" else "DAY"
 
                 val entry = TimeEntry(
                     id = existing?.id ?: 0,
@@ -1325,7 +1296,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                     shiftId = sId,
                     shiftType = sType
                 )
-                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value, activeShifts)
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(entry, userConfig.value)
                 repository.insertOrUpdate(calculated)
                 syncTimeEntryToLegacyLog(calculated)
             }
@@ -1607,27 +1578,9 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
             selectedMonth = selectedMonth,
             todayStr = todayStr,
             isCurrentSelectedMonth = isCurrentSelectedMonth,
-            holidayDatesInMonth = holidayDatesInMonth,
-            companyShifts = _companyShifts.value
+            holidayDatesInMonth = holidayDatesInMonth
         )
     }
-
-    // Notification Center Management & Persistent Local Caching
-    private val _adminNotifications = MutableStateFlow<List<com.example.data.model.AdminNotification>>(emptyList())
-    val adminNotifications: StateFlow<List<com.example.data.model.AdminNotification>> = _adminNotifications.asStateFlow()
-
-    private val _readNotificationIds = MutableStateFlow<Set<String>>(emptySet())
-    val readNotificationIds: StateFlow<Set<String>> = _readNotificationIds.asStateFlow()
-
-    private val _deletedNotificationIds = MutableStateFlow<Set<String>>(emptySet())
-    val deletedNotificationIds: StateFlow<Set<String>> = _deletedNotificationIds.asStateFlow()
-
-    private val _isRefreshingNotifications = MutableStateFlow(false)
-    val isRefreshingNotifications: StateFlow<Boolean> = _isRefreshingNotifications.asStateFlow()
-
-    val unreadNotificationCount: StateFlow<Int> = combine(_adminNotifications, _readNotificationIds) { list, readSet ->
-        list.count { it.id !in readSet }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     private fun getNotifPrefs() = getApplication<Application>().getSharedPreferences("admin_notif_prefs_v2", Context.MODE_PRIVATE)
 
@@ -1780,6 +1733,38 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                 com.example.data.FirestoreService.deleteAdminNotification(uid, id)
             } catch (e: Exception) {
                 android.util.Log.e("TimeSnapViewModel", "Lỗi xóa thông báo server", e)
+            }
+        }
+    }
+
+    fun recalculateAllHistory(onComplete: (Int) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val session = currentUserSession.value ?: return@launch
+            val allEntries = repository.getAllEntriesForUserDirect(session.uid)
+            val workRule = workRuleRepository.getActiveWorkRule("default_company")
+            val otRule = overtimeRuleRepository.getActiveOvertimeRule("default_company")
+            var count = 0
+            for (entry in allEntries) {
+                val otMultiplier = when (entry.dayType) {
+                    "SUNDAY", "WEEKLY_OFF" -> otRule?.weeklyOffMultiplier ?: 2.0
+                    "HOLIDAY" -> otRule?.holidayMultiplier ?: 3.0
+                    else -> otRule?.normalDayMultiplier ?: 1.5
+                }
+                val updated = entry.copy(
+                    workRuleId = workRule?.id,
+                    workRuleVersion = workRule?.version,
+                    overtimeRuleId = otRule?.id,
+                    overtimeRuleVersion = otRule?.version,
+                    snapshotStandardHours = workRule?.standardHoursPerDay ?: 8.0,
+                    snapshotOtMultiplier = otMultiplier,
+                    snapshotRoundingMinutes = workRule?.roundingMinutes ?: 15
+                )
+                val calculated = com.example.data.SalaryCalculator.calculateSingleEntry(updated, userConfig.value)
+                repository.insertOrUpdate(calculated)
+                count++
+            }
+            withContext(Dispatchers.Main) {
+                onComplete(count)
             }
         }
     }

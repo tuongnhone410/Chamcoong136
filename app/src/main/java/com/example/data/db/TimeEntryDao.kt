@@ -24,6 +24,9 @@ interface TimeEntryDao {
     @Query("SELECT * FROM time_entries WHERE userId = :userId AND (date LIKE :monthPattern OR date LIKE :altMonthPattern) ORDER BY date ASC")
     suspend fun getEntriesForUserInMonthDirect(userId: String, monthPattern: String, altMonthPattern: String): List<TimeEntry>
 
+    @Query("SELECT * FROM time_entries WHERE userId = :userId ORDER BY date ASC")
+    suspend fun getAllEntriesForUserDirect(userId: String): List<TimeEntry>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(entry: TimeEntry)
 

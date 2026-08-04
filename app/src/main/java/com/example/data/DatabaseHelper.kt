@@ -30,7 +30,7 @@ class DatabaseHelper private constructor(private val database: AppDatabase) {
                             context.applicationContext,
                             AppDatabase::class.java,
                             "timesnap_pro.db"
-                        ).fallbackToDestructiveMigration(dropAllTables = true).build()
+                        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
                         INSTANCE = DatabaseHelper(db)
                     }
                 }
