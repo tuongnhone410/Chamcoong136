@@ -191,9 +191,9 @@ fun CompanyRulesHubDialog(
 
                         when (selectedSection) {
                             HubSection.COMPANY_INFO -> CompanyInfoSection(defaultConfig, viewModel)
-                            HubSection.SHIFTS -> ShiftManagementDialogContent(viewModel.shiftRepository, companyId)
-                            HubSection.WORK_RULES -> WorkRuleManagementDialogContent(viewModel.workRuleRepository, companyId)
-                            HubSection.OVERTIME_RULES -> OvertimeRuleManagementDialogContent(viewModel.overtimeRuleRepository, companyId)
+                            HubSection.SHIFTS -> ShiftManagementDialogContent(viewModel.shiftRepository, companyId, onDismiss = { selectedSection = null })
+                            HubSection.WORK_RULES -> WorkRuleManagementDialogContent(viewModel.workRuleRepository, companyId, onDismiss = { selectedSection = null })
+                            HubSection.OVERTIME_RULES -> OvertimeRuleManagementDialogContent(viewModel.overtimeRuleRepository, companyId, onDismiss = { selectedSection = null })
                             HubSection.HOLIDAYS -> HolidaysSection(companyId)
                             HubSection.ALLOWANCES -> AllowancesSection(defaultConfig, viewModel)
                             HubSection.ADVANCED -> AdvancedSection(defaultConfig, viewModel)
@@ -442,18 +442,18 @@ fun CompanyInfoSection(userConfig: UserConfig, viewModel: TimeSnapViewModel) {
 }
 
 @Composable
-fun ShiftManagementDialogContent(shiftRepository: ShiftRepository, companyId: String) {
-    ShiftManagementDialog(shiftRepository = shiftRepository, companyId = companyId, onDismiss = {})
+fun ShiftManagementDialogContent(shiftRepository: ShiftRepository, companyId: String, onDismiss: () -> Unit) {
+    ShiftManagementDialog(shiftRepository = shiftRepository, companyId = companyId, onDismiss = onDismiss)
 }
 
 @Composable
-fun WorkRuleManagementDialogContent(workRuleRepository: WorkRuleRepository, companyId: String) {
-    WorkRuleManagementDialog(workRuleRepository = workRuleRepository, companyId = companyId, onDismiss = {})
+fun WorkRuleManagementDialogContent(workRuleRepository: WorkRuleRepository, companyId: String, onDismiss: () -> Unit) {
+    WorkRuleManagementDialog(workRuleRepository = workRuleRepository, companyId = companyId, onDismiss = onDismiss)
 }
 
 @Composable
-fun OvertimeRuleManagementDialogContent(overtimeRuleRepository: OvertimeRuleRepository, companyId: String) {
-    OvertimeRuleManagementDialog(overtimeRuleRepository = overtimeRuleRepository, companyId = companyId, onDismiss = {})
+fun OvertimeRuleManagementDialogContent(overtimeRuleRepository: OvertimeRuleRepository, companyId: String, onDismiss: () -> Unit) {
+    OvertimeRuleManagementDialog(overtimeRuleRepository = overtimeRuleRepository, companyId = companyId, onDismiss = onDismiss)
 }
 
 @Composable
