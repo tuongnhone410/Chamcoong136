@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.example.data.model.CompanyConfig
+import com.example.data.FirestoreService
 import com.example.data.repository.TimeRepository
 import com.example.data.repository.CloudSyncManager
 import com.example.data.repository.RegisteredUser
@@ -81,18 +83,26 @@ class AuthController(
         password: String,
         name: String,
         maNhanVien: String,
+        companyCode: String = "",
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) = withContext(Dispatchers.IO) {
         val cleanEmail = email.trim().lowercase()
         val cleanMaNhanVien = maNhanVien.trim()
+        val cleanCompanyCode = companyCode.trim()
         val sharedPrefs = context.getSharedPreferences("timesnap_auth", Context.MODE_PRIVATE)
+
+        val company = if (cleanCompanyCode.isNotEmpty()) {
+            FirestoreService.getCompanyByCode(cleanCompanyCode) ?: CompanyConfig.DEFAULT_COMPANY
+        } else {
+            CompanyConfig.DEFAULT_COMPANY
+        }
 
         val auth = firebaseAuth
         if (auth == null) {
             // Local register fallback
             val mockUid = "local_${System.currentTimeMillis()}"
-            repository.insertDefaultConfig(mockUid, name, cleanEmail, cleanMaNhanVien)
+            repository.insertDefaultConfig(mockUid, name, cleanEmail, cleanMaNhanVien, company)
             sharedPrefs.edit()
                 .putString("email_of_employee_$cleanMaNhanVien", cleanEmail)
                 .putString("maNhanVien_of_email_$cleanEmail", cleanEmail)
@@ -129,7 +139,7 @@ class AuthController(
                                 if (profileTask.isSuccessful) {
                                     CoroutineScope(Dispatchers.IO).launch {
                                         try {
-                                            repository.insertDefaultConfig(user.uid, name, cleanEmail, cleanMaNhanVien)
+                                            repository.insertDefaultConfig(user.uid, name, cleanEmail, cleanMaNhanVien, company)
                                             
                                             // Save the registration mappings
                                             sharedPrefs.edit()

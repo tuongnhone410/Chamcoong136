@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalAtm
 import androidx.compose.material.icons.filled.Logout
@@ -242,8 +241,6 @@ fun HomeScreen(
     val configState by viewModel.userConfig.collectAsStateWithLifecycle()
     val selectedMonth by viewModel.currentSelectedMonth.collectAsStateWithLifecycle()
     val unreadNotifCount by viewModel.unreadNotificationCount.collectAsStateWithLifecycle()
-    val isShiftsConfigured by viewModel.isCompanyShiftsConfigured.collectAsStateWithLifecycle()
-    var showCompanyRulesHub by remember { mutableStateOf(false) }
 
     var liveTimeString by remember { mutableStateOf("") }
     var liveHMString by remember { mutableStateOf("") }
@@ -652,72 +649,14 @@ fun HomeScreen(
                 animationSpec = tween(300), label = ""
             )
 
-            if (!isShiftsConfigured) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkContainer),
-                    shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Chưa cấu hình ca làm việc",
-                            tint = AccentOrange,
-                            modifier = Modifier.size(52.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "Chưa cấu hình ca làm việc",
-                            color = White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Hệ thống phát hiện Company mới chưa cấu hình ca làm việc chính thức trong Trung tâm Cấu hình Công ty. Vui lòng thiết lập để sử dụng chức năng chấm công.",
-                            color = LightGray,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Button(
-                            onClick = { showCompanyRulesHub = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("go_to_company_hub_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Trung tâm Cấu hình Công ty", color = White, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        TextButton(
-                            onClick = { viewModel.useDefaultCompanyShifts() },
-                            modifier = Modifier.fillMaxWidth().testTag("use_default_shifts_button")
-                        ) {
-                            Text("Dùng bộ ca làm việc mẫu mặc định", color = NeonBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            } else {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = DarkContainer),
-                    shape = RoundedCornerShape(22.dp),
-                    border = BorderStroke(1.dp, CardBorder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 20.dp)
-                ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = DarkContainer),
+                shape = RoundedCornerShape(22.dp),
+                border = BorderStroke(1.dp, CardBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -922,7 +861,6 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-            }
             }
 
             // State for Dialog
@@ -1328,15 +1266,19 @@ fun HomeScreen(
                                 digits.length >= 3 -> {
                                     var hours = digits.substring(0, 2)
                                     val h = hours.toIntOrNull() ?: 0
-                                    if (h > 23) hours = "23"
+                                    if (h > 24) hours = "24"
                                     var minutes = digits.substring(2)
-                                    val m = minutes.toIntOrNull() ?: 0
-                                    if (m > 59) minutes = "59"
+                                    if (hours == "24" && minutes.isNotEmpty()) {
+                                        minutes = "00".take(minutes.length)
+                                    } else {
+                                        val m = minutes.toIntOrNull() ?: 0
+                                        if (m > 59) minutes = "59"
+                                    }
                                     "$hours:$minutes"
                                 }
                                 digits.length == 2 -> {
                                     val h = digits.toIntOrNull() ?: 0
-                                    if (h > 23) "23" else digits
+                                    if (h > 24) "24" else digits
                                 }
                                 else -> digits
                             }
@@ -1572,15 +1514,19 @@ fun HomeScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 23) hours = "23"
+                                            if (h > 24) hours = "24"
                                             var minutes = digits.substring(2)
-                                            val m = minutes.toIntOrNull() ?: 0
-                                            if (m > 59) minutes = "59"
+                                            if (hours == "24" && minutes.isNotEmpty()) {
+                                                minutes = "00".take(minutes.length)
+                                            } else {
+                                                val m = minutes.toIntOrNull() ?: 0
+                                                if (m > 59) minutes = "59"
+                                            }
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 23) "23" else digits
+                                            if (h > 24) "24" else digits
                                         }
                                         else -> digits
                                     }
@@ -1625,15 +1571,19 @@ fun HomeScreen(
                                         digits.length >= 3 -> {
                                             var hours = digits.substring(0, 2)
                                             val h = hours.toIntOrNull() ?: 0
-                                            if (h > 23) hours = "23"
+                                            if (h > 24) hours = "24"
                                             var minutes = digits.substring(2)
-                                            val m = minutes.toIntOrNull() ?: 0
-                                            if (m > 59) minutes = "59"
+                                            if (hours == "24" && minutes.isNotEmpty()) {
+                                                minutes = "00".take(minutes.length)
+                                            } else {
+                                                val m = minutes.toIntOrNull() ?: 0
+                                                if (m > 59) minutes = "59"
+                                            }
                                             "$hours:$minutes"
                                         }
                                         digits.length == 2 -> {
                                             val h = digits.toIntOrNull() ?: 0
-                                            if (h > 23) "23" else digits
+                                            if (h > 24) "24" else digits
                                         }
                                         else -> digits
                                     }
@@ -1848,14 +1798,6 @@ fun HomeScreen(
                     Text("Xong", color = White, fontWeight = FontWeight.Bold)
                 }
             }
-        )
-    }
-
-    if (showCompanyRulesHub) {
-        CompanyRulesHubDialog(
-            viewModel = viewModel,
-            companyId = viewModel.currentCompanyId,
-            onDismiss = { showCompanyRulesHub = false }
         )
     }
 

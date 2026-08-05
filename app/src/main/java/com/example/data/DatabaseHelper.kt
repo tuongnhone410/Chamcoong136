@@ -12,7 +12,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class DatabaseHelper private constructor(private val database: AppDatabase) {
+class DatabaseHelper private constructor(private val database: LegacyAppDatabase) {
 
     private val userConfigDao = database.userConfigDao()
     private val attendanceDao = database.attendanceDao()
@@ -28,9 +28,9 @@ class DatabaseHelper private constructor(private val database: AppDatabase) {
                     if (INSTANCE == null) {
                         val db = Room.databaseBuilder(
                             context.applicationContext,
-                            AppDatabase::class.java,
+                            LegacyAppDatabase::class.java,
                             "timesnap_pro.db"
-                        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
+                        ).fallbackToDestructiveMigration(dropAllTables = true).build()
                         INSTANCE = DatabaseHelper(db)
                     }
                 }

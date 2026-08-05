@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.util.Log
+import com.example.data.model.CompanyConfig
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -240,6 +241,154 @@ object FirestoreService {
         }
         
         return allConfigs
+    }
+
+    fun getAllCompaniesFlow(): Flow<List<CompanyConfig>> = callbackFlow {
+        val firestore = getDb()
+        if (firestore == null) {
+            trySend(listOf(CompanyConfig.DEFAULT_COMPANY))
+            close()
+            return@callbackFlow
+        }
+        val listener = firestore.collection("companies")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error listening to companies", error)
+                    trySend(listOf(CompanyConfig.DEFAULT_COMPANY))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && !snapshot.isEmpty) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        doc.toCompanyConfig()
+                    }.sortedBy { it.companyName }
+                    if (list.none { it.companyId == "default_company" }) {
+                        trySend(listOf(CompanyConfig.DEFAULT_COMPANY) + list)
+                    } else {
+                        trySend(list)
+                    }
+                } else {
+                    trySend(listOf(CompanyConfig.DEFAULT_COMPANY))
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun getAllCompanies(): List<CompanyConfig> {
+        val firestore = getDb() ?: return listOf(CompanyConfig.DEFAULT_COMPANY)
+        return try {
+            val snapshot = firestore.collection("companies").get().awaitTaskFirestore()
+            if (snapshot != null && !snapshot.isEmpty) {
+                val list = snapshot.documents.mapNotNull { it.toCompanyConfig() }.sortedBy { it.companyName }
+                if (list.none { it.companyId == "default_company" }) {
+                    listOf(CompanyConfig.DEFAULT_COMPANY) + list
+                } else {
+                    list
+                }
+            } else {
+                listOf(CompanyConfig.DEFAULT_COMPANY)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting all companies: ${e.message}")
+            listOf(CompanyConfig.DEFAULT_COMPANY)
+        }
+    }
+
+    suspend fun getCompanyByCode(code: String): CompanyConfig? {
+        val firestore = getDb() ?: return null
+        return try {
+            val snapshot = firestore.collection("companies")
+                .whereEqualTo("companyCode", code.uppercase(Locale.ROOT))
+                .get()
+                .awaitTaskFirestore()
+            if (snapshot != null && !snapshot.isEmpty) {
+                snapshot.documents.firstOrNull()?.toCompanyConfig()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting company by code $code: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun saveCompany(company: CompanyConfig): Boolean {
+        val firestore = getDb() ?: return false
+        val map = mapOf(
+            "companyId" to company.companyId,
+            "companyName" to company.companyName,
+            "companyCode" to company.companyCode.uppercase(Locale.ROOT),
+            "description" to company.description,
+            "address" to company.address,
+            "luongCoBan" to company.luongCoBan,
+            "luongDongBaoHiem" to company.luongDongBaoHiem,
+            "tiLeDongBaoHiem" to company.tiLeDongBaoHiem,
+            "ngayChotLuong" to company.ngayChotLuong,
+            "doanPhiCongDoan" to company.doanPhiCongDoan,
+            "heSoOtNgayThuong" to company.heSoOtNgayThuong,
+            "heSoOtChuNhat" to company.heSoOtChuNhat,
+            "heSoOtNgayLe" to company.heSoOtNgayLe,
+            "heSoOtDem" to company.heSoOtDem,
+            "caDemStart" to company.caDemStart,
+            "caDemEnd" to company.caDemEnd,
+            "tienChuyenCanGoc" to company.tienChuyenCanGoc,
+            "soNgayPhepNam" to company.soNgayPhepNam,
+            "pcKyThuat" to company.pcKyThuat,
+            "pcTrachNhiem" to company.pcTrachNhiem,
+            "pcChucVu" to company.pcChucVu,
+            "pcHieuSuat" to company.pcHieuSuat,
+            "pcSanPham" to company.pcSanPham,
+            "pcComCa" to company.pcComCa,
+            "pcComOt" to company.pcComOt,
+            "pcNhaO" to company.pcNhaO,
+            "pcDocHai" to company.pcDocHai,
+            "pcDtDoanhThu" to company.pcDtDoanhThu,
+            "pcXangXe" to company.pcXangXe,
+            "pcThamNien" to company.pcThamNien,
+            "pcKhac1" to company.pcKhac1,
+            "pcCaDem" to company.pcCaDem,
+            "allowanceCalcTypes" to company.allowanceCalcTypes,
+            "soGioNghiGiaiLao" to company.soGioNghiGiaiLao,
+            "tinhKhauTruNghi" to company.tinhKhauTruNghi,
+            "createdAt" to company.createdAt,
+            "updatedAt" to System.currentTimeMillis()
+        )
+        return try {
+            firestore.collection("companies").document(company.companyId)
+                .set(map, SetOptions.merge())
+                .awaitTaskFirestore()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving company ${company.companyId}: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun deleteCompany(companyId: String): Boolean {
+        if (companyId == "default_company") return false
+        val firestore = getDb() ?: return false
+        return try {
+            firestore.collection("companies").document(companyId).delete().awaitTaskFirestore()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deleting company $companyId: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun syncCompanyConfigToEmployees(company: CompanyConfig): Int {
+        val allEmployees = getAllUserConfigs()
+        val targetEmployees = allEmployees.filter { it.companyId == company.companyId || (company.companyId == "default_company" && (it.companyId.isBlank() || it.companyId == "default_company")) }
+        var updatedCount = 0
+        targetEmployees.forEach { emp ->
+            try {
+                val updatedConfig = company.applyToUserConfig(emp, overwriteCustomBaseSalary = false)
+                saveUserSalaryConfigToFirestore(updatedConfig)
+                updatedCount++
+            } catch (e: Exception) {
+                Log.e(TAG, "Error syncing company config to employee ${emp.userId}: ${e.message}")
+            }
+        }
+        return updatedCount
     }
 
     suspend fun getAttendanceLogsForUser(uid: String): List<AttendanceRecord> {
@@ -945,6 +1094,8 @@ object FirestoreService {
             "caDemStart" to config.caDemStart,
             "caDemEnd" to config.caDemEnd,
             "companyId" to config.companyId,
+            "companyName" to config.companyName,
+            "companyCode" to config.companyCode,
             "isAdmin" to config.isAdmin
         )
         firestore.collection("users").document(config.userId).collection("salary_config").document("settings")
@@ -988,7 +1139,7 @@ object FirestoreService {
         }
     }
 
-    suspend fun deleteUserFully(userId: String, keepAttendanceHistory: Boolean = true) {
+    suspend fun deleteUserFully(userId: String) {
         if (userId.startsWith("demo") || userId.contains("demo")) return
         val firestore = getDb() ?: return
         try {
@@ -999,11 +1150,9 @@ object FirestoreService {
             }
             
             // 2. Delete attendance_logs subcollection documents
-            if (!keepAttendanceHistory) {
-                val logs = firestore.collection("users").document(userId).collection("attendance_logs").get().awaitTaskFirestore()
-                logs?.documents?.forEach { doc ->
-                    doc.reference.delete().awaitTaskFirestore()
-                }
+            val logs = firestore.collection("users").document(userId).collection("attendance_logs").get().awaitTaskFirestore()
+            logs?.documents?.forEach { doc ->
+                doc.reference.delete().awaitTaskFirestore()
             }
             
             // 3. Delete the main user document
@@ -1081,7 +1230,52 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         caDemStart = getString("caDemStart") ?: getString("thoi_gian_ca_dem") ?: "22:00",
         caDemEnd = getString("caDemEnd") ?: "06:00",
         companyId = getString("companyId") ?: "default_company",
+        companyName = getString("companyName") ?: "Công ty Mặc Định",
+        companyCode = getString("companyCode") ?: "DEFAULT",
         isAdmin = getBoolean("isAdmin") ?: false
+    )
+}
+
+fun DocumentSnapshot.toCompanyConfig(): CompanyConfig {
+    val id = getString("companyId") ?: this.id
+    return CompanyConfig(
+        companyId = id,
+        companyName = getString("companyName") ?: "Công ty Mặc Định",
+        companyCode = getString("companyCode") ?: "DEFAULT",
+        description = getString("description") ?: "",
+        address = getString("address") ?: "",
+        luongCoBan = getDouble("luongCoBan") ?: 6000000.0,
+        luongDongBaoHiem = getDouble("luongDongBaoHiem") ?: 5000000.0,
+        tiLeDongBaoHiem = getDouble("tiLeDongBaoHiem") ?: 10.5,
+        ngayChotLuong = getLong("ngayChotLuong")?.toInt() ?: 1,
+        doanPhiCongDoan = getDouble("doanPhiCongDoan") ?: 40000.0,
+        heSoOtNgayThuong = getDouble("heSoOtNgayThuong") ?: 1.5,
+        heSoOtChuNhat = getDouble("heSoOtChuNhat") ?: 2.0,
+        heSoOtNgayLe = getDouble("heSoOtNgayLe") ?: 3.0,
+        heSoOtDem = getDouble("heSoOtDem") ?: 1.75,
+        caDemStart = getString("caDemStart") ?: "22:00",
+        caDemEnd = getString("caDemEnd") ?: "06:00",
+        tienChuyenCanGoc = getDouble("tienChuyenCanGoc") ?: 500000.0,
+        soNgayPhepNam = getLong("soNgayPhepNam")?.toInt() ?: 12,
+        pcKyThuat = getDouble("pcKyThuat") ?: 0.0,
+        pcTrachNhiem = getDouble("pcTrachNhiem") ?: 0.0,
+        pcChucVu = getDouble("pcChucVu") ?: 0.0,
+        pcHieuSuat = getDouble("pcHieuSuat") ?: 0.0,
+        pcSanPham = getDouble("pcSanPham") ?: 0.0,
+        pcComCa = getDouble("pcComCa") ?: 30000.0,
+        pcComOt = getDouble("pcComOt") ?: 15000.0,
+        pcNhaO = getDouble("pcNhaO") ?: 0.0,
+        pcDocHai = getDouble("pcDocHai") ?: 0.0,
+        pcDtDoanhThu = getDouble("pcDtDoanhThu") ?: 0.0,
+        pcXangXe = getDouble("pcXangXe") ?: 0.0,
+        pcThamNien = getDouble("pcThamNien") ?: 0.0,
+        pcKhac1 = getDouble("pcKhac1") ?: 0.0,
+        pcCaDem = getDouble("pcCaDem") ?: 0.0,
+        allowanceCalcTypes = getString("allowanceCalcTypes") ?: "",
+        soGioNghiGiaiLao = getDouble("soGioNghiGiaiLao") ?: 1.5,
+        tinhKhauTruNghi = getBoolean("tinhKhauTruNghi") ?: false,
+        createdAt = getLong("createdAt") ?: System.currentTimeMillis(),
+        updatedAt = getLong("updatedAt") ?: System.currentTimeMillis()
     )
 }
 

@@ -17,12 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.UserConfig
-import com.example.data.db.AppDatabase
+import com.example.data.model.CompanyConfig
 import com.example.data.AttendanceRecord
 import com.example.ui.theme.*
 import com.example.viewmodel.AdminViewModel
@@ -70,6 +72,9 @@ fun AdminScreen(
     val context = LocalContext.current
     val adminViewModel: AdminViewModel = viewModel()
     val employees by adminViewModel.employees.collectAsStateWithLifecycle()
+    val companies by adminViewModel.companies.collectAsStateWithLifecycle()
+    val selectedCompanyId by adminViewModel.selectedCompanyId.collectAsStateWithLifecycle()
+    val filteredEmployees by adminViewModel.filteredEmployees.collectAsStateWithLifecycle()
     val isLoading by adminViewModel.isLoading.collectAsStateWithLifecycle()
     val selectedEmployee by adminViewModel.selectedEmployee.collectAsStateWithLifecycle()
     val selectedIds by adminViewModel.selectedEmployeeIds.collectAsStateWithLifecycle()
@@ -81,9 +86,8 @@ fun AdminScreen(
     var showBatchEditDialog by remember { mutableStateOf(false) }
     var showBatchDeleteConfirm by remember { mutableStateOf(false) }
     var showSingleDeleteConfirm by remember { mutableStateOf(false) }
-    var deleteKeepAttendanceHistory by remember { mutableStateOf(true) }
     var showSendNotifDialog by remember { mutableStateOf(false) }
-    var showShiftManagementDialog by remember { mutableStateOf(false) }
+    var showCompanyManagementDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var longClickedEmployee by remember { mutableStateOf<UserConfig?>(null) }
 
@@ -169,9 +173,6 @@ fun AdminScreen(
                                 Icon(Icons.Default.FileDownload, contentDescription = "Xuất phiếu lương cá nhân", tint = NeonBlue)
                             }
                         } else {
-                            IconButton(onClick = { showShiftManagementDialog = true }) {
-                                Icon(Icons.Default.Schedule, contentDescription = "Cấu hình ca làm việc", tint = NeonBlue)
-                            }
                             IconButton(onClick = { showSendNotifDialog = true }) {
                                 Icon(Icons.Default.Campaign, contentDescription = "Gửi thông báo", tint = White)
                             }
@@ -218,7 +219,11 @@ fun AdminScreen(
                     )
                 } else {
                     EmployeeListView(
-                        employees = employees.filter { it.hoVaTen.contains(searchQuery, ignoreCase = true) || it.maNhanVien.contains(searchQuery, ignoreCase = true) }.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen }),
+                        companies = companies,
+                        selectedCompanyId = selectedCompanyId,
+                        onSelectCompany = { adminViewModel.selectCompany(it) },
+                        onOpenCompanyManagement = { showCompanyManagementDialog = true },
+                        employees = filteredEmployees.filter { it.hoVaTen.contains(searchQuery, ignoreCase = true) || it.maNhanVien.contains(searchQuery, ignoreCase = true) }.sortedWith(compareByDescending<UserConfig> { it.isAdmin }.thenBy { it.hoVaTen }),
                         selectedIds = selectedIds,
                         todayAttendanceMap = todayAttendanceMap,
                         searchQuery = searchQuery,
@@ -237,6 +242,15 @@ fun AdminScreen(
                 }
             }
         }
+    }
+
+    if (showCompanyManagementDialog) {
+        CompanyManagementDialog(
+            companies = companies,
+            allEmployees = employees,
+            adminViewModel = adminViewModel,
+            onDismiss = { showCompanyManagementDialog = false }
+        )
     }
 
     if (longClickedEmployee != null) {
@@ -702,31 +716,11 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { showBatchDeleteConfirm = false },
             title = { Text("Xác nhận xóa", color = White) },
-            text = {
-                Column {
-                    Text("Bạn có chắc chắn muốn xóa ${selectedIds.size} nhân viên đã chọn? Hành động này không thể hoàn tác.", color = Color.Gray)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { deleteKeepAttendanceHistory = !deleteKeepAttendanceHistory }
-                    ) {
-                        Checkbox(
-                            checked = deleteKeepAttendanceHistory,
-                            onCheckedChange = { deleteKeepAttendanceHistory = it },
-                            colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Giữ lại lịch sử chấm công", color = White, fontWeight = FontWeight.SemiBold)
-                            Text("Không xóa dữ liệu chuyên cần và giờ công lịch sử", color = Color.Gray, fontSize = 11.sp)
-                        }
-                    }
-                }
-            },
+            text = { Text("Bạn có chắc chắn muốn xóa ${selectedIds.size} nhân viên đã chọn? Hành động này không thể hoàn tác.", color = Color.Gray) },
             confirmButton = {
                 Button(
                     onClick = {
-                        adminViewModel.batchDeleteEmployees(deleteKeepAttendanceHistory)
+                        adminViewModel.batchDeleteEmployees()
                         showBatchDeleteConfirm = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
@@ -745,31 +739,11 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { showSingleDeleteConfirm = false },
             title = { Text("Xác nhận xóa", color = White) },
-            text = {
-                Column {
-                    Text("Bạn có chắc chắn muốn xóa nhân viên '${selectedEmployee?.hoVaTen}'?", color = Color.Gray)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { deleteKeepAttendanceHistory = !deleteKeepAttendanceHistory }
-                    ) {
-                        Checkbox(
-                            checked = deleteKeepAttendanceHistory,
-                            onCheckedChange = { deleteKeepAttendanceHistory = it },
-                            colors = CheckboxDefaults.colors(checkedColor = NeonBlue)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Giữ lại lịch sử chấm công", color = White, fontWeight = FontWeight.SemiBold)
-                            Text("Không xóa dữ liệu chuyên cần và giờ công lịch sử", color = Color.Gray, fontSize = 11.sp)
-                        }
-                    }
-                }
-            },
+            text = { Text("Bạn có chắc chắn muốn xóa nhân viên '${selectedEmployee?.hoVaTen}'? Tất cả dữ liệu chấm công và cấu hình sẽ bị mất.", color = Color.Gray) },
             confirmButton = {
                 Button(
                     onClick = {
-                        adminViewModel.deleteEmployee(selectedEmployee!!.userId, deleteKeepAttendanceHistory)
+                        adminViewModel.deleteEmployee(selectedEmployee!!.userId)
                         showSingleDeleteConfirm = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
@@ -812,16 +786,6 @@ fun AdminScreen(
                     showSendNotifDialog = false
                 }
             }
-        )
-    }
-
-    if (showShiftManagementDialog) {
-        val db = AppDatabase.getInstance(context)
-        val shiftRepo = remember { com.example.data.repository.ShiftRepository(db.shiftDao()) }
-        ShiftManagementDialog(
-            shiftRepository = shiftRepo,
-            companyId = adminViewModel.currentAdminUid,
-            onDismiss = { showShiftManagementDialog = false }
         )
     }
 
@@ -1055,6 +1019,10 @@ fun getEmployeeShiftStatus(rec: AttendanceRecord?): ShiftStatusInfo {
 
 @Composable
 fun EmployeeListView(
+    companies: List<CompanyConfig>,
+    selectedCompanyId: String?,
+    onSelectCompany: (String?) -> Unit,
+    onOpenCompanyManagement: () -> Unit,
     employees: List<UserConfig>,
     selectedIds: Set<String> = emptySet(),
     todayAttendanceMap: Map<String, AttendanceRecord> = emptyMap(),
@@ -1067,13 +1035,43 @@ fun EmployeeListView(
     val focusManager = LocalFocusManager.current
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Company Filter Bar & Management Button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CompanySelectorBox(
+                companies = companies,
+                selectedCompanyId = selectedCompanyId,
+                onSelectCompany = onSelectCompany,
+                allowAllOption = true,
+                allEmployees = employees,
+                onAddCompany = { onOpenCompanyManagement() },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = onOpenCompanyManagement,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue.copy(alpha = 0.2f)),
+                border = BorderStroke(1.dp, NeonBlue),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Cty & Phụ cấp", color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
         // Search Bar
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             placeholder = { Text("Tìm tên hoặc mã nhân viên...", color = Color.Gray) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = NeonBlue) },
             trailingIcon = {
@@ -1147,7 +1145,7 @@ fun EmployeeListView(
                         }
                     }
                 }
-                items(employees, key = { it.userId }) { employee ->
+                items(employees) { employee ->
                     EmployeeCard(
                         employee = employee, 
                         isSelected = selectedIds.contains(employee.userId),
@@ -1862,7 +1860,7 @@ fun EmployeeDetailView(
                             }
                         }
                     } else {
-                        items(filteredRecords.sortedByDescending { it.dateString }, key = { "${it.uid}_${it.dateString}" }) { record ->
+                        items(filteredRecords.sortedByDescending { it.dateString }) { record ->
                             AttendanceRecordItem(record = record, employee = employee, onDelete = { adminViewModel.deleteAttendanceRecord(employee.userId, record.dateString) })
                         }
                     }
@@ -2026,13 +2024,7 @@ fun EmployeeDetailView(
                                     ) {
                                         AutoJumpField(
                                             value = dayStr,
-                                            onValueChange = { newVal ->
-                                                val text = newVal.text
-                                                val num = text.toIntOrNull()
-                                                if (num == null || (num in 1..31)) {
-                                                    dayStr = newVal
-                                                }
-                                            },
+                                            onValueChange = { dayStr = it },
                                             focusRequester = focusRequesters[0],
                                             nextFocusRequester = focusRequesters[1],
                                             maxLength = 2,
@@ -2041,13 +2033,7 @@ fun EmployeeDetailView(
                                         Text("/", color = White, fontWeight = FontWeight.Bold)
                                         AutoJumpField(
                                             value = monthStr,
-                                            onValueChange = { newVal ->
-                                                val text = newVal.text
-                                                val num = text.toIntOrNull()
-                                                if (num == null || (num in 1..12)) {
-                                                    monthStr = newVal
-                                                }
-                                            },
+                                            onValueChange = { monthStr = it },
                                             focusRequester = focusRequesters[1],
                                             nextFocusRequester = focusRequesters[2],
                                             maxLength = 2,
@@ -2083,13 +2069,7 @@ fun EmployeeDetailView(
                                             ) {
                                                 AutoJumpField(
                                                     value = checkInHour,
-                                                    onValueChange = { newVal ->
-                                                        val text = newVal.text
-                                                        val num = text.toIntOrNull()
-                                                        if (num == null || (num in 0..23)) {
-                                                            checkInHour = newVal
-                                                        }
-                                                    },
+                                                    onValueChange = { checkInHour = it },
                                                     focusRequester = focusRequesters[3],
                                                     nextFocusRequester = focusRequesters[4],
                                                     maxLength = 2,
@@ -2098,13 +2078,7 @@ fun EmployeeDetailView(
                                                 Text(":", color = White, fontWeight = FontWeight.Bold)
                                                 AutoJumpField(
                                                     value = checkInMin,
-                                                    onValueChange = { newVal ->
-                                                        val text = newVal.text
-                                                        val num = text.toIntOrNull()
-                                                        if (num == null || (num in 0..59)) {
-                                                            checkInMin = newVal
-                                                        }
-                                                    },
+                                                    onValueChange = { checkInMin = it },
                                                     focusRequester = focusRequesters[4],
                                                     nextFocusRequester = focusRequesters[5],
                                                     maxLength = 2,
@@ -2125,13 +2099,7 @@ fun EmployeeDetailView(
                                             ) {
                                                 AutoJumpField(
                                                     value = checkOutHour,
-                                                    onValueChange = { newVal ->
-                                                        val text = newVal.text
-                                                        val num = text.toIntOrNull()
-                                                        if (num == null || (num in 0..23)) {
-                                                            checkOutHour = newVal
-                                                        }
-                                                    },
+                                                    onValueChange = { checkOutHour = it },
                                                     focusRequester = focusRequesters[5],
                                                     nextFocusRequester = focusRequesters[6],
                                                     maxLength = 2,
@@ -2140,13 +2108,7 @@ fun EmployeeDetailView(
                                                 Text(":", color = White, fontWeight = FontWeight.Bold)
                                                 AutoJumpField(
                                                     value = checkOutMin,
-                                                    onValueChange = { newVal ->
-                                                        val text = newVal.text
-                                                        val num = text.toIntOrNull()
-                                                        if (num == null || (num in 0..59)) {
-                                                            checkOutMin = newVal
-                                                        }
-                                                    },
+                                                    onValueChange = { checkOutMin = it },
                                                     focusRequester = focusRequesters[6],
                                                     nextFocusRequester = null,
                                                     maxLength = 2,
@@ -2448,7 +2410,7 @@ fun AttendanceSummaryBoard(
                             .heightIn(max = 350.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(leaveRecords, key = { "${it.uid}_${it.dateString}" }) { r ->
+                        items(leaveRecords) { r ->
                             val statusUpper = r.status.uppercase(Locale.ROOT)
                             val typeLabel = when {
                                 statusUpper == "PAID_LEAVE" || statusUpper == "PAID" || statusUpper == "NP" || statusUpper == "PHEP" -> "Phép năm"
@@ -2598,7 +2560,7 @@ fun AttendanceSummaryBoard(
                             .heightIn(max = 350.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(lateRecords, key = { "${it.uid}_${it.dateString}" }) { r ->
+                        items(lateRecords) { r ->
                             val calc = com.example.data.SalaryCalculator.calculateSingleEntry(r.toTimeEntry(), employee)
                             val lateMins = calc.lateMinutes
                             val inTimeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(r.clockInTime))
@@ -3354,7 +3316,7 @@ fun EmployeeAttendanceEdit(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            items(records.sortedByDescending { it.dateString }, key = { "${it.uid}_${it.dateString}" }) { record ->
+            items(records.sortedByDescending { it.dateString }) { record ->
                 AttendanceRecordItem(record = record, employee = employee, onDelete = { onDeleteRecord(record.dateString) })
             }
         }
@@ -4103,4 +4065,702 @@ fun SendAdminNotificationDialog(
             }
         }
     )
+}
+
+@Composable
+fun CompanyManagementDialog(
+    companies: List<CompanyConfig>,
+    allEmployees: List<UserConfig>,
+    adminViewModel: AdminViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var selectedCompanyId by remember { mutableStateOf(companies.firstOrNull()?.companyId ?: "default_company") }
+    val currentCompany = companies.find { it.companyId == selectedCompanyId } ?: companies.firstOrNull() ?: CompanyConfig.DEFAULT_COMPANY
+
+    var localCompanyConfig by remember(currentCompany.companyId) { mutableStateOf(currentCompany) }
+
+    var companyName by remember(currentCompany.companyId) { mutableStateOf(currentCompany.companyName) }
+    var companyCode by remember(currentCompany.companyId) { mutableStateOf(currentCompany.companyCode) }
+    var description by remember(currentCompany.companyId) { mutableStateOf(currentCompany.description) }
+    var address by remember(currentCompany.companyId) { mutableStateOf(currentCompany.address) }
+    var luongCoBan by remember(currentCompany.companyId) { mutableStateOf(currentCompany.luongCoBan.toLong().toString()) }
+
+    var pcXangXe by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcXangXe.toLong().toString()) }
+    var pcTrachNhiem by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcTrachNhiem.toLong().toString()) }
+    var pcKyThuat by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcKyThuat.toLong().toString()) }
+    var pcChucVu by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcChucVu.toLong().toString()) }
+    var pcHieuSuat by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcHieuSuat.toLong().toString()) }
+    var pcSanPham by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcSanPham.toLong().toString()) }
+    var pcComCa by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcComCa.toLong().toString()) }
+    var pcComOt by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcComOt.toLong().toString()) }
+    var pcNhaO by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcNhaO.toLong().toString()) }
+    var pcDocHai by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcDocHai.toLong().toString()) }
+    var pcDtDoanhThu by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcDtDoanhThu.toLong().toString()) }
+    var pcThamNien by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcThamNien.toLong().toString()) }
+    var pcCaDem by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcCaDem.toLong().toString()) }
+    var pcKhac1 by remember(currentCompany.companyId) { mutableStateOf(currentCompany.pcKhac1.toLong().toString()) }
+    var tienChuyenCanGoc by remember(currentCompany.companyId) { mutableStateOf(currentCompany.tienChuyenCanGoc.toLong().toString()) }
+    var schedule by remember(currentCompany.companyId) { mutableStateOf(currentCompany.lichTrinh) }
+
+    var activeEditingAllowanceField by remember { mutableStateOf<String?>(null) }
+    var activeEditingAllowanceName by remember { mutableStateOf("") }
+    var activeEditingAllowanceValue by remember { mutableStateOf("") }
+    var activeEditingAllowanceType by remember { mutableStateOf("") }
+
+    var showAddCompanyDialog by remember { mutableStateOf(false) }
+
+    val allowanceCalcTypesMap = remember(localCompanyConfig.allowanceCalcTypes) {
+        if (localCompanyConfig.allowanceCalcTypes.isBlank()) emptyMap()
+        else localCompanyConfig.allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkContainer,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(26.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Quản lý Công ty & Phụ cấp", color = White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+                IconButton(onClick = { showAddCompanyDialog = true }) {
+                    Icon(Icons.Default.AddBusiness, contentDescription = "Thêm công ty", tint = NeonBlue)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 550.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text("Chọn công ty (Cty A, Cty B...):", color = LightGray, fontSize = 12.sp)
+                
+                CompanySelectorBox(
+                    companies = companies,
+                    selectedCompanyId = selectedCompanyId,
+                    onSelectCompany = { id -> if (id != null) selectedCompanyId = id },
+                    allowAllOption = false,
+                    allEmployees = allEmployees,
+                    onAddCompany = { showAddCompanyDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider(color = Color.DarkGray, thickness = 1.dp)
+
+                Text("Cấu hình chung cho: ${currentCompany.companyName}", color = NeonBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                
+                OutlinedTextField(
+                    value = companyName,
+                    onValueChange = { companyName = it },
+                    label = { Text("Tên Công ty") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                )
+
+                OutlinedTextField(
+                    value = companyCode,
+                    onValueChange = { companyCode = it.uppercase() },
+                    label = { Text("Mã Công ty (VD: CTY_A, CTY_B)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                )
+
+                OutlinedTextField(
+                    value = luongCoBan,
+                    onValueChange = { luongCoBan = it.filter { c -> c.isDigit() } },
+                    label = { Text("Lương cơ bản mặc định (VNĐ)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = ThousandSeparatorVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                )
+
+                HorizontalDivider(color = Color.DarkGray, thickness = 1.dp)
+
+                // ALLOWANCES SECTION (Matching User Settings UX/UI)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("CÁC KHOẢN PHỤ CẤP CÔNG TY", color = NeonBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    Text(
+                        text = "Chạm vào từng mục để chỉnh sửa số tiền và tính chất tính lương của khoản phụ cấp.",
+                        color = LightGray,
+                        fontSize = 11.sp,
+                        fontStyle = FontStyle.Italic
+                    )
+
+                    // Sub-group 1: Phụ cấp theo tháng
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📌 ", fontSize = 13.sp)
+                            Text("PHỤ CẤP THEO THÁNG", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        AllowanceRowItem(
+                            name = "1. Kỹ thuật",
+                            value = pcKyThuat,
+                            fieldName = "pcKyThuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKyThuat"
+                                activeEditingAllowanceName = "Phụ cấp Kỹ thuật"
+                                activeEditingAllowanceValue = pcKyThuat
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcKyThuat")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "2. Trách nhiệm",
+                            value = pcTrachNhiem,
+                            fieldName = "pcTrachNhiem",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcTrachNhiem"
+                                activeEditingAllowanceName = "Phụ cấp Trách nhiệm"
+                                activeEditingAllowanceValue = pcTrachNhiem
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcTrachNhiem")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "3. Chức vụ",
+                            value = pcChucVu,
+                            fieldName = "pcChucVu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcChucVu"
+                                activeEditingAllowanceName = "Phụ cấp Chức vụ"
+                                activeEditingAllowanceValue = pcChucVu
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcChucVu")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "4. Hiệu suất",
+                            value = pcHieuSuat,
+                            fieldName = "pcHieuSuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcHieuSuat"
+                                activeEditingAllowanceName = "Phụ cấp Hiệu suất"
+                                activeEditingAllowanceValue = pcHieuSuat
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcHieuSuat")
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // Sub-group 2: Phụ cấp theo ca
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🍱 ", fontSize = 13.sp)
+                            Text("PHỤ CẤP THEO CA", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        AllowanceRowItem(
+                            name = "5. Cơm / Ca làm việc",
+                            value = pcComCa,
+                            fieldName = "pcComCa",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComCa"
+                                activeEditingAllowanceName = "Phụ cấp Cơm / Ca"
+                                activeEditingAllowanceValue = pcComCa
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcComCa")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "6. Cơm tăng ca (OT)",
+                            value = pcComOt,
+                            fieldName = "pcComOt",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComOt"
+                                activeEditingAllowanceName = "Phụ cấp Cơm OT"
+                                activeEditingAllowanceValue = pcComOt
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcComOt")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "7. Phụ cấp ca đêm (mỗi ca)",
+                            value = pcCaDem,
+                            fieldName = "pcCaDem",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcCaDem"
+                                activeEditingAllowanceName = "Phụ cấp Ca đêm"
+                                activeEditingAllowanceValue = pcCaDem
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcCaDem")
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(1.dp).fillMaxWidth().background(Color.Gray.copy(alpha = 0.2f)))
+
+                    // Sub-group 3: Phụ cấp khác
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🎁 ", fontSize = 13.sp)
+                            Text("PHỤ CẤP KHÁC", color = NeonBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        AllowanceRowItem(
+                            name = "8. Nhà ở",
+                            value = pcNhaO,
+                            fieldName = "pcNhaO",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcNhaO"
+                                activeEditingAllowanceName = "Phụ cấp Nhà ở"
+                                activeEditingAllowanceValue = pcNhaO
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcNhaO")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "9. Xăng xe",
+                            value = pcXangXe,
+                            fieldName = "pcXangXe",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcXangXe"
+                                activeEditingAllowanceName = "Phụ cấp Xăng xe"
+                                activeEditingAllowanceValue = pcXangXe
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcXangXe")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "10. Độc hại",
+                            value = pcDocHai,
+                            fieldName = "pcDocHai",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDocHai"
+                                activeEditingAllowanceName = "Phụ cấp Độc hại"
+                                activeEditingAllowanceValue = pcDocHai
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcDocHai")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "11. Doanh thu",
+                            value = pcDtDoanhThu,
+                            fieldName = "pcDtDoanhThu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDtDoanhThu"
+                                activeEditingAllowanceName = "Phụ cấp Doanh thu"
+                                activeEditingAllowanceValue = pcDtDoanhThu
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcDtDoanhThu")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "12. Thâm niên",
+                            value = pcThamNien,
+                            fieldName = "pcThamNien",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcThamNien"
+                                activeEditingAllowanceName = "Phụ cấp Thâm niên"
+                                activeEditingAllowanceValue = pcThamNien
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcThamNien")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "13. Sản phẩm",
+                            value = pcSanPham,
+                            fieldName = "pcSanPham",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcSanPham"
+                                activeEditingAllowanceName = "Phụ cấp Sản phẩm"
+                                activeEditingAllowanceValue = pcSanPham
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcSanPham")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "14. Khác",
+                            value = pcKhac1,
+                            fieldName = "pcKhac1",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKhac1"
+                                activeEditingAllowanceName = "Phụ cấp Khác"
+                                activeEditingAllowanceValue = pcKhac1
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("pcKhac1")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "15. Chuyên cần",
+                            value = tienChuyenCanGoc,
+                            fieldName = "tienChuyenCanGoc",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "tienChuyenCanGoc"
+                                activeEditingAllowanceName = "Tiền Chuyên cần"
+                                activeEditingAllowanceValue = tienChuyenCanGoc
+                                activeEditingAllowanceType = localCompanyConfig.getCalcTypeFor("tienChuyenCanGoc")
+                            }
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color.DarkGray, thickness = 1.dp)
+
+                // EMPLOYEES OF THIS COMPANY SECTION
+                val companyEmployees = allEmployees.filter { 
+                    it.companyId == currentCompany.companyId || 
+                    (currentCompany.companyId == "default_company" && (it.companyId.isBlank() || it.companyId == "default_company"))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Nhân viên thuộc ${currentCompany.companyName} (${companyEmployees.size} NV):", color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                if (companyEmployees.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(DarkBackground, RoundedCornerShape(8.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Chưa có nhân viên nào thuộc công ty này.\nNhân viên có thể nhập mã '${currentCompany.companyCode}' khi đăng ký.", color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        companyEmployees.forEach { emp ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = DarkBackground,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(emp.hoVaTen, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("Mã NV: ${emp.maNhanVien} | Email: ${emp.emailDangKy.ifBlank { "Không có" }}", color = Color.Gray, fontSize = 11.sp)
+                                    }
+                                    if (emp.isAdmin) {
+                                        Surface(
+                                            color = AccentOrange.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text("Admin", color = AccentOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        val updated = localCompanyConfig.copy(
+                            companyName = companyName.ifBlank { localCompanyConfig.companyName },
+                            companyCode = companyCode.ifBlank { localCompanyConfig.companyCode },
+                            description = description,
+                            address = address,
+                            luongCoBan = luongCoBan.toDoubleOrNull() ?: localCompanyConfig.luongCoBan,
+                            pcXangXe = pcXangXe.toDoubleOrNull() ?: 0.0,
+                            pcTrachNhiem = pcTrachNhiem.toDoubleOrNull() ?: 0.0,
+                            pcKyThuat = pcKyThuat.toDoubleOrNull() ?: 0.0,
+                            pcChucVu = pcChucVu.toDoubleOrNull() ?: 0.0,
+                            pcHieuSuat = pcHieuSuat.toDoubleOrNull() ?: 0.0,
+                            pcSanPham = pcSanPham.toDoubleOrNull() ?: 0.0,
+                            pcComCa = pcComCa.toDoubleOrNull() ?: 0.0,
+                            pcComOt = pcComOt.toDoubleOrNull() ?: 0.0,
+                            pcNhaO = pcNhaO.toDoubleOrNull() ?: 0.0,
+                            pcDocHai = pcDocHai.toDoubleOrNull() ?: 0.0,
+                            pcDtDoanhThu = pcDtDoanhThu.toDoubleOrNull() ?: 0.0,
+                            pcThamNien = pcThamNien.toDoubleOrNull() ?: 0.0,
+                            pcCaDem = pcCaDem.toDoubleOrNull() ?: 0.0,
+                            pcKhac1 = pcKhac1.toDoubleOrNull() ?: 0.0,
+                            tienChuyenCanGoc = tienChuyenCanGoc.toDoubleOrNull() ?: 0.0
+                        )
+                        adminViewModel.saveCompany(updated) { success ->
+                            if (success) {
+                                android.widget.Toast.makeText(context, "Đã lưu cấu hình công ty thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                ) {
+                    Text("Lưu Cấu Hình", color = White, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = {
+                        val updated = localCompanyConfig.copy(
+                            companyName = companyName.ifBlank { localCompanyConfig.companyName },
+                            companyCode = companyCode.ifBlank { localCompanyConfig.companyCode },
+                            luongCoBan = luongCoBan.toDoubleOrNull() ?: localCompanyConfig.luongCoBan,
+                            pcXangXe = pcXangXe.toDoubleOrNull() ?: 0.0,
+                            pcTrachNhiem = pcTrachNhiem.toDoubleOrNull() ?: 0.0,
+                            pcKyThuat = pcKyThuat.toDoubleOrNull() ?: 0.0,
+                            pcChucVu = pcChucVu.toDoubleOrNull() ?: 0.0,
+                            pcHieuSuat = pcHieuSuat.toDoubleOrNull() ?: 0.0,
+                            pcComCa = pcComCa.toDoubleOrNull() ?: 0.0,
+                            tienChuyenCanGoc = tienChuyenCanGoc.toDoubleOrNull() ?: 0.0
+                        )
+                        adminViewModel.syncCompanyConfigToEmployees(updated) { count ->
+                            android.widget.Toast.makeText(context, "Đã đồng bộ phụ cấp cho $count nhân viên thuộc công ty!", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
+                ) {
+                    Text("Đồng bộ cho NV", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Đóng", color = LightGray)
+            }
+        }
+    )
+
+    if (activeEditingAllowanceField != null) {
+        AllowanceEditDialog(
+            name = activeEditingAllowanceName,
+            initialValue = activeEditingAllowanceValue,
+            initialType = activeEditingAllowanceType,
+            onDismiss = { activeEditingAllowanceField = null },
+            onSave = { newValue, newType ->
+                val cleanVal = newValue.filter { it.isDigit() }
+                when (activeEditingAllowanceField) {
+                    "tienChuyenCanGoc" -> tienChuyenCanGoc = cleanVal
+                    "pcKyThuat" -> pcKyThuat = cleanVal
+                    "pcTrachNhiem" -> pcTrachNhiem = cleanVal
+                    "pcChucVu" -> pcChucVu = cleanVal
+                    "pcHieuSuat" -> pcHieuSuat = cleanVal
+                    "pcSanPham" -> pcSanPham = cleanVal
+                    "pcComCa" -> pcComCa = cleanVal
+                    "pcComOt" -> pcComOt = cleanVal
+                    "pcNhaO" -> pcNhaO = cleanVal
+                    "pcDocHai" -> pcDocHai = cleanVal
+                    "pcDtDoanhThu" -> pcDtDoanhThu = cleanVal
+                    "pcXangXe" -> pcXangXe = cleanVal
+                    "pcCaDem" -> pcCaDem = cleanVal
+                    "pcKhac1" -> pcKhac1 = cleanVal
+                    "pcThamNien" -> pcThamNien = cleanVal
+                }
+                localCompanyConfig = localCompanyConfig.copyWithCalcType(activeEditingAllowanceField!!, newType)
+                activeEditingAllowanceField = null
+            }
+        )
+    }
+
+    if (showAddCompanyDialog) {
+        var newName by remember { mutableStateOf("") }
+        var newCode by remember { mutableStateOf("") }
+        var newSchedule by remember { mutableStateOf("08:00 - 17:00") }
+        AlertDialog(
+            onDismissRequest = { showAddCompanyDialog = false },
+            containerColor = DarkContainer,
+            title = { Text("Thêm Công ty mới (Cty A, Cty B)", color = White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Tên công ty (VD: Công ty A)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                    )
+                    OutlinedTextField(
+                        value = newCode,
+                        onValueChange = { newCode = it.uppercase() },
+                        label = { Text("Mã công ty (VD: CTY_A)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                    )
+                    OutlinedTextField(
+                        value = newSchedule,
+                        onValueChange = { newSchedule = it },
+                        label = { Text("Giờ vào - Giờ ra ca làm (VD: 08:00 - 17:00)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank() && newCode.isNotBlank()) {
+                            val newComp = CompanyConfig(
+                                companyId = "comp_${System.currentTimeMillis()}",
+                                companyName = newName.trim(),
+                                companyCode = newCode.trim(),
+                                description = "Công ty $newName",
+                                lichTrinh = newSchedule.ifBlank { "08:00 - 17:00" }
+                            )
+                            adminViewModel.saveCompany(newComp) { success ->
+                                if (success) {
+                                    selectedCompanyId = newComp.companyId
+                                    showAddCompanyDialog = false
+                                    android.widget.Toast.makeText(context, "Đã tạo công ty mới thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonBlue)
+                ) {
+                    Text("Tạo mới", color = White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCompanyDialog = false }) {
+                    Text("Hủy", color = LightGray)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun CompanySelectorBox(
+    companies: List<CompanyConfig>,
+    selectedCompanyId: String?,
+    onSelectCompany: (String?) -> Unit,
+    allowAllOption: Boolean = true,
+    allEmployees: List<UserConfig> = emptyList(),
+    onAddCompany: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedName = if (selectedCompanyId == null) {
+        "Tất cả công ty (${companies.size} Cty)"
+    } else {
+        companies.find { it.companyId == selectedCompanyId }?.companyName ?: "Chọn công ty"
+    }
+
+    Box(modifier = modifier) {
+        OutlinedCard(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.outlinedCardColors(containerColor = DarkContainer),
+            border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = if (allowAllOption && selectedCompanyId == null) "Công ty đang lọc" else "Công ty",
+                            color = Color.Gray,
+                            fontSize = 10.sp
+                        )
+                        Text(
+                            text = selectedName,
+                            color = White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = NeonBlue
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(DarkContainer)
+                .widthIn(min = 280.dp, max = 360.dp)
+                .heightIn(max = 350.dp)
+        ) {
+            if (allowAllOption) {
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                            Text("Tất cả công ty", color = if (selectedCompanyId == null) NeonBlue else White, fontWeight = if (selectedCompanyId == null) FontWeight.Bold else FontWeight.Normal)
+                            Text("${allEmployees.size} NV", color = Color.Gray, fontSize = 11.sp)
+                        }
+                    },
+                    onClick = {
+                        onSelectCompany(null)
+                        expanded = false
+                    }
+                )
+                HorizontalDivider(color = Color.DarkGray, thickness = 0.5.dp)
+            }
+
+            companies.forEach { comp ->
+                val isSelected = comp.companyId == selectedCompanyId
+                val count = allEmployees.count { it.companyId == comp.companyId || (comp.companyId == "default_company" && (it.companyId.isBlank() || it.companyId == "default_company")) }
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(comp.companyName, color = if (isSelected) NeonBlue else White, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Mã: ${comp.companyCode}", color = Color.Gray, fontSize = 10.sp)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = if (isSelected) NeonBlue.copy(alpha = 0.2f) else DarkBackground,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text("$count NV", color = if (isSelected) NeonBlue else LightGray, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                    },
+                    onClick = {
+                        onSelectCompany(comp.companyId)
+                        expanded = false
+                    }
+                )
+            }
+
+            if (onAddCompany != null) {
+                HorizontalDivider(color = Color.DarkGray, thickness = 0.5.dp)
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Icon(Icons.Default.AddBusiness, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("+ Thêm công ty mới", color = NeonBlue, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onAddCompany()
+                    }
+                )
+            }
+        }
+    }
 }

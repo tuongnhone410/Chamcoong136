@@ -50,6 +50,11 @@ data class UserConfig(
     val lichTrinh: String = "08:00 - 17:00",
     val ngayVaoLam: String = "", // Ngày vào làm/bắt đầu tính công (yyyy-MM-dd)
     
+    // Multi-tenancy / Company configuration
+    val companyId: String = "default_company",
+    val companyName: String = "Công ty Mặc Định",
+    val companyCode: String = "DEFAULT",
+    
     // Retrocompatibility keys (to prevent DB compilation errors)
     val tienComMoiNgay: Double = 50000.0,
     val phuCap: Double = 1000000.0,
@@ -61,7 +66,6 @@ data class UserConfig(
     val heSoOtDem: Double = 1.75,
     val caDemStart: String = "22:00",
     val caDemEnd: String = "06:00",
-    val companyId: String = "default_company",
     val isAdmin: Boolean = false
 ) {
     fun getCalcTypeFor(field: String): String {
@@ -88,13 +92,12 @@ data class UserConfig(
     companion object {
         fun getDefaultCalcType(field: String): String {
             return when (field) {
-                "pcComCa" -> "PER_SHIFT"
-                "pcComOt" -> "PER_SHIFT"
-                "pcCaDem" -> "PER_SHIFT"
-                "pcThamNien" -> "FIXED_MONTHLY"
-                "tienChuyenCanGoc" -> "ATTENDANCE_CONDITION"
-                "pcKyThuat", "pcTrachNhiem", "pcChucVu" -> "FIXED_MONTHLY"
-                else -> "DAILY_RATE"
+                "pcComCa" -> "PER_WORK_DAY"
+                "pcComOt" -> "OT_MEAL_GE_1H"
+                "pcCaDem" -> "PER_NIGHT_SHIFT" // Phụ cấp ca đêm
+                "pcThamNien" -> "MONTHLY_FLAT"
+                "tienChuyenCanGoc" -> "MONTHLY_PRO_RATED"
+                else -> "MONTHLY_PRO_RATED"
             }
         }
     }

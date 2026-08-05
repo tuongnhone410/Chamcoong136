@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -41,6 +42,7 @@ fun RegisterScreen(
     var name by remember { mutableStateFlowOf("") }
     var email by remember { mutableStateFlowOf("") }
     var maNhanVien by remember { mutableStateFlowOf("") }
+    var companyCode by remember { mutableStateFlowOf("") }
     var password by remember { mutableStateFlowOf("") }
     var confirmPassword by remember { mutableStateFlowOf("") }
     
@@ -147,6 +149,30 @@ fun RegisterScreen(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
                     .testTag("ma_nhan_vien_register_input"),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedLabelColor = NeonBlue,
+                    focusedBorderColor = NeonBlue,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.3f),
+                    focusedTextColor = MaterialTheme.colorScheme.onPrimary,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+
+            // Mã công ty (Tùy chọn)
+            OutlinedTextField(
+                value = companyCode,
+                onValueChange = { 
+                    companyCode = it
+                    errorMessage = null
+                },
+                label = { Text("Mã công ty (Để trống nếu dùng mặc định)") },
+                leadingIcon = { Icon(Icons.Default.Work, "Company Icon", tint = NeonBlue) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .testTag("company_code_register_input"),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedLabelColor = NeonBlue,
