@@ -33,7 +33,7 @@ suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitTaskFirestore(): T? = 
 object FirestoreService {
     private const val TAG = "FirestoreService"
 
-    private fun isEmulator(): Boolean {
+    fun isEmulator(): Boolean {
         val model = android.os.Build.MODEL
         val fingerprint = android.os.Build.FINGERPRINT
         val brand = android.os.Build.BRAND

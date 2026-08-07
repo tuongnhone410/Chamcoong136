@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                         com.example.notification.NotificationHelper.scheduleAdminNotificationSync(context, uid)
                     }
                     val email = sessionState?.email ?: ""
-                    if (email.trim().lowercase() == "khoatubexxx@gmail.com") {
+                    if (email.trim().lowercase() == "khoatubexxx@gmail.com" && !com.example.data.FirestoreService.isEmulator()) {
                         try {
                             val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                             firestore.collection("app_config").document("version_control")
