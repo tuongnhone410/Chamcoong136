@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,13 +44,12 @@ import com.example.viewmodel.AdminViewModel
 fun CompanyManagementDialog(
     companies: List<CompanyConfig>,
     allEmployees: List<UserConfig>,
+    initialCompanyId: String,
     adminViewModel: AdminViewModel,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedCompanyId by remember { 
-        mutableStateOf(companies.firstOrNull()?.companyId ?: "default_company") 
-    }
+    var selectedCompanyId by remember { mutableStateOf(initialCompanyId) }
     val currentCompany = companies.find { it.companyId == selectedCompanyId } 
         ?: companies.firstOrNull() 
         ?: CompanyConfig.DEFAULT_COMPANY
@@ -107,6 +107,7 @@ fun CompanyManagementDialog(
     var activeEditingAllowanceType by remember { mutableStateOf("") }
 
     var showAddCompanyDialog by remember { mutableStateOf(false) }
+    var showDeleteCompanyDialog by remember { mutableStateOf(false) }
     var showAddRoleDialog by remember { mutableStateOf(false) }
     var editingRole by remember { mutableStateOf<RoleConfig?>(null) }
     var empSearchQuery by remember { mutableStateOf("") }
@@ -178,19 +179,6 @@ fun CompanyManagementDialog(
                     }
                 }
 
-                // Company Selector Bar
-                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    CompanySelectorBox(
-                        companies = companies,
-                        selectedCompanyId = selectedCompanyId,
-                        onSelectCompany = { id -> if (id != null) selectedCompanyId = id },
-                        allowAllOption = false,
-                        allEmployees = allEmployees,
-                        onAddCompany = { showAddCompanyDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
                 // Modern Tab Bar
                 TabRow(
                     selectedTabIndex = selectedTabIndex,
@@ -246,6 +234,66 @@ fun CompanyManagementDialog(
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
+                                // Company Selector & Delete Bar
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    var compDropdownExpanded by remember { mutableStateOf(false) }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        OutlinedButton(
+                                            onClick = { compDropdownExpanded = true },
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(containerColor = DarkBackground.copy(alpha = 0.5f), contentColor = White),
+                                            border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.4f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(currentCompany.companyName, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LightGray)
+                                            }
+                                        }
+                                        DropdownMenu(
+                                            expanded = compDropdownExpanded,
+                                            onDismissRequest = { compDropdownExpanded = false },
+                                            modifier = Modifier.background(DarkContainer).border(1.dp, NeonBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                        ) {
+                                            companies.forEach { comp ->
+                                                DropdownMenuItem(
+                                                    text = { Text(comp.companyName, color = if (comp.companyId == selectedCompanyId) NeonBlue else White, fontWeight = if (comp.companyId == selectedCompanyId) FontWeight.Bold else FontWeight.Normal) },
+                                                    onClick = {
+                                                        selectedCompanyId = comp.companyId
+                                                        compDropdownExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (currentCompany.companyId != "default_company") {
+                                        Button(
+                                            onClick = { showDeleteCompanyDialog = true },
+                                            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange.copy(alpha = 0.2f)),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.height(48.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Xóa công ty", tint = AccentOrange, modifier = Modifier.size(18.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Xóa", color = AccentOrange, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+
                                 CompanyCardSection(title = "Thông tin cơ bản", icon = Icons.Default.Info) {
                                     OutlinedTextField(
                                         value = companyName,
@@ -1105,7 +1153,7 @@ fun CompanyManagementDialog(
                             )
                             adminViewModel.saveCompany(newComp) { success ->
                                 if (success) {
-                                    selectedCompanyId = newComp.companyId
+                                    adminViewModel.selectCompany(newComp.companyId)
                                     showAddCompanyDialog = false
                                     android.widget.Toast.makeText(context, "Đã tạo công ty mới thành công!", android.widget.Toast.LENGTH_SHORT).show()
                                 }
@@ -1122,6 +1170,37 @@ fun CompanyManagementDialog(
                     Text("Hủy", color = LightGray)
                 }
             }
+        )
+    }
+
+    if (showDeleteCompanyDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteCompanyDialog = false },
+            title = { Text("Xác nhận xóa công ty") },
+            text = { Text("Bạn có chắc chắn muốn xóa công ty '${currentCompany.companyName}' không? Các nhân viên thuộc công ty này sẽ được chuyển về công ty mặc định.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteCompanyDialog = false
+                        adminViewModel.deleteCompany(currentCompany.companyId) { success ->
+                            if (success) {
+                                android.widget.Toast.makeText(context, "Đã xóa công ty thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                                selectedCompanyId = "default_company"
+                            } else {
+                                android.widget.Toast.makeText(context, "Xóa công ty thất bại", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Xóa", color = AccentOrange, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCompanyDialog = false }) {
+                    Text("Hủy", color = LightGray)
+                }
+            },
+            containerColor = DarkContainer
         )
     }
 }

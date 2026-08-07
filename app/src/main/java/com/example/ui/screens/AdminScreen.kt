@@ -251,6 +251,7 @@ fun AdminScreen(
         CompanyManagementDialog(
             companies = companies,
             allEmployees = employees,
+            initialCompanyId = selectedCompanyId ?: companies.firstOrNull()?.companyId ?: "default_company",
             adminViewModel = adminViewModel,
             onDismiss = { showCompanyManagementDialog = false }
         )
@@ -797,22 +798,22 @@ fun AdminScreen(
                                     )
                                     if (selectedRole != null) {
                                         updated = updated.copy(
-                                            luongCoBan = selectedRole.luongCoBan,
-                                            pcKyThuat = selectedRole.pcKyThuat,
-                                            pcTrachNhiem = selectedRole.pcTrachNhiem,
-                                            pcChucVu = selectedRole.pcChucVu,
-                                            pcHieuSuat = selectedRole.pcHieuSuat,
-                                            pcSanPham = selectedRole.pcSanPham,
-                                            pcComCa = selectedRole.pcComCa,
-                                            pcComOt = selectedRole.pcComOt,
-                                            pcNhaO = selectedRole.pcNhaO,
-                                            pcDocHai = selectedRole.pcDocHai,
-                                            pcDtDoanhThu = selectedRole.pcDtDoanhThu,
-                                            pcXangXe = selectedRole.pcXangXe,
-                                            pcThamNien = selectedRole.pcThamNien,
-                                            pcKhac1 = selectedRole.pcKhac1,
-                                            pcCaDem = selectedRole.pcCaDem,
-                                            tienChuyenCanGoc = selectedRole.tienChuyenCanGoc,
+                                            luongCoBan = if (selectedRole.luongCoBan > 0.0) selectedRole.luongCoBan else batchCurrentCompany.luongCoBan,
+                                            pcKyThuat = if (selectedRole.pcKyThuat > 0.0) selectedRole.pcKyThuat else batchCurrentCompany.pcKyThuat,
+                                            pcTrachNhiem = if (selectedRole.pcTrachNhiem > 0.0) selectedRole.pcTrachNhiem else batchCurrentCompany.pcTrachNhiem,
+                                            pcChucVu = if (selectedRole.pcChucVu > 0.0) selectedRole.pcChucVu else batchCurrentCompany.pcChucVu,
+                                            pcHieuSuat = if (selectedRole.pcHieuSuat > 0.0) selectedRole.pcHieuSuat else batchCurrentCompany.pcHieuSuat,
+                                            pcSanPham = if (selectedRole.pcSanPham > 0.0) selectedRole.pcSanPham else batchCurrentCompany.pcSanPham,
+                                            pcComCa = if (selectedRole.pcComCa > 0.0) selectedRole.pcComCa else batchCurrentCompany.pcComCa,
+                                            pcComOt = if (selectedRole.pcComOt > 0.0) selectedRole.pcComOt else batchCurrentCompany.pcComOt,
+                                            pcNhaO = if (selectedRole.pcNhaO > 0.0) selectedRole.pcNhaO else batchCurrentCompany.pcNhaO,
+                                            pcDocHai = if (selectedRole.pcDocHai > 0.0) selectedRole.pcDocHai else batchCurrentCompany.pcDocHai,
+                                            pcDtDoanhThu = if (selectedRole.pcDtDoanhThu > 0.0) selectedRole.pcDtDoanhThu else batchCurrentCompany.pcDtDoanhThu,
+                                            pcXangXe = if (selectedRole.pcXangXe > 0.0) selectedRole.pcXangXe else batchCurrentCompany.pcXangXe,
+                                            pcThamNien = if (selectedRole.pcThamNien > 0.0) selectedRole.pcThamNien else batchCurrentCompany.pcThamNien,
+                                            pcKhac1 = if (selectedRole.pcKhac1 > 0.0) selectedRole.pcKhac1 else batchCurrentCompany.pcKhac1,
+                                            pcCaDem = if (selectedRole.pcCaDem > 0.0) selectedRole.pcCaDem else batchCurrentCompany.pcCaDem,
+                                            tienChuyenCanGoc = if (selectedRole.tienChuyenCanGoc > 0.0) selectedRole.tienChuyenCanGoc else batchCurrentCompany.tienChuyenCanGoc,
                                             allowanceCalcTypes = if (selectedRole.allowanceCalcTypes.isNotBlank()) selectedRole.allowanceCalcTypes else updated.allowanceCalcTypes
                                         )
                                     }
@@ -1176,8 +1177,8 @@ fun EmployeeListView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             CompanySelectorBox(
@@ -1189,16 +1190,24 @@ fun EmployeeListView(
                 onAddCompany = { onOpenCompanyManagement() },
                 modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = onOpenCompanyManagement,
                 colors = ButtonDefaults.buttonColors(containerColor = NeonBlue.copy(alpha = 0.2f)),
                 border = BorderStroke(1.dp, NeonBlue),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(52.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Cty & Phụ cấp", color = NeonBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    "Cty & Phụ cấp", 
+                    color = NeonBlue, 
+                    fontSize = 13.sp, 
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 
@@ -3058,23 +3067,42 @@ fun EmployeeConfigEdit(
                     )
                     if (updatedRole != null) {
                         updatedUser = updatedUser.copy(
-                            luongCoBan = updatedRole.luongCoBan,
-                            pcKyThuat = updatedRole.pcKyThuat,
-                            pcTrachNhiem = updatedRole.pcTrachNhiem,
-                            pcChucVu = updatedRole.pcChucVu,
-                            pcHieuSuat = updatedRole.pcHieuSuat,
-                            pcSanPham = updatedRole.pcSanPham,
-                            pcComCa = updatedRole.pcComCa,
-                            pcComOt = updatedRole.pcComOt,
-                            pcNhaO = updatedRole.pcNhaO,
-                            pcDocHai = updatedRole.pcDocHai,
-                            pcDtDoanhThu = updatedRole.pcDtDoanhThu,
-                            pcXangXe = updatedRole.pcXangXe,
-                            pcThamNien = updatedRole.pcThamNien,
-                            pcKhac1 = updatedRole.pcKhac1,
-                            pcCaDem = updatedRole.pcCaDem,
-                            tienChuyenCanGoc = updatedRole.tienChuyenCanGoc,
+                            luongCoBan = if (updatedRole.luongCoBan > 0.0) updatedRole.luongCoBan else currentCompany.luongCoBan,
+                            pcKyThuat = if (updatedRole.pcKyThuat > 0.0) updatedRole.pcKyThuat else currentCompany.pcKyThuat,
+                            pcTrachNhiem = if (updatedRole.pcTrachNhiem > 0.0) updatedRole.pcTrachNhiem else currentCompany.pcTrachNhiem,
+                            pcChucVu = if (updatedRole.pcChucVu > 0.0) updatedRole.pcChucVu else currentCompany.pcChucVu,
+                            pcHieuSuat = if (updatedRole.pcHieuSuat > 0.0) updatedRole.pcHieuSuat else currentCompany.pcHieuSuat,
+                            pcSanPham = if (updatedRole.pcSanPham > 0.0) updatedRole.pcSanPham else currentCompany.pcSanPham,
+                            pcComCa = if (updatedRole.pcComCa > 0.0) updatedRole.pcComCa else currentCompany.pcComCa,
+                            pcComOt = if (updatedRole.pcComOt > 0.0) updatedRole.pcComOt else currentCompany.pcComOt,
+                            pcNhaO = if (updatedRole.pcNhaO > 0.0) updatedRole.pcNhaO else currentCompany.pcNhaO,
+                            pcDocHai = if (updatedRole.pcDocHai > 0.0) updatedRole.pcDocHai else currentCompany.pcDocHai,
+                            pcDtDoanhThu = if (updatedRole.pcDtDoanhThu > 0.0) updatedRole.pcDtDoanhThu else currentCompany.pcDtDoanhThu,
+                            pcXangXe = if (updatedRole.pcXangXe > 0.0) updatedRole.pcXangXe else currentCompany.pcXangXe,
+                            pcThamNien = if (updatedRole.pcThamNien > 0.0) updatedRole.pcThamNien else currentCompany.pcThamNien,
+                            pcKhac1 = if (updatedRole.pcKhac1 > 0.0) updatedRole.pcKhac1 else currentCompany.pcKhac1,
+                            pcCaDem = if (updatedRole.pcCaDem > 0.0) updatedRole.pcCaDem else currentCompany.pcCaDem,
+                            tienChuyenCanGoc = if (updatedRole.tienChuyenCanGoc > 0.0) updatedRole.tienChuyenCanGoc else currentCompany.tienChuyenCanGoc,
                             allowanceCalcTypes = if (updatedRole.allowanceCalcTypes.isNotBlank()) updatedRole.allowanceCalcTypes else updatedUser.allowanceCalcTypes
+                        )
+                    } else {
+                        updatedUser = updatedUser.copy(
+                            luongCoBan = currentCompany.luongCoBan,
+                            pcKyThuat = currentCompany.pcKyThuat,
+                            pcTrachNhiem = currentCompany.pcTrachNhiem,
+                            pcChucVu = currentCompany.pcChucVu,
+                            pcHieuSuat = currentCompany.pcHieuSuat,
+                            pcSanPham = currentCompany.pcSanPham,
+                            pcComCa = currentCompany.pcComCa,
+                            pcComOt = currentCompany.pcComOt,
+                            pcNhaO = currentCompany.pcNhaO,
+                            pcDocHai = currentCompany.pcDocHai,
+                            pcDtDoanhThu = currentCompany.pcDtDoanhThu,
+                            pcXangXe = currentCompany.pcXangXe,
+                            pcThamNien = currentCompany.pcThamNien,
+                            pcKhac1 = currentCompany.pcKhac1,
+                            pcCaDem = currentCompany.pcCaDem,
+                            tienChuyenCanGoc = currentCompany.tienChuyenCanGoc
                         )
                     }
                     onSave(updatedUser)
@@ -3104,28 +3132,35 @@ fun CompanySelectorBox(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(52.dp)
                 .clickable { expanded = true },
             color = DarkBackground.copy(alpha = 0.5f),
             shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.3f))
         ) {
             Row(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text("Công ty", color = Color.Gray, fontSize = 12.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Business, contentDescription = null, tint = NeonBlue, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Công ty", color = Color.Gray, fontSize = 10.sp)
                         Text(
                             text = if (selectedCompanyId == null) "Tất cả công ty" else currentCompany?.companyName ?: "Không xác định",
                             color = White,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LightGray)
             }
         }
@@ -3351,6 +3386,8 @@ fun SendAdminNotificationDialog(
 
 @Composable
 fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelete: () -> Unit) {
+    val inStr = if (record.clockInTime > 0) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockInTime)) else "N/A"
+    val outStr = if (record.clockOutTime != null && record.clockOutTime > 0) SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(record.clockOutTime)) else "N/A"
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         color = DarkBackground,
@@ -3363,7 +3400,7 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
         ) {
             Column {
                 Text(record.dateString, color = White, fontWeight = FontWeight.Bold)
-                Text("In: ${record.clockInTime.toString()} - Out: ${record.clockOutTime?.toString() ?: "N/A"}", color = Color.Gray)
+                Text("In: $inStr - Out: $outStr", color = Color.Gray)
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AccentOrange)

@@ -174,6 +174,8 @@ fun RoleEditDialog(
     var localRole by remember { mutableStateOf(role) }
     var roleName by remember { mutableStateOf(localRole.roleName) }
     var lcb by remember { mutableStateOf(if (localRole.luongCoBan == 0.0) "" else localRole.luongCoBan.toLong().toString()) }
+    var tinhKhauTruNghi by remember { mutableStateOf(localRole.tinhKhauTruNghi) }
+    var soGioNghiGiaiLao by remember { mutableStateOf(if (localRole.soGioNghiGiaiLao == 0.0) "1.5" else localRole.soGioNghiGiaiLao.toString()) }
     
     // Professional Allowances
     var pcChucVu by remember { mutableStateOf(if (localRole.pcChucVu == 0.0) "" else localRole.pcChucVu.toLong().toString()) }
@@ -467,6 +469,37 @@ fun RoleEditDialog(
                             }
                         )
                     }
+
+                    // Group 5: Break Time Deduction (Khấu trừ giờ nghỉ)
+                    CompanyCardSection(title = "5. Cấu hình khấu trừ giờ nghỉ", icon = Icons.Default.Timer) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Khấu trừ giờ nghỉ giữa ca", color = White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Tự động trừ thời gian nghỉ giải lao khỏi tổng giờ làm", color = LightGray, fontSize = 11.sp)
+                            }
+                            Switch(
+                                checked = tinhKhauTruNghi,
+                                onCheckedChange = { tinhKhauTruNghi = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = NeonBlue)
+                            )
+                        }
+                        if (tinhKhauTruNghi) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = soGioNghiGiaiLao,
+                                onValueChange = { soGioNghiGiaiLao = it.filter { c -> c.isDigit() || c == '.' } },
+                                label = { Text("Số giờ nghỉ giải lao (giờ)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                    }
                 }
 
                 // Bottom Actions
@@ -506,7 +539,9 @@ fun RoleEditDialog(
                                 pcThamNien = pcThamNien.toDoubleOrNull() ?: 0.0,
                                 pcDtDoanhThu = pcDtDoanhThu.toDoubleOrNull() ?: 0.0,
                                 pcKhac1 = pcKhac.toDoubleOrNull() ?: 0.0,
-                                tienChuyenCanGoc = chuyenCan.toDoubleOrNull() ?: 0.0
+                                tienChuyenCanGoc = chuyenCan.toDoubleOrNull() ?: 0.0,
+                                tinhKhauTruNghi = tinhKhauTruNghi,
+                                soGioNghiGiaiLao = soGioNghiGiaiLao.toDoubleOrNull() ?: 1.5
                             )
                             onSave(updated)
                         },

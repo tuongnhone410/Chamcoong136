@@ -70,7 +70,7 @@ data class CompanyConfig(
     }
 
     fun applyToUserConfig(user: UserConfig, overwriteCustomBaseSalary: Boolean = false): UserConfig {
-        return user.copy(
+        val baseConfig = user.copy(
             companyId = this.companyId,
             companyName = this.companyName,
             companyCode = this.companyCode,
@@ -106,6 +106,33 @@ data class CompanyConfig(
             tinhKhauTruNghi = this.tinhKhauTruNghi,
             lichTrinh = this.lichTrinh
         )
+
+        val role = if (user.roleId.isNotBlank()) getRoles().find { it.roleId == user.roleId } else null
+        return if (role != null) {
+            baseConfig.copy(
+                roleName = role.roleName,
+                luongCoBan = if (!overwriteCustomBaseSalary && user.luongCoBan > 0.0) user.luongCoBan else (if (role.luongCoBan > 0.0) role.luongCoBan else baseConfig.luongCoBan),
+                pcKyThuat = if (role.pcKyThuat > 0.0) role.pcKyThuat else baseConfig.pcKyThuat,
+                pcTrachNhiem = if (role.pcTrachNhiem > 0.0) role.pcTrachNhiem else baseConfig.pcTrachNhiem,
+                pcChucVu = if (role.pcChucVu > 0.0) role.pcChucVu else baseConfig.pcChucVu,
+                pcHieuSuat = if (role.pcHieuSuat > 0.0) role.pcHieuSuat else baseConfig.pcHieuSuat,
+                pcSanPham = if (role.pcSanPham > 0.0) role.pcSanPham else baseConfig.pcSanPham,
+                pcComCa = if (role.pcComCa > 0.0) role.pcComCa else baseConfig.pcComCa,
+                pcComOt = if (role.pcComOt > 0.0) role.pcComOt else baseConfig.pcComOt,
+                pcNhaO = if (role.pcNhaO > 0.0) role.pcNhaO else baseConfig.pcNhaO,
+                pcDocHai = if (role.pcDocHai > 0.0) role.pcDocHai else baseConfig.pcDocHai,
+                pcDtDoanhThu = if (role.pcDtDoanhThu > 0.0) role.pcDtDoanhThu else baseConfig.pcDtDoanhThu,
+                pcXangXe = if (role.pcXangXe > 0.0) role.pcXangXe else baseConfig.pcXangXe,
+                pcThamNien = if (role.pcThamNien > 0.0) role.pcThamNien else baseConfig.pcThamNien,
+                pcKhac1 = if (role.pcKhac1 > 0.0) role.pcKhac1 else baseConfig.pcKhac1,
+                pcCaDem = if (role.pcCaDem > 0.0) role.pcCaDem else baseConfig.pcCaDem,
+                tienChuyenCanGoc = if (role.tienChuyenCanGoc > 0.0) role.tienChuyenCanGoc else baseConfig.tienChuyenCanGoc,
+                tinhKhauTruNghi = role.tinhKhauTruNghi,
+                soGioNghiGiaiLao = role.soGioNghiGiaiLao
+            )
+        } else {
+            baseConfig
+        }
     }
 
     companion object {
@@ -149,7 +176,9 @@ data class RoleConfig(
     val pcKhac1: Double = 0.0,
     val pcCaDem: Double = 0.0,
     val tienChuyenCanGoc: Double = 0.0,
-    val allowanceCalcTypes: String = ""
+    val allowanceCalcTypes: String = "",
+    val tinhKhauTruNghi: Boolean = false,
+    val soGioNghiGiaiLao: Double = 1.5
 ) {
     fun getCalcTypeFor(field: String): String {
         if (allowanceCalcTypes.isBlank()) {
@@ -173,7 +202,7 @@ data class RoleConfig(
     }
 
     fun toCsv(): String {
-        return listOf(roleId, roleName, luongCoBan, pcKyThuat, pcTrachNhiem, pcChucVu, pcHieuSuat, pcSanPham, pcComCa, pcComOt, pcNhaO, pcDocHai, pcDtDoanhThu, pcXangXe, pcThamNien, pcKhac1, pcCaDem, tienChuyenCanGoc, allowanceCalcTypes).joinToString("||")
+        return listOf(roleId, roleName, luongCoBan, pcKyThuat, pcTrachNhiem, pcChucVu, pcHieuSuat, pcSanPham, pcComCa, pcComOt, pcNhaO, pcDocHai, pcDtDoanhThu, pcXangXe, pcThamNien, pcKhac1, pcCaDem, tienChuyenCanGoc, allowanceCalcTypes, tinhKhauTruNghi, soGioNghiGiaiLao).joinToString("||")
     }
     companion object {
         fun fromCsv(csv: String): RoleConfig? {
@@ -199,7 +228,9 @@ data class RoleConfig(
                     pcKhac1 = parts[15].toDoubleOrNull() ?: 0.0,
                     pcCaDem = parts[16].toDoubleOrNull() ?: 0.0,
                     tienChuyenCanGoc = parts[17].toDoubleOrNull() ?: 0.0,
-                    allowanceCalcTypes = if (parts.size > 18) parts[18] else ""
+                    allowanceCalcTypes = if (parts.size > 18) parts[18] else "",
+                    tinhKhauTruNghi = if (parts.size > 19) parts[19].toBooleanStrictOrNull() ?: false else false,
+                    soGioNghiGiaiLao = if (parts.size > 20) parts[20].toDoubleOrNull() ?: 1.5 else 1.5
                 )
             } catch (e: Exception) { null }
         }
