@@ -148,10 +148,32 @@ data class RoleConfig(
     val pcThamNien: Double = 0.0,
     val pcKhac1: Double = 0.0,
     val pcCaDem: Double = 0.0,
-    val tienChuyenCanGoc: Double = 0.0
+    val tienChuyenCanGoc: Double = 0.0,
+    val allowanceCalcTypes: String = ""
 ) {
+    fun getCalcTypeFor(field: String): String {
+        if (allowanceCalcTypes.isBlank()) {
+            return UserConfig.getDefaultCalcType(field)
+        }
+        val map = allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }
+        return map[field] ?: UserConfig.getDefaultCalcType(field)
+    }
+
+    fun copyWithCalcType(field: String, calcType: String): RoleConfig {
+        val map = allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }.toMutableMap()
+        map[field] = calcType
+        val newStr = map.entries.joinToString(";") { "${it.key}:${it.value}" }
+        return this.copy(allowanceCalcTypes = newStr)
+    }
+
     fun toCsv(): String {
-        return listOf(roleId, roleName, luongCoBan, pcKyThuat, pcTrachNhiem, pcChucVu, pcHieuSuat, pcSanPham, pcComCa, pcComOt, pcNhaO, pcDocHai, pcDtDoanhThu, pcXangXe, pcThamNien, pcKhac1, pcCaDem, tienChuyenCanGoc).joinToString("||")
+        return listOf(roleId, roleName, luongCoBan, pcKyThuat, pcTrachNhiem, pcChucVu, pcHieuSuat, pcSanPham, pcComCa, pcComOt, pcNhaO, pcDocHai, pcDtDoanhThu, pcXangXe, pcThamNien, pcKhac1, pcCaDem, tienChuyenCanGoc, allowanceCalcTypes).joinToString("||")
     }
     companion object {
         fun fromCsv(csv: String): RoleConfig? {
@@ -176,7 +198,8 @@ data class RoleConfig(
                     pcThamNien = parts[14].toDoubleOrNull() ?: 0.0,
                     pcKhac1 = parts[15].toDoubleOrNull() ?: 0.0,
                     pcCaDem = parts[16].toDoubleOrNull() ?: 0.0,
-                    tienChuyenCanGoc = parts[17].toDoubleOrNull() ?: 0.0
+                    tienChuyenCanGoc = parts[17].toDoubleOrNull() ?: 0.0,
+                    allowanceCalcTypes = if (parts.size > 18) parts[18] else ""
                 )
             } catch (e: Exception) { null }
         }

@@ -812,7 +812,8 @@ fun AdminScreen(
                                             pcThamNien = selectedRole.pcThamNien,
                                             pcKhac1 = selectedRole.pcKhac1,
                                             pcCaDem = selectedRole.pcCaDem,
-                                            tienChuyenCanGoc = selectedRole.tienChuyenCanGoc
+                                            tienChuyenCanGoc = selectedRole.tienChuyenCanGoc,
+                                            allowanceCalcTypes = if (selectedRole.allowanceCalcTypes.isNotBlank()) selectedRole.allowanceCalcTypes else updated.allowanceCalcTypes
                                         )
                                     }
                                     updated
@@ -3072,7 +3073,8 @@ fun EmployeeConfigEdit(
                             pcThamNien = updatedRole.pcThamNien,
                             pcKhac1 = updatedRole.pcKhac1,
                             pcCaDem = updatedRole.pcCaDem,
-                            tienChuyenCanGoc = updatedRole.tienChuyenCanGoc
+                            tienChuyenCanGoc = updatedRole.tienChuyenCanGoc,
+                            allowanceCalcTypes = if (updatedRole.allowanceCalcTypes.isNotBlank()) updatedRole.allowanceCalcTypes else updatedUser.allowanceCalcTypes
                         )
                     }
                     onSave(updatedUser)
@@ -3299,11 +3301,562 @@ fun AttendanceRecordItem(record: AttendanceRecord, employee: UserConfig, onDelet
 }
 
 @Composable
-fun EmployeePayslipView(employee: UserConfig, records: List<AttendanceRecord>, selectedMonthYm: String, isAllMonths: Boolean) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Phiếu Lương: ${employee.hoVaTen}", color = White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Spacer(modifier = Modifier.height(16.dp))
-        Text("Tổng số bản ghi chấm công: ${records.size}", color = LightGray)
-        // Stubbed for brevity. 
+fun EmployeePayslipView(
+    employee: UserConfig,
+    records: List<AttendanceRecord>,
+    selectedMonthYm: String,
+    isAllMonths: Boolean,
+    adminViewModel: AdminViewModel = viewModel()
+) {
+    val context = LocalContext.current
+    val scrollState = rememberScrollState()
+    var selectedTab by remember { mutableStateOf(0) } // 0: Thực tế, 1: Dự kiến
+
+    // Date calculations
+    var targetYear = 2026
+    var targetMonth = 8
+    try {
+        val parts = selectedMonthYm.split("-")
+        targetYear = parts[0].toInt()
+        targetMonth = parts[1].toInt()
+    } catch (e: Exception) {}
+
+    val todayCal = Calendar.getInstance()
+    val currentYear = todayCal.get(Calendar.YEAR)
+    val currentMonth = todayCal.get(Calendar.MONTH) + 1
+    val todayDayOfMonth = todayCal.get(Calendar.DAY_OF_MONTH)
+
+    val isCurrentSelectedMonth = (targetYear == currentYear && targetMonth == currentMonth)
+    val todayStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, todayDayOfMonth)
+
+    val maxDaysInMo = Calendar.getInstance().apply {
+        set(Calendar.YEAR, targetYear)
+        set(Calendar.MONTH, targetMonth - 1)
+    }.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val holidayDatesInMonth = mutableSetOf<String>()
+    for (day in 1..maxDaysInMo) {
+        val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+        if (com.example.data.SalaryCalculator.isHoliday(dateStr)) {
+            if (!isCurrentSelectedMonth || dateStr <= todayStr) {
+                holidayDatesInMonth.add(dateStr)
+            }
+        }
+    }
+
+    val effectiveJoinDate: String? = if (employee.ngayVaoLam.isNotBlank()) {
+        employee.ngayVaoLam.trim()
+    } else {
+        null
+    }
+
+    var expectedWorkDaysSoFar = 0
+    var totalWorkDaysInMonth = 0
+
+    // Calculate total work days in month first
+    for (day in 1..maxDaysInMo) {
+        val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+        val cal = Calendar.getInstance()
+        cal.set(targetYear, targetMonth - 1, day)
+        val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+        val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+        if (!isSunday && !isHoliday) {
+            totalWorkDaysInMonth++
+        }
+    }
+
+    if (isCurrentSelectedMonth) {
+        for (day in 1 until todayDayOfMonth) {
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth, day)
+            if (effectiveJoinDate != null && dateStr < effectiveJoinDate) {
+                continue
+            }
+            val cal = Calendar.getInstance()
+            cal.set(currentYear, currentMonth - 1, day)
+            val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+            if (!isSunday && !isHoliday) {
+                expectedWorkDaysSoFar++
+            }
+        }
+    } else {
+        if (effectiveJoinDate != null && effectiveJoinDate.startsWith(selectedMonthYm)) {
+            for (day in 1..maxDaysInMo) {
+                val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+                if (dateStr < effectiveJoinDate) {
+                    continue
+                }
+                val cal = Calendar.getInstance()
+                cal.set(targetYear, targetMonth - 1, day)
+                val isSunday = (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY)
+                val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+                if (!isSunday && !isHoliday) {
+                    expectedWorkDaysSoFar++
+                }
+            }
+        } else {
+            expectedWorkDaysSoFar = totalWorkDaysInMonth
+        }
+    }
+
+    fun normalizeToYmd(dateStr: String): String {
+        return try {
+            if (dateStr.contains("/")) {
+                val parts = dateStr.split("/")
+                if (parts.size == 3) {
+                    "${parts[2].padStart(4, '0')}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}"
+                } else {
+                    dateStr
+                }
+            } else {
+                dateStr
+            }
+        } catch (e: Exception) {
+            dateStr
+        }
+    }
+
+    val timeEntries = records.map { log ->
+        val entry = log.toTimeEntry()
+        entry.copy(date = normalizeToYmd(entry.date))
+    }
+
+    val summary = com.example.data.SalaryCalculator.calculateMonthlySalary(
+        entries = timeEntries,
+        config = employee,
+        scheduledDaysSoFar = expectedWorkDaysSoFar,
+        totalScheduledDaysInMonth = totalWorkDaysInMonth,
+        earliestDate = effectiveJoinDate,
+        selectedMonth = selectedMonthYm,
+        todayStr = todayStr,
+        isCurrentSelectedMonth = isCurrentSelectedMonth,
+        holidayDatesInMonth = holidayDatesInMonth
+    )
+
+    // Projected state calculations
+    val startProjectionDay = if (!isCurrentSelectedMonth) 1 else (todayDayOfMonth + 1).coerceAtMost(maxDaysInMo + 1)
+    
+    val remainingWeekdays = if (!isCurrentSelectedMonth) 0 else {
+        var count = 0
+        val cal = Calendar.getInstance()
+        for (day in startProjectionDay..maxDaysInMo) {
+            cal.set(targetYear, targetMonth - 1, day)
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+            val isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            if (!isSunday && !isHoliday) {
+                count++
+            }
+        }
+        count
+    }
+
+    val remainingSundays = if (!isCurrentSelectedMonth) 0 else {
+        var count = 0
+        val cal = Calendar.getInstance()
+        for (day in startProjectionDay..maxDaysInMo) {
+            cal.set(targetYear, targetMonth - 1, day)
+            val dateStr = String.format(Locale.US, "%04d-%02d-%02d", targetYear, targetMonth, day)
+            val isHoliday = com.example.data.SalaryCalculator.isHoliday(dateStr)
+            val isSunday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+            if (isSunday && !isHoliday) {
+                count++
+            }
+        }
+        count
+    }
+
+    val dailySalary = employee.luongCoBan / 26.0
+    val hourlySalary = dailySalary / 8.0
+
+    val hasWorkedSunday = timeEntries.any { e ->
+        com.example.data.SalaryCalculator.isSunday(e.date) && e.checkInTime != null
+    }
+
+    var includeSundayInProjection by remember(hasWorkedSunday) { mutableStateOf(hasWorkedSunday) }
+
+    val additionalWeekdaysPay = remainingWeekdays * dailySalary
+    val additionalSundaysPay = if (includeSundayInProjection) {
+        remainingSundays * dailySalary * employee.heSoOtChuNhat
+    } else {
+        0.0
+    }
+
+    val soNgayCongDuKien = if (isCurrentSelectedMonth) {
+        summary.workingDays + remainingWeekdays + (if (includeSundayInProjection) remainingSundays else 0)
+    } else {
+        maxOf(summary.workingDays, summary.standardWorkDays)
+    }
+    val soNgayCongDuKienDouble = soNgayCongDuKien.toDouble()
+
+    fun calcPr(fieldName: String, valRaw: Double): Double {
+        return com.example.data.SalaryCalculator.calculateAllowanceValue(
+            fieldName = fieldName,
+            allowanceValue = valRaw,
+            calcType = employee.getCalcTypeFor(fieldName),
+            totalWorkDays = soNgayCongDuKienDouble,
+            comCaCount = summary.workingDays,
+            comOtCount = 0,
+            nightShiftsCount = summary.caDemCount,
+            scheduledDaysSoFar = summary.workingDays,
+            totalScheduledDaysInMonth = 26
+        )
+    }
+
+    val pcKyThuatShow = if (selectedTab == 1) calcPr("pcKyThuat", employee.pcKyThuat) else summary.pcKyThuatVal
+    val pcTrachNhiemShow = if (selectedTab == 1) calcPr("pcTrachNhiem", employee.pcTrachNhiem) else summary.pcTrachNhiemVal
+    val pcChucVuShow = if (selectedTab == 1) calcPr("pcChucVu", employee.pcChucVu) else summary.pcChucVuVal
+    val pcHieuSuatShow = if (selectedTab == 1) calcPr("pcHieuSuat", employee.pcHieuSuat) else summary.pcHieuSuatVal
+    val pcSanPhamShow = if (selectedTab == 1) calcPr("pcSanPham", employee.pcSanPham) else summary.pcSanPhamVal
+
+    val pcComCaShow = if (selectedTab == 1) {
+        if (isCurrentSelectedMonth) {
+            summary.pcComCaVal + (remainingWeekdays * employee.pcComCa) + (if (includeSundayInProjection) remainingSundays * employee.pcComCa else 0.0)
+        } else {
+            summary.pcComCaVal
+        }
+    } else {
+        summary.pcComCaVal
+    }
+
+    val pcComOtShow = summary.pcComOtVal
+
+    val pcNhaOShow = if (selectedTab == 1) calcPr("pcNhaO", employee.pcNhaO) else summary.pcNhaOVal
+    val pcDocHaiShow = if (selectedTab == 1) calcPr("pcDocHai", employee.pcDocHai) else summary.pcDocHaiVal
+    val pcDtDoanhThuShow = if (selectedTab == 1) calcPr("pcDtDoanhThu", employee.pcDtDoanhThu) else summary.pcDtDoanhThuVal
+    val pcXangXeShow = if (selectedTab == 1) calcPr("pcXangXe", employee.pcXangXe) else summary.pcXangXeVal
+    val pcKhacShow = if (selectedTab == 1) calcPr("pcCaDem", employee.pcCaDem) else summary.pcCaDemVal
+    val pcKhac1Show = if (selectedTab == 1) calcPr("pcKhac1", employee.pcKhac1) else summary.pcKhac1Val
+    val pcThamNienShow = if (selectedTab == 1) calcPr("pcThamNien", employee.pcThamNien) else summary.pcThamNienVal
+
+    val hasLoggedUnpaidOrAbsent = timeEntries.any { e ->
+        e.dayType == "UNPAID_LEAVE" || (e.checkInTime == null && e.dayType != "PAID_LEAVE" && e.dayType != "HOLIDAY_LEAVE")
+    }
+
+    val pcChuyenCanShow = if (selectedTab == 1) {
+        if (hasLoggedUnpaidOrAbsent) 0.0 else calcPr("tienChuyenCanGoc", employee.tienChuyenCanGoc)
+    } else {
+        summary.phuCapChuyenCan
+    }
+
+    val luongDuKienBaseSalary = Math.round((employee.luongCoBan / 26.0) * soNgayCongDuKienDouble).toDouble()
+
+    val currentProratedAllowancesSum = summary.pcKyThuatVal + summary.pcTrachNhiemVal + summary.pcChucVuVal + summary.pcHieuSuatVal +
+            summary.pcSanPhamVal + summary.pcComCaVal + summary.pcComOtVal + summary.pcNhaOVal + summary.pcDocHaiVal + 
+            summary.pcDtDoanhThuVal + summary.pcXangXeVal + summary.pcKhac1Val + summary.pcThamNienVal + summary.phuCapChuyenCan +
+            summary.pcCaDemVal
+
+    val fullProjectedAllowancesSum = pcKyThuatShow + pcTrachNhiemShow + pcChucVuShow + pcHieuSuatShow +
+            pcSanPhamShow + pcComCaShow + pcComOtShow + pcNhaOShow + pcDocHaiShow + 
+            pcDtDoanhThuShow + pcXangXeShow + pcKhac1Show + pcThamNienShow + pcChuyenCanShow +
+            summary.pcCaDemVal
+
+    val allowanceAdjustment = fullProjectedAllowancesSum - currentProratedAllowancesSum
+    val baseSalaryAdjustment = if (isCurrentSelectedMonth) (luongDuKienBaseSalary - summary.baseBasicSalary) else 0.0
+
+    val finalLuongHienThi = if (selectedTab == 1) {
+        summary.luongThucNhan + baseSalaryAdjustment + additionalSundaysPay + allowanceAdjustment
+    } else {
+        summary.luongThucNhan
+    }
+
+    val monthLabel = remember(selectedMonthYm) {
+        try {
+            val parser = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+            val d = parser.parse(selectedMonthYm) ?: Date()
+            val formatter = SimpleDateFormat("MMMM / yyyy", Locale("vi", "VN"))
+            formatter.format(d).replaceFirstChar { it.uppercase() }
+        } catch (e: Exception) {
+            selectedMonthYm
+        }
+    }
+
+    val fmt = remember { DecimalFormat("#,###") }
+    val df = remember { DecimalFormat("#.#") }
+
+    @Composable
+    fun LocalPayslipMoneyRow(
+        label: String,
+        value: Double,
+        isAddition: Boolean,
+        isAccent: Boolean = false
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = if (isAccent) NeonBlue else LightGray,
+                fontSize = 13.sp,
+                fontWeight = if (isAccent) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (isAddition) "+${fmt.format(value)}đ" else "-${fmt.format(value)}đ",
+                color = if (isAddition) AccentGreen else AccentRed,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Toggle Switch Tabs
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = DarkContainer,
+            contentColor = NeonBlue,
+            indicator = { tabPositions ->
+                TabRowDefaults.Indicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = NeonBlue,
+                    height = 2.dp
+                )
+            },
+            modifier = Modifier.clip(RoundedCornerShape(8.dp))
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text("Thực Tế", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text("Dự Kiến", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) }
+            )
+        }
+
+        // Main Invoice Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkContainer),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, NeonBlue.copy(alpha = 0.25f))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Ticket Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "PHIẾU LƯƠNG NHÂN VIÊN",
+                            color = NeonBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = monthLabel,
+                            color = LightGray,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Surface(
+                        color = (if (selectedTab == 1) AccentOrange else NeonBlue).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (selectedTab == 1) "DỰ KIẾN" else "THỰC TẾ",
+                            color = if (selectedTab == 1) AccentOrange else NeonBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                // Employee Metadata
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Nhân viên:", color = LightGray, fontSize = 13.sp)
+                        Text(employee.hoVaTen, color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Chức vụ / Vai trò:", color = LightGray, fontSize = 13.sp)
+                        Text(employee.roleName, color = White, fontSize = 13.sp)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Lương cơ bản (26 ngày):", color = LightGray, fontSize = 13.sp)
+                        Text("${fmt.format(employee.luongCoBan)}đ", color = White, fontSize = 13.sp)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Ngày công chuẩn:", color = LightGray, fontSize = 13.sp)
+                        Text("${summary.standardWorkDays} ngày", color = White, fontSize = 13.sp)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Ngày công thực tế tính luơng:", color = LightGray, fontSize = 13.sp)
+                        val daysShow = if (selectedTab == 1) soNgayCongDuKienDouble else summary.workingDays.toDouble()
+                        Text("${df.format(daysShow)} ngày", color = White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                // Earnings & Allowances Details
+                Text("CÁC KHOẢN THU NHẬP", color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                // 1. Base Salary
+                if (selectedTab == 1) {
+                    LocalPayslipMoneyRow(label = "Lương cơ bản thực nhận (dự kiến)", value = luongDuKienBaseSalary, isAddition = true)
+                } else {
+                    LocalPayslipMoneyRow(label = "Lương cơ bản thực nhận", value = summary.baseBasicSalary, isAddition = true)
+                }
+
+                // 2. Allowances
+                if (pcChuyenCanShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp chuyên cần", value = pcChuyenCanShow, isAddition = true)
+                }
+                if (employee.pcTrachNhiem > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp trách nhiệm", value = pcTrachNhiemShow, isAddition = true)
+                }
+                if (employee.pcKyThuat > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp kỹ thuật", value = pcKyThuatShow, isAddition = true)
+                }
+                if (employee.pcHieuSuat > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp hiệu suất", value = pcHieuSuatShow, isAddition = true)
+                }
+                if (employee.pcSanPham > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp sản phẩm", value = pcSanPhamShow, isAddition = true)
+                }
+                if (employee.pcChucVu > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp chức vụ", value = pcChucVuShow, isAddition = true)
+                }
+                if (employee.pcDocHai > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp độc hại", value = pcDocHaiShow, isAddition = true)
+                }
+                if (employee.pcDtDoanhThu > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp doanh thu", value = pcDtDoanhThuShow, isAddition = true)
+                }
+                if (employee.pcThamNien > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp thâm niên", value = pcThamNienShow, isAddition = true)
+                }
+                if (pcComCaShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp cơm ca", value = pcComCaShow, isAddition = true)
+                }
+                if (pcComOtShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp cơm OT", value = pcComOtShow, isAddition = true)
+                }
+                if (pcXangXeShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp xăng xe", value = pcXangXeShow, isAddition = true)
+                }
+                if (pcNhaOShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp nhà ở", value = pcNhaOShow, isAddition = true)
+                }
+                if (pcKhacShow > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp ca đêm", value = pcKhacShow, isAddition = true)
+                }
+                if (pcKhac1Show > 0.0) {
+                    LocalPayslipMoneyRow(label = "Phụ cấp khác", value = pcKhac1Show, isAddition = true)
+                }
+
+                // 3. Overtime Pay
+                val totalOtNgayHienThi = summary.otDayHours + (if (selectedTab == 1 && isCurrentSelectedMonth) remainingWeekdays * 0.0 else 0.0)
+                val totalOtNgayTienHienThi = summary.tienOtNgay
+                if (totalOtNgayHienThi > 0.0 || totalOtNgayTienHienThi > 0.0) {
+                    LocalPayslipMoneyRow(label = "OT ngày 1.5 (${df.format(totalOtNgayHienThi)}h)", value = totalOtNgayTienHienThi, isAddition = true, isAccent = true)
+                }
+                if (summary.tienOtDem > 0.0) {
+                    LocalPayslipMoneyRow(label = "OT đêm 2.0 (${df.format(summary.otNightHours)}h)", value = summary.tienOtDem, isAddition = true, isAccent = true)
+                }
+                if (summary.tienOtLe > 0.0) {
+                    LocalPayslipMoneyRow(label = "OT lễ 3.0 (${df.format(summary.otLeHours)}h)", value = summary.tienOtLe, isAddition = true, isAccent = true)
+                }
+                if (summary.tienChuNhat > 0.0) {
+                    LocalPayslipMoneyRow(label = "OT chủ nhật 2.0 (${df.format(summary.chuNhatHours)}h)", value = summary.tienChuNhat, isAddition = true, isAccent = true)
+                }
+
+                // Projected Sunday Pay
+                if (selectedTab == 1 && isCurrentSelectedMonth && includeSundayInProjection && remainingSundays > 0) {
+                    LocalPayslipMoneyRow(label = "OT chủ nhật dự kiến ($remainingSundays ngày)", value = additionalSundaysPay, isAddition = true, isAccent = true)
+                }
+
+                // Bonus
+                if (summary.thuong > 0.0) {
+                    LocalPayslipMoneyRow(label = "Tiền thưởng / Thưởng dự án", value = summary.thuong, isAddition = true)
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                // Deductions
+                Text("CÁC KHOẢN GIẢM TRỪ", color = White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                if (summary.tienBh > 0.0) {
+                    LocalPayslipMoneyRow(label = "Khấu trừ Bảo hiểm xã hội", value = summary.tienBh, isAddition = false)
+                }
+                if (summary.doanPhi > 0.0) {
+                    LocalPayslipMoneyRow(label = "Khấu trừ Đoàn phí công đoàn", value = summary.doanPhi, isAddition = false)
+                }
+                if (summary.tienKhauTruNghi > 0.0) {
+                    LocalPayslipMoneyRow(label = "Khấu trừ nghỉ giữa giờ / nghỉ lễ", value = summary.tienKhauTruNghi, isAddition = false)
+                }
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                // Final Pay (Thực nhận)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "THỰC NHẬN:",
+                        color = AccentGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "${fmt.format(finalLuongHienThi)}đ",
+                        color = AccentGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                }
+            }
+        }
+
+        // Action Buttons (Export PDF / Resync)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    adminViewModel.exportSingleEmployeePayslip(context, employee)
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Xuất PDF", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }

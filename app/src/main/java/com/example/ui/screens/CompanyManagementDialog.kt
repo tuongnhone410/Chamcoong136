@@ -192,11 +192,10 @@ fun CompanyManagementDialog(
                 }
 
                 // Modern Tab Bar
-                ScrollableTabRow(
+                TabRow(
                     selectedTabIndex = selectedTabIndex,
                     containerColor = DarkBackground.copy(alpha = 0.4f),
                     contentColor = NeonBlue,
-                    edgePadding = 12.dp,
                     indicator = { tabPositions ->
                         if (selectedTabIndex < tabPositions.size) {
                             TabRowDefaults.SecondaryIndicator(
@@ -218,7 +217,9 @@ fun CompanyManagementDialog(
                                     pair.first,
                                     color = if (isSelected) NeonBlue else LightGray,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 13.sp
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             icon = {
@@ -252,27 +253,46 @@ fun CompanyManagementDialog(
                                         label = { Text("Tên Công ty") },
                                         modifier = Modifier.fillMaxWidth(),
                                         singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                            focusedLabelColor = NeonBlue,
+                                            unfocusedLabelColor = LightGray
+                                        )
                                     )
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = companyCode,
-                                                onValueChange = { companyCode = it.uppercase() },
-                                                label = { Text("Mã Cty (CTY_A...)") },
-                                                singleLine = true,
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = schedule,
-                                                onValueChange = { schedule = it },
-                                                label = { Text("Lịch chuẩn (08:00 - 17:00)") },
-                                                singleLine = true,
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = companyCode,
+                                            onValueChange = { companyCode = it.uppercase() },
+                                            label = { Text("Mã Cty (CTY_A...)") },
+                                            singleLine = true,
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = schedule,
+                                            onValueChange = { schedule = it },
+                                            label = { Text("Lịch chuẩn (08:00 - 17:00)") },
+                                            singleLine = true,
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                     OutlinedTextField(
                                         value = address,
@@ -280,104 +300,165 @@ fun CompanyManagementDialog(
                                         label = { Text("Địa chỉ trụ sở") },
                                         modifier = Modifier.fillMaxWidth(),
                                         singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = White,
+                                            unfocusedTextColor = White,
+                                            focusedBorderColor = NeonBlue,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                            focusedLabelColor = NeonBlue,
+                                            unfocusedLabelColor = LightGray
+                                        )
                                     )
                                 }
 
                                 CompanyCardSection(title = "Mức lương & Bảo hiểm chuẩn", icon = Icons.Default.AccountBalanceWallet) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = luongCoBan,
-                                                onValueChange = { luongCoBan = it.filter { c -> c.isDigit() } },
-                                                label = { Text("Lương CB mặc định") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = luongDongBaoHiem,
-                                                onValueChange = { luongDongBaoHiem = it.filter { c -> c.isDigit() } },
-                                                label = { Text("Lương đóng BH") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = luongCoBan,
+                                            onValueChange = { luongCoBan = it.filter { c -> c.isDigit() } },
+                                            label = { Text("Lương CB mặc định") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = luongDongBaoHiem,
+                                            onValueChange = { luongDongBaoHiem = it.filter { c -> c.isDigit() } },
+                                            label = { Text("Lương đóng BH") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = tiLeDongBaoHiem,
-                                                onValueChange = { tiLeDongBaoHiem = it },
-                                                label = { Text("Tỉ lệ BH (%)") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = doanPhiCongDoan,
-                                                onValueChange = { doanPhiCongDoan = it.filter { c -> c.isDigit() } },
-                                                label = { Text("Đoàn phí CĐ (đ)") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = tiLeDongBaoHiem,
+                                            onValueChange = { tiLeDongBaoHiem = it },
+                                            label = { Text("Tỉ lệ BH (%)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = doanPhiCongDoan,
+                                            onValueChange = { doanPhiCongDoan = it.filter { c -> c.isDigit() } },
+                                            label = { Text("Đoàn phí CĐ (đ)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                 }
 
                                 CompanyCardSection(title = "Hệ số tăng ca & Nghỉ giải lao", icon = Icons.Default.TrendingUp) {
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = hsOtThuong,
-                                                onValueChange = { hsOtThuong = it },
-                                                label = { Text("OT Ngày thường") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = hsOtChuNhat,
-                                                onValueChange = { hsOtChuNhat = it },
-                                                label = { Text("OT Chủ nhật") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = hsOtThuong,
+                                            onValueChange = { hsOtThuong = it },
+                                            label = { Text("OT Ngày thường") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = hsOtChuNhat,
+                                            onValueChange = { hsOtChuNhat = it },
+                                            label = { Text("OT Chủ nhật") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = hsOtNgayLe,
-                                                onValueChange = { hsOtNgayLe = it },
-                                                label = { Text("OT Ngày lễ") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = hsOtDem,
-                                                onValueChange = { hsOtDem = it },
-                                                label = { Text("OT Ca đêm") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = hsOtNgayLe,
+                                            onValueChange = { hsOtNgayLe = it },
+                                            label = { Text("OT Ngày lễ") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        OutlinedTextField(
+                                            value = hsOtDem,
+                                            onValueChange = { hsOtDem = it },
+                                            label = { Text("OT Ca đêm") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            OutlinedTextField(
-                                                value = soGioNghiGiaiLao,
-                                                onValueChange = { soGioNghiGiaiLao = it },
-                                                label = { Text("Giờ nghỉ giải lao") },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = soGioNghiGiaiLao,
+                                            onValueChange = { soGioNghiGiaiLao = it },
+                                            label = { Text("Giờ nghỉ giải lao") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = White,
+                                                unfocusedTextColor = White,
+                                                focusedBorderColor = NeonBlue,
+                                                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                                                focusedLabelColor = NeonBlue,
+                                                unfocusedLabelColor = LightGray
+                                            ),
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                             Checkbox(
@@ -970,7 +1051,14 @@ fun CompanyManagementDialog(
                         label = { Text("Tên công ty (VD: Công ty A)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = NeonBlue,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedLabelColor = NeonBlue,
+                            unfocusedLabelColor = LightGray
+                        )
                     )
                     OutlinedTextField(
                         value = newCode,
@@ -978,7 +1066,14 @@ fun CompanyManagementDialog(
                         label = { Text("Mã công ty (VD: CTY_A)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = NeonBlue,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedLabelColor = NeonBlue,
+                            unfocusedLabelColor = LightGray
+                        )
                     )
                     OutlinedTextField(
                         value = newSchedule,
@@ -986,7 +1081,14 @@ fun CompanyManagementDialog(
                         label = { Text("Lịch trình chuẩn (08:00 - 17:00)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue)
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = White,
+                            unfocusedTextColor = White,
+                            focusedBorderColor = NeonBlue,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                            focusedLabelColor = NeonBlue,
+                            unfocusedLabelColor = LightGray
+                        )
                     )
                 }
             },

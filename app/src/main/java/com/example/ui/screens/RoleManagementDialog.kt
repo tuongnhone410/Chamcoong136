@@ -171,27 +171,41 @@ fun RoleEditDialog(
     onSave: (RoleConfig) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var roleName by remember { mutableStateOf(role.roleName) }
-    var lcb by remember { mutableStateOf(if (role.luongCoBan == 0.0) "" else role.luongCoBan.toLong().toString()) }
+    var localRole by remember { mutableStateOf(role) }
+    var roleName by remember { mutableStateOf(localRole.roleName) }
+    var lcb by remember { mutableStateOf(if (localRole.luongCoBan == 0.0) "" else localRole.luongCoBan.toLong().toString()) }
     
     // Professional Allowances
-    var pcChucVu by remember { mutableStateOf(if (role.pcChucVu == 0.0) "" else role.pcChucVu.toLong().toString()) }
-    var pcTrachNhiem by remember { mutableStateOf(if (role.pcTrachNhiem == 0.0) "" else role.pcTrachNhiem.toLong().toString()) }
-    var pcKyThuat by remember { mutableStateOf(if (role.pcKyThuat == 0.0) "" else role.pcKyThuat.toLong().toString()) }
-    var pcHieuSuat by remember { mutableStateOf(if (role.pcHieuSuat == 0.0) "" else role.pcHieuSuat.toLong().toString()) }
-    var pcSanPham by remember { mutableStateOf(if (role.pcSanPham == 0.0) "" else role.pcSanPham.toLong().toString()) }
+    var pcChucVu by remember { mutableStateOf(if (localRole.pcChucVu == 0.0) "" else localRole.pcChucVu.toLong().toString()) }
+    var pcTrachNhiem by remember { mutableStateOf(if (localRole.pcTrachNhiem == 0.0) "" else localRole.pcTrachNhiem.toLong().toString()) }
+    var pcKyThuat by remember { mutableStateOf(if (localRole.pcKyThuat == 0.0) "" else localRole.pcKyThuat.toLong().toString()) }
+    var pcHieuSuat by remember { mutableStateOf(if (localRole.pcHieuSuat == 0.0) "" else localRole.pcHieuSuat.toLong().toString()) }
+    var pcSanPham by remember { mutableStateOf(if (localRole.pcSanPham == 0.0) "" else localRole.pcSanPham.toLong().toString()) }
     
     // Living / Welfare Allowances
-    var pcComCa by remember { mutableStateOf(if (role.pcComCa == 0.0) "" else role.pcComCa.toLong().toString()) }
-    var pcComOt by remember { mutableStateOf(if (role.pcComOt == 0.0) "" else role.pcComOt.toLong().toString()) }
-    var pcNhaO by remember { mutableStateOf(if (role.pcNhaO == 0.0) "" else role.pcNhaO.toLong().toString()) }
-    var pcXangXe by remember { mutableStateOf(if (role.pcXangXe == 0.0) "" else role.pcXangXe.toLong().toString()) }
-    var pcDocHai by remember { mutableStateOf(if (role.pcDocHai == 0.0) "" else role.pcDocHai.toLong().toString()) }
-    var pcCaDem by remember { mutableStateOf(if (role.pcCaDem == 0.0) "" else role.pcCaDem.toLong().toString()) }
-    var pcThamNien by remember { mutableStateOf(if (role.pcThamNien == 0.0) "" else role.pcThamNien.toLong().toString()) }
-    var pcDtDoanhThu by remember { mutableStateOf(if (role.pcDtDoanhThu == 0.0) "" else role.pcDtDoanhThu.toLong().toString()) }
-    var pcKhac by remember { mutableStateOf(if (role.pcKhac1 == 0.0) "" else role.pcKhac1.toLong().toString()) }
-    var chuyenCan by remember { mutableStateOf(if (role.tienChuyenCanGoc == 0.0) "" else role.tienChuyenCanGoc.toLong().toString()) }
+    var pcComCa by remember { mutableStateOf(if (localRole.pcComCa == 0.0) "" else localRole.pcComCa.toLong().toString()) }
+    var pcComOt by remember { mutableStateOf(if (localRole.pcComOt == 0.0) "" else localRole.pcComOt.toLong().toString()) }
+    var pcNhaO by remember { mutableStateOf(if (localRole.pcNhaO == 0.0) "" else localRole.pcNhaO.toLong().toString()) }
+    var pcXangXe by remember { mutableStateOf(if (localRole.pcXangXe == 0.0) "" else localRole.pcXangXe.toLong().toString()) }
+    var pcDocHai by remember { mutableStateOf(if (localRole.pcDocHai == 0.0) "" else localRole.pcDocHai.toLong().toString()) }
+    var pcCaDem by remember { mutableStateOf(if (localRole.pcCaDem == 0.0) "" else localRole.pcCaDem.toLong().toString()) }
+    var pcThamNien by remember { mutableStateOf(if (localRole.pcThamNien == 0.0) "" else localRole.pcThamNien.toLong().toString()) }
+    var pcDtDoanhThu by remember { mutableStateOf(if (localRole.pcDtDoanhThu == 0.0) "" else localRole.pcDtDoanhThu.toLong().toString()) }
+    var pcKhac by remember { mutableStateOf(if (localRole.pcKhac1 == 0.0) "" else localRole.pcKhac1.toLong().toString()) }
+    var chuyenCan by remember { mutableStateOf(if (localRole.tienChuyenCanGoc == 0.0) "" else localRole.tienChuyenCanGoc.toLong().toString()) }
+
+    var activeEditingAllowanceField by remember { mutableStateOf<String?>(null) }
+    var activeEditingAllowanceName by remember { mutableStateOf("") }
+    var activeEditingAllowanceValue by remember { mutableStateOf("") }
+    var activeEditingAllowanceType by remember { mutableStateOf("") }
+
+    val allowanceCalcTypesMap = remember(localRole.allowanceCalcTypes) {
+        if (localRole.allowanceCalcTypes.isBlank()) emptyMap()
+        else localRole.allowanceCalcTypes.split(";").filter { it.contains(":") }.associate {
+            val parts = it.split(":")
+            parts[0] to parts[1]
+        }
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -255,131 +269,203 @@ fun RoleEditDialog(
                         )
                     }
 
+                    Text(
+                        text = "Chạm vào từng khoản phụ cấp để cấu hình số tiền mặc định & cách tính (Theo ngày / Theo giờ / Cố định) cho chức vụ này.",
+                        color = LightGray,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+
                     // Group 2: Professional Allowances
                     CompanyCardSection(title = "2. Phụ cấp chuyên môn & Trách nhiệm", icon = Icons.Default.Engineering) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcChucVu,
-                                    onValueChange = { pcChucVu = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Chức vụ") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        AllowanceRowItem(
+                            name = "1. Kỹ thuật",
+                            value = pcKyThuat,
+                            fieldName = "pcKyThuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKyThuat"
+                                activeEditingAllowanceName = "Phụ cấp Kỹ thuật"
+                                activeEditingAllowanceValue = pcKyThuat
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcKyThuat")
                             }
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcTrachNhiem,
-                                    onValueChange = { pcTrachNhiem = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Trách nhiệm") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "2. Trách nhiệm",
+                            value = pcTrachNhiem,
+                            fieldName = "pcTrachNhiem",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcTrachNhiem"
+                                activeEditingAllowanceName = "Phụ cấp Trách nhiệm"
+                                activeEditingAllowanceValue = pcTrachNhiem
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcTrachNhiem")
                             }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcKyThuat,
-                                    onValueChange = { pcKyThuat = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Kỹ thuật") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "3. Chức vụ",
+                            value = pcChucVu,
+                            fieldName = "pcChucVu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcChucVu"
+                                activeEditingAllowanceName = "Phụ cấp Chức vụ"
+                                activeEditingAllowanceValue = pcChucVu
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcChucVu")
                             }
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcHieuSuat,
-                                    onValueChange = { pcHieuSuat = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Hiệu suất") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "4. Hiệu suất",
+                            value = pcHieuSuat,
+                            fieldName = "pcHieuSuat",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcHieuSuat"
+                                activeEditingAllowanceName = "Phụ cấp Hiệu suất"
+                                activeEditingAllowanceValue = pcHieuSuat
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcHieuSuat")
                             }
-                        }
-                        OutlinedTextField(
+                        )
+                        AllowanceRowItem(
+                            name = "5. Sản phẩm",
                             value = pcSanPham,
-                            onValueChange = { pcSanPham = it.filter { c -> c.isDigit() } },
-                            label = { Text("PC Sản phẩm") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            fieldName = "pcSanPham",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcSanPham"
+                                activeEditingAllowanceName = "Phụ cấp Sản phẩm"
+                                activeEditingAllowanceValue = pcSanPham
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcSanPham")
+                            }
                         )
                     }
 
                     // Group 3: Living & Welfare Allowances
-                    CompanyCardSection(title = "3. Phụ cấp đời sống & Phúc lợi", icon = Icons.Default.Restaurant) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcComCa,
-                                    onValueChange = { pcComCa = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Cơm ca") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                    CompanyCardSection(title = "3. Phụ cấp đời sống & Sinh hoạt", icon = Icons.Default.Restaurant) {
+                        AllowanceRowItem(
+                            name = "6. Cơm ca",
+                            value = pcComCa,
+                            fieldName = "pcComCa",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComCa"
+                                activeEditingAllowanceName = "Phụ cấp Cơm ca"
+                                activeEditingAllowanceValue = pcComCa
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcComCa")
                             }
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcXangXe,
-                                    onValueChange = { pcXangXe = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Xăng xe") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "7. Cơm OT",
+                            value = pcComOt,
+                            fieldName = "pcComOt",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcComOt"
+                                activeEditingAllowanceName = "Phụ cấp Cơm OT"
+                                activeEditingAllowanceValue = pcComOt
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcComOt")
                             }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcNhaO,
-                                    onValueChange = { pcNhaO = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Nhà ở") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "8. Nhà ở",
+                            value = pcNhaO,
+                            fieldName = "pcNhaO",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcNhaO"
+                                activeEditingAllowanceName = "Phụ cấp Nhà ở"
+                                activeEditingAllowanceValue = pcNhaO
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcNhaO")
                             }
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcDocHai,
-                                    onValueChange = { pcDocHai = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Độc hại") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "9. Xăng xe",
+                            value = pcXangXe,
+                            fieldName = "pcXangXe",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcXangXe"
+                                activeEditingAllowanceName = "Phụ cấp Xăng xe"
+                                activeEditingAllowanceValue = pcXangXe
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcXangXe")
                             }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = chuyenCan,
-                                    onValueChange = { chuyenCan = it.filter { c -> c.isDigit() } },
-                                    label = { Text("Tiền Chuyên cần") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                        AllowanceRowItem(
+                            name = "10. Ca đêm",
+                            value = pcCaDem,
+                            fieldName = "pcCaDem",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcCaDem"
+                                activeEditingAllowanceName = "Phụ cấp Ca đêm"
+                                activeEditingAllowanceValue = pcCaDem
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcCaDem")
                             }
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedTextField(
-                                    value = pcKhac,
-                                    onValueChange = { pcKhac = it.filter { c -> c.isDigit() } },
-                                    label = { Text("PC Khác") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = White, unfocusedTextColor = White, focusedBorderColor = NeonBlue),
-                                    singleLine = true
-                                )
+                        )
+                    }
+
+                    // Group 4: Special Allowances
+                    CompanyCardSection(title = "4. Phụ cấp đặc thù & Phúc lợi", icon = Icons.Default.CardGiftcard) {
+                        AllowanceRowItem(
+                            name = "11. Độc hại",
+                            value = pcDocHai,
+                            fieldName = "pcDocHai",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDocHai"
+                                activeEditingAllowanceName = "Phụ cấp Độc hại"
+                                activeEditingAllowanceValue = pcDocHai
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcDocHai")
                             }
-                        }
+                        )
+                        AllowanceRowItem(
+                            name = "12. Doanh thu",
+                            value = pcDtDoanhThu,
+                            fieldName = "pcDtDoanhThu",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcDtDoanhThu"
+                                activeEditingAllowanceName = "Phụ cấp Doanh thu"
+                                activeEditingAllowanceValue = pcDtDoanhThu
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcDtDoanhThu")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "13. Thâm niên",
+                            value = pcThamNien,
+                            fieldName = "pcThamNien",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcThamNien"
+                                activeEditingAllowanceName = "Phụ cấp Thâm niên"
+                                activeEditingAllowanceValue = pcThamNien
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcThamNien")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "14. Khác",
+                            value = pcKhac,
+                            fieldName = "pcKhac1",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "pcKhac1"
+                                activeEditingAllowanceName = "Phụ cấp Khác"
+                                activeEditingAllowanceValue = pcKhac
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("pcKhac1")
+                            }
+                        )
+                        AllowanceRowItem(
+                            name = "15. Chuyên cần",
+                            value = chuyenCan,
+                            fieldName = "tienChuyenCanGoc",
+                            calcTypeMap = allowanceCalcTypesMap,
+                            onClick = {
+                                activeEditingAllowanceField = "tienChuyenCanGoc"
+                                activeEditingAllowanceName = "Tiền Chuyên cần"
+                                activeEditingAllowanceValue = chuyenCan
+                                activeEditingAllowanceType = localRole.getCalcTypeFor("tienChuyenCanGoc")
+                            }
+                        )
                     }
                 }
 
@@ -403,7 +489,7 @@ fun RoleEditDialog(
 
                     Button(
                         onClick = {
-                            val updated = role.copy(
+                            val updated = localRole.copy(
                                 roleName = roleName.trim(),
                                 luongCoBan = lcb.toDoubleOrNull() ?: 0.0,
                                 pcChucVu = pcChucVu.toDoubleOrNull() ?: 0.0,
@@ -433,5 +519,36 @@ fun RoleEditDialog(
                 }
             }
         }
+    }
+
+    if (activeEditingAllowanceField != null) {
+        AllowanceEditDialog(
+            name = activeEditingAllowanceName,
+            initialValue = activeEditingAllowanceValue,
+            initialType = activeEditingAllowanceType,
+            onDismiss = { activeEditingAllowanceField = null },
+            onSave = { newValue, newType ->
+                val cleanVal = newValue.filter { it.isDigit() }
+                when (activeEditingAllowanceField) {
+                    "tienChuyenCanGoc" -> chuyenCan = cleanVal
+                    "pcKyThuat" -> pcKyThuat = cleanVal
+                    "pcTrachNhiem" -> pcTrachNhiem = cleanVal
+                    "pcChucVu" -> pcChucVu = cleanVal
+                    "pcHieuSuat" -> pcHieuSuat = cleanVal
+                    "pcSanPham" -> pcSanPham = cleanVal
+                    "pcComCa" -> pcComCa = cleanVal
+                    "pcComOt" -> pcComOt = cleanVal
+                    "pcNhaO" -> pcNhaO = cleanVal
+                    "pcDocHai" -> pcDocHai = cleanVal
+                    "pcDtDoanhThu" -> pcDtDoanhThu = cleanVal
+                    "pcXangXe" -> pcXangXe = cleanVal
+                    "pcCaDem" -> pcCaDem = cleanVal
+                    "pcKhac1" -> pcKhac = cleanVal
+                    "pcThamNien" -> pcThamNien = cleanVal
+                }
+                localRole = localRole.copyWithCalcType(activeEditingAllowanceField!!, newType)
+                activeEditingAllowanceField = null
+            }
+        )
     }
 }
