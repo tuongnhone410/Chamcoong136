@@ -33,7 +33,28 @@ suspend fun <T> com.google.android.gms.tasks.Task<T>.awaitTaskFirestore(): T? = 
 object FirestoreService {
     private const val TAG = "FirestoreService"
 
+    private fun isEmulator(): Boolean {
+        val model = android.os.Build.MODEL
+        val fingerprint = android.os.Build.FINGERPRINT
+        val brand = android.os.Build.BRAND
+        val device = android.os.Build.DEVICE
+        val product = android.os.Build.PRODUCT
+        val hardware = android.os.Build.HARDWARE
+        return fingerprint.startsWith("generic")
+                || fingerprint.startsWith("unknown")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || hardware.contains("goldfish")
+                || hardware.contains("ranchu")
+                || (brand.startsWith("generic") && device.startsWith("generic"))
+                || "google_sdk" == product
+    }
+
     private fun getDb(): FirebaseFirestore? {
+        if (isEmulator()) {
+            return null
+        }
         return try {
             FirebaseFirestore.getInstance()
         } catch (e: Throwable) {
@@ -208,8 +229,8 @@ object FirestoreService {
         val allConfigs = mutableListOf<com.example.data.model.UserConfig>()
         val processedIds = mutableSetOf<String>()
 
+        // 1. Try New Structure: Collection group query for 'salary_config'
         try {
-            // 1. Try New Structure: Collection group query for 'salary_config'
             val snapshot = firestore.collectionGroup("salary_config")
                 .get()
                 .awaitTaskFirestore()
@@ -222,8 +243,12 @@ object FirestoreService {
                     processedIds.add(userId)
                 }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error fetching collectionGroup salary_config: ${e.message}")
+        }
 
-            // 2. Try Old Structure: 'users_salary' collection
+        // 2. Try Old Structure: 'users_salary' collection
+        try {
             val oldSnapshot = firestore.collection("users_salary")
                 .get()
                 .awaitTaskFirestore()
@@ -237,7 +262,7 @@ object FirestoreService {
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Error fetching all user configs: ${e.message}")
+            Log.w(TAG, "Error fetching old users_salary: ${e.message}")
         }
         
         return allConfigs
@@ -570,6 +595,9 @@ object FirestoreService {
     }
 
     suspend fun checkAppVersion(context: android.content.Context): AppVersionControl? {
+        if (isEmulator()) {
+            return null
+        }
         val currentCode = try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -901,7 +929,7 @@ object FirestoreService {
                         try {
                             firestore.collection("users").document(user.userId)
                                 .collection("notifications").document(notifId)
-                                .set(map)
+                                .set(map) // Ghi bất đồng bộ không chặn luồng, tránh timeout vòng lặp
                         } catch (ex: Exception) {
                             Log.e(TAG, "Lỗi lưu thông báo cho nhân viên ${user.userId}: ${ex.message}")
                         }

@@ -27,6 +27,7 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
     val authController = AuthController(application, repository)
     val cloudSyncManager = CloudSyncManager(application)
     private var syncJob: kotlinx.coroutines.Job? = null
+    private var adminNotifListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
     val hasRestoredForSession = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     // Current logged-in UI session state
@@ -221,7 +222,17 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch(Dispatchers.IO) {
             var lastUid: String? = null
             currentUserSession.collect { session ->
-                if (session != null && session.uid != lastUid) {
+                if (session == null) {
+                    // Hủy đăng ký listener cũ khi session null (logout)
+                    adminNotifListenerRegistration?.remove()
+                    adminNotifListenerRegistration = null
+                    lastUid = null
+                    _cloudSyncStatus.value = "Yêu cầu đăng nhập"
+                } else if (session.uid != lastUid) {
+                    // Hủy đăng ký cũ nếu có
+                    adminNotifListenerRegistration?.remove()
+                    adminNotifListenerRegistration = null
+
                     lastUid = session.uid
                     hasRestoredForSession[session.uid] = false
                     _cloudSyncStatus.value = "Đang kiểm tra..."
@@ -233,6 +244,31 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         com.example.notification.NotificationHelper.scheduleNextCheckInReminder(getApplication(), session.uid)
                         loadLocalCachedNotifications(session.uid)
                         fetchAdminNotifications()
+
+                        // Đăng ký realtime listener lắng nghe thông báo mới từ Firestore
+                        try {
+                            val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic")
+                                    || android.os.Build.FINGERPRINT.startsWith("unknown")
+                                    || android.os.Build.MODEL.contains("google_sdk")
+                                    || android.os.Build.MODEL.contains("Emulator")
+                                    || android.os.Build.MODEL.contains("Android SDK built for x86")
+                                    || android.os.Build.HARDWARE.contains("goldfish")
+                                    || android.os.Build.HARDWARE.contains("ranchu")
+                            if (!isEmulator) {
+                                val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                adminNotifListenerRegistration = firestore.collection("users").document(session.uid)
+                                    .collection("notifications")
+                                    .addSnapshotListener { _, error ->
+                                        if (error != null) {
+                                            android.util.Log.e("TimeSnapViewModel", "Lỗi realtime notifications: ${error.message}")
+                                            return@addSnapshotListener
+                                        }
+                                        fetchAdminNotifications()
+                                    }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("TimeSnapViewModel", "Failed to register realtime notif listener: ${e.message}")
+                        }
                     } catch (e: Exception) {
                         android.util.Log.e("TimeSnapViewModel", "Failed to init notifications: ${e.message}")
                     }
@@ -279,9 +315,6 @@ class TimeSnapViewModel(application: Application) : AndroidViewModel(application
                         hasRestoredForSession[session.uid] = true
                         _cloudSyncStatus.value = "Lỗi xác thực dữ liệu"
                     }
-                } else if (session == null) {
-                    lastUid = null
-                    _cloudSyncStatus.value = "Yêu cầu đăng nhập"
                 }
             }
         }

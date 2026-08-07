@@ -104,7 +104,7 @@ class CloudSyncManager(private val context: Context) {
 
             // 3. Upload config and entries to Firebase Firestore
             try {
-                if (!userId.startsWith("demo") && !userId.contains("demo")) {
+                if (!isEmulator() && !userId.startsWith("demo") && !userId.contains("demo")) {
                     val firestore = FirebaseFirestore.getInstance()
                     val map = mapOf(
                         "userId" to userId,
@@ -172,7 +172,7 @@ class CloudSyncManager(private val context: Context) {
             var configJson: String? = null
 
             // Try pulling from Firebase Firestore first
-            if (!userId.startsWith("demo") && !userId.contains("demo")) {
+            if (!isEmulator() && !userId.startsWith("demo") && !userId.contains("demo")) {
                 try {
                     val firestore = FirebaseFirestore.getInstance()
                     val document = firestore.collection("users").document(userId).collection("overtime_sync").document("backup")
@@ -219,6 +219,24 @@ class CloudSyncManager(private val context: Context) {
             Log.e("CloudSyncManager", "Failed to restore from server", e)
             return@withContext null
         }
+    }
+
+    private fun isEmulator(): Boolean {
+        val model = android.os.Build.MODEL
+        val fingerprint = android.os.Build.FINGERPRINT
+        val brand = android.os.Build.BRAND
+        val device = android.os.Build.DEVICE
+        val product = android.os.Build.PRODUCT
+        val hardware = android.os.Build.HARDWARE
+        return fingerprint.startsWith("generic")
+                || fingerprint.startsWith("unknown")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || hardware.contains("goldfish")
+                || hardware.contains("ranchu")
+                || (brand.startsWith("generic") && device.startsWith("generic"))
+                || "google_sdk" == product
     }
 
     /**

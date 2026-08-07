@@ -2346,7 +2346,7 @@ fun EmployeeDetailView(
             } else {
                 EmployeePayslipView(
                     employee = employee,
-                    records = records,
+                    records = filteredRecords,
                     selectedMonthYm = selectedMonthYm,
                     isAllMonths = isAllMonths
                 )
@@ -3253,19 +3253,91 @@ fun SendAdminNotificationDialog(
 ) {
     var title by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+    var expandedUserDropdown by remember { mutableStateOf(false) }
+    var selectedUser by remember { mutableStateOf<UserConfig?>(null) } // null means "Tất cả nhân viên"
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { androidx.compose.material3.Text("Gửi thông báo", color = White) },
+        title = { androidx.compose.material3.Text("Gửi thông báo", color = White, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Dropdown Selector for Recipient
+                Column {
+                    androidx.compose.material3.Text(
+                        text = "Người nhận",
+                        color = LightGray,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(DarkBackground, RoundedCornerShape(8.dp))
+                            .border(1.dp, Color.DarkGray, RoundedCornerShape(8.dp))
+                            .clickable { expandedUserDropdown = true }
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = selectedUser?.let { "${it.hoVaTen} (${it.roleName})" } ?: "Tất cả nhân viên",
+                                color = White,
+                                fontSize = 14.sp
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = NeonBlue
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = expandedUserDropdown,
+                            onDismissRequest = { expandedUserDropdown = false },
+                            modifier = Modifier
+                                .background(DarkContainer)
+                                .width(300.dp)
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Tất cả nhân viên", color = White) },
+                                onClick = {
+                                    selectedUser = null
+                                    expandedUserDropdown = false
+                                }
+                            )
+                            employees.forEach { emp ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("${emp.hoVaTen} (${emp.roleName})", color = White) },
+                                    onClick = {
+                                        selectedUser = emp
+                                        expandedUserDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 AdminInputField("Tiêu đề", title, { title = it })
                 AdminInputField("Nội dung", message, { message = it })
             }
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { onSend("", "", title, message, "general") }) {
-                androidx.compose.material3.Text("Gửi", color = NeonBlue)
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val uid = selectedUser?.userId ?: "ALL"
+                    val name = selectedUser?.hoVaTen ?: "Tất cả nhân viên"
+                    onSend(uid, name, title, message, "general")
+                },
+                enabled = title.isNotBlank() && message.isNotBlank()
+            ) {
+                androidx.compose.material3.Text("Gửi", color = if (title.isNotBlank() && message.isNotBlank()) NeonBlue else Color.Gray)
             }
         },
         dismissButton = {
@@ -3847,7 +3919,7 @@ fun EmployeePayslipView(
         ) {
             Button(
                 onClick = {
-                    adminViewModel.exportSingleEmployeePayslip(context, employee)
+                    adminViewModel.exportSingleEmployeePayslip(context, employee, selectedMonthYm)
                 },
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonBlue),
