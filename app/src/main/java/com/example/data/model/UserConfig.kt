@@ -54,6 +54,8 @@ data class UserConfig(
     val companyId: String = "default_company",
     val companyName: String = "Công ty Mặc Định",
     val companyCode: String = "DEFAULT",
+    val roleId: String = "",
+    val roleName: String = "",
     
     // Retrocompatibility keys (to prevent DB compilation errors)
     val tienComMoiNgay: Double = 50000.0,

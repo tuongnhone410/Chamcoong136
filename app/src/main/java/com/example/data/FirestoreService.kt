@@ -237,7 +237,7 @@ object FirestoreService {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching all user configs: ${e.message}")
+            Log.w(TAG, "Error fetching all user configs: ${e.message}")
         }
         
         return allConfigs
@@ -349,6 +349,7 @@ object FirestoreService {
             "allowanceCalcTypes" to company.allowanceCalcTypes,
             "soGioNghiGiaiLao" to company.soGioNghiGiaiLao,
             "tinhKhauTruNghi" to company.tinhKhauTruNghi,
+            "rolesData" to company.rolesData,
             "createdAt" to company.createdAt,
             "updatedAt" to System.currentTimeMillis()
         )
@@ -837,7 +838,7 @@ object FirestoreService {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi tự động dọn dẹp thông báo Admin quá 12 tiếng: ${e.message}")
+            Log.w(TAG, "Bỏ qua lỗi dọn dẹp thông báo: ${e.message}")
         }
     }
 
@@ -977,7 +978,7 @@ object FirestoreService {
                 }
                 snap?.documents?.forEach { parseDoc(it) }
             } catch (e: Exception) {
-                Log.e(TAG, "Lỗi đọc notifications từ subcollection user: ${e.message}")
+                Log.w(TAG, "Bỏ qua lỗi đọc notifications từ user")
             }
         }
 
@@ -990,7 +991,7 @@ object FirestoreService {
             }
             snap?.documents?.forEach { parseDoc(it) }
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi đọc root collection admin_notifications: ${e.message}")
+            Log.w(TAG, "Bỏ qua lỗi đọc root collection admin_notifications (có thể do quyền Firebase)")
         }
 
         // Query Path 3: app_config/admin_notifications/items
@@ -1003,7 +1004,7 @@ object FirestoreService {
             }
             snap?.documents?.forEach { parseDoc(it) }
         } catch (e: Exception) {
-            Log.e(TAG, "Lỗi đọc app_config notifications: ${e.message}")
+            Log.w(TAG, "Bỏ qua lỗi đọc app_config notifications")
         }
 
         return notifMap.values.sortedBy { it.createdAt }
@@ -1096,6 +1097,8 @@ object FirestoreService {
             "companyId" to config.companyId,
             "companyName" to config.companyName,
             "companyCode" to config.companyCode,
+            "roleId" to config.roleId,
+            "roleName" to config.roleName,
             "isAdmin" to config.isAdmin
         )
         firestore.collection("users").document(config.userId).collection("salary_config").document("settings")
@@ -1232,6 +1235,10 @@ fun DocumentSnapshot.toUserSalaryConfig(userId: String): com.example.data.model.
         companyId = getString("companyId") ?: "default_company",
         companyName = getString("companyName") ?: "Công ty Mặc Định",
         companyCode = getString("companyCode") ?: "DEFAULT",
+        roleId = getString("roleId") ?: "",
+        roleName = getString("roleName") ?: "",
+        
+        
         isAdmin = getBoolean("isAdmin") ?: false
     )
 }
@@ -1242,6 +1249,8 @@ fun DocumentSnapshot.toCompanyConfig(): CompanyConfig {
         companyId = id,
         companyName = getString("companyName") ?: "Công ty Mặc Định",
         companyCode = getString("companyCode") ?: "DEFAULT",
+        
+        
         description = getString("description") ?: "",
         address = getString("address") ?: "",
         luongCoBan = getDouble("luongCoBan") ?: 6000000.0,
@@ -1274,6 +1283,7 @@ fun DocumentSnapshot.toCompanyConfig(): CompanyConfig {
         allowanceCalcTypes = getString("allowanceCalcTypes") ?: "",
         soGioNghiGiaiLao = getDouble("soGioNghiGiaiLao") ?: 1.5,
         tinhKhauTruNghi = getBoolean("tinhKhauTruNghi") ?: false,
+        rolesData = getString("rolesData") ?: "",
         createdAt = getLong("createdAt") ?: System.currentTimeMillis(),
         updatedAt = getLong("updatedAt") ?: System.currentTimeMillis()
     )

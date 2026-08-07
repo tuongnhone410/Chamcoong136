@@ -43,6 +43,7 @@ data class CompanyConfig(
     val soGioNghiGiaiLao: Double = 1.5,
     val tinhKhauTruNghi: Boolean = false,
     val lichTrinh: String = "08:00 - 17:00",
+    val rolesData: String = "",
     
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
@@ -127,4 +128,66 @@ data class CompanyConfig(
             pcComOt = 15000.0
         )
     }
+}
+
+data class RoleConfig(
+    val roleId: String = java.util.UUID.randomUUID().toString(),
+    val roleName: String = "",
+    val luongCoBan: Double = 0.0,
+    val pcKyThuat: Double = 0.0,
+    val pcTrachNhiem: Double = 0.0,
+    val pcChucVu: Double = 0.0,
+    val pcHieuSuat: Double = 0.0,
+    val pcSanPham: Double = 0.0,
+    val pcComCa: Double = 0.0,
+    val pcComOt: Double = 0.0,
+    val pcNhaO: Double = 0.0,
+    val pcDocHai: Double = 0.0,
+    val pcDtDoanhThu: Double = 0.0,
+    val pcXangXe: Double = 0.0,
+    val pcThamNien: Double = 0.0,
+    val pcKhac1: Double = 0.0,
+    val pcCaDem: Double = 0.0,
+    val tienChuyenCanGoc: Double = 0.0
+) {
+    fun toCsv(): String {
+        return listOf(roleId, roleName, luongCoBan, pcKyThuat, pcTrachNhiem, pcChucVu, pcHieuSuat, pcSanPham, pcComCa, pcComOt, pcNhaO, pcDocHai, pcDtDoanhThu, pcXangXe, pcThamNien, pcKhac1, pcCaDem, tienChuyenCanGoc).joinToString("||")
+    }
+    companion object {
+        fun fromCsv(csv: String): RoleConfig? {
+            val parts = csv.split("||")
+            if (parts.size < 18) return null
+            return try {
+                RoleConfig(
+                    roleId = parts[0],
+                    roleName = parts[1],
+                    luongCoBan = parts[2].toDoubleOrNull() ?: 0.0,
+                    pcKyThuat = parts[3].toDoubleOrNull() ?: 0.0,
+                    pcTrachNhiem = parts[4].toDoubleOrNull() ?: 0.0,
+                    pcChucVu = parts[5].toDoubleOrNull() ?: 0.0,
+                    pcHieuSuat = parts[6].toDoubleOrNull() ?: 0.0,
+                    pcSanPham = parts[7].toDoubleOrNull() ?: 0.0,
+                    pcComCa = parts[8].toDoubleOrNull() ?: 0.0,
+                    pcComOt = parts[9].toDoubleOrNull() ?: 0.0,
+                    pcNhaO = parts[10].toDoubleOrNull() ?: 0.0,
+                    pcDocHai = parts[11].toDoubleOrNull() ?: 0.0,
+                    pcDtDoanhThu = parts[12].toDoubleOrNull() ?: 0.0,
+                    pcXangXe = parts[13].toDoubleOrNull() ?: 0.0,
+                    pcThamNien = parts[14].toDoubleOrNull() ?: 0.0,
+                    pcKhac1 = parts[15].toDoubleOrNull() ?: 0.0,
+                    pcCaDem = parts[16].toDoubleOrNull() ?: 0.0,
+                    tienChuyenCanGoc = parts[17].toDoubleOrNull() ?: 0.0
+                )
+            } catch (e: Exception) { null }
+        }
+    }
+}
+
+fun CompanyConfig.getRoles(): List<RoleConfig> {
+    if (this.rolesData.isBlank()) return emptyList()
+    return this.rolesData.split(";;").mapNotNull { RoleConfig.fromCsv(it) }
+}
+
+fun CompanyConfig.updateRoles(roles: List<RoleConfig>): CompanyConfig {
+    return this.copy(rolesData = roles.joinToString(";;") { it.toCsv() }, updatedAt = System.currentTimeMillis())
 }
