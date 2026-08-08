@@ -3886,21 +3886,21 @@ fun EmployeePayslipView(
                 val totalOtNgayHienThi = summary.otDayHours + (if (selectedTab == 1 && isCurrentSelectedMonth) remainingWeekdays * 0.0 else 0.0)
                 val totalOtNgayTienHienThi = summary.tienOtNgay
                 if (totalOtNgayHienThi > 0.0 || totalOtNgayTienHienThi > 0.0) {
-                    LocalPayslipMoneyRow(label = "OT ngày 1.5 (${df.format(totalOtNgayHienThi)}h)", value = totalOtNgayTienHienThi, isAddition = true, isAccent = true)
+                    LocalPayslipMoneyRow(label = "OT ngày ${df.format(employee.heSoOtNgayThuong)} (${df.format(totalOtNgayHienThi)}h)", value = totalOtNgayTienHienThi, isAddition = true, isAccent = true)
                 }
                 if (summary.tienOtDem > 0.0) {
-                    LocalPayslipMoneyRow(label = "OT đêm 2.0 (${df.format(summary.otNightHours)}h)", value = summary.tienOtDem, isAddition = true, isAccent = true)
+                    LocalPayslipMoneyRow(label = "OT đêm ${df.format(employee.heSoOtDem)} (${df.format(summary.otNightHours)}h)", value = summary.tienOtDem, isAddition = true, isAccent = true)
                 }
                 if (summary.tienOtLe > 0.0) {
-                    LocalPayslipMoneyRow(label = "OT lễ 3.0 (${df.format(summary.otLeHours)}h)", value = summary.tienOtLe, isAddition = true, isAccent = true)
+                    LocalPayslipMoneyRow(label = "OT lễ ${df.format(employee.heSoOtNgayLe)} (${df.format(summary.otLeHours)}h)", value = summary.tienOtLe, isAddition = true, isAccent = true)
                 }
                 if (summary.tienChuNhat > 0.0) {
-                    LocalPayslipMoneyRow(label = "OT chủ nhật 2.0 (${df.format(summary.chuNhatHours)}h)", value = summary.tienChuNhat, isAddition = true, isAccent = true)
+                    LocalPayslipMoneyRow(label = "OT chủ nhật ${df.format(employee.heSoOtChuNhat)} (${df.format(summary.chuNhatHours)}h)", value = summary.tienChuNhat, isAddition = true, isAccent = true)
                 }
 
                 // Projected Sunday Pay
                 if (selectedTab == 1 && isCurrentSelectedMonth && includeSundayInProjection && remainingSundays > 0) {
-                    LocalPayslipMoneyRow(label = "OT chủ nhật dự kiến ($remainingSundays ngày)", value = additionalSundaysPay, isAddition = true, isAccent = true)
+                    LocalPayslipMoneyRow(label = "OT chủ nhật ${df.format(employee.heSoOtChuNhat)} ($remainingSundays ngày)", value = additionalSundaysPay, isAddition = true, isAccent = true)
                 }
 
                 // Bonus

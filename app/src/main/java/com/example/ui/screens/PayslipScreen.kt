@@ -450,7 +450,8 @@ fun PayslipScreen(
                 val baseSalaryAdjustment = if (isCurrentSelectedMonth) (luongDuKienBaseSalary - s.baseBasicSalary) else 0.0
                 val breakHours = if (c.tinhKhauTruNghi) c.soGioNghiGiaiLao else 0.0
                 val totalOtHours = customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0)
-                val customOt15Pay = totalOtHours * hourlySalary * c.heSoOtNgayThuong
+                val customOtCoeff = if (selectedOt15Shift == "Đêm") c.heSoOtDem else c.heSoOtNgayThuong
+                val customOt15Pay = totalOtHours * hourlySalary * customOtCoeff
                 val customNightAllowance = if (selectedOt15Shift == "Đêm") {
                     customOt15DaysCount * c.pcCaDem
                 } else 0.0
@@ -746,7 +747,7 @@ fun PayslipScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Dự kiến OT1.5:", color = LightGray, fontSize = 13.sp)
+                                    Text("Dự kiến OT (${if (selectedOt15Shift == "Đêm") df.format(c.heSoOtDem) else df.format(c.heSoOtNgayThuong)}):", color = LightGray, fontSize = 13.sp)
                                     if (customOt15DaysCount > 0.0) {
                                         Text(
                                             text = "+${fmt.format(customOt15Pay)}đ dự kiến",
@@ -911,26 +912,26 @@ fun PayslipScreen(
                             PayslipMoneyRow(label = "Cơm OT", value = pcComOtShow, isAddition = true)
                         }
 
-                        // 13. OT 1.5 (Merged)
+                        // 13. OT Ngày (Merged)
                         val projectedOtDayHours = if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
                         val totalOtDayHours = s.otDayHours + projectedOtDayHours
                         val totalOtDayPay = s.tienOtNgay + (if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15Pay else 0.0)
                         
                         if (totalOtDayHours > 0.0) {
-                            PayslipMoneyRow(label = "OT 1.5 (${df.format(totalOtDayHours)}h)", value = totalOtDayPay, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT ngày ${df.format(c.heSoOtNgayThuong)} (${df.format(totalOtDayHours)}h)", value = totalOtDayPay, isAddition = true, isAccent = true)
                         }
 
-                        // 14. OT 2.0
+                        // 14. OT Chủ nhật
                         if (s.tienChuNhat > 0.0) {
-                            PayslipMoneyRow(label = "OT 2.0 (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT chủ nhật ${df.format(c.heSoOtChuNhat)} (${df.format(s.chuNhatHours)}h)", value = s.tienChuNhat, isAddition = true, isAccent = true)
                         }
                         if (selectedTab == 1 && isCurrentSelectedMonth && includeSundayInProjection && remainingSundays > 0) {
-                            PayslipMoneyRow(label = "OT 2.0 ($remainingSundays)", value = additionalSundaysPay, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT chủ nhật ${df.format(c.heSoOtChuNhat)} ($remainingSundays)", value = additionalSundaysPay, isAddition = true, isAccent = true)
                         }
 
-                        // 15. OT 3.0
+                        // 15. OT Lễ
                         if (s.tienOtLe > 0.0) {
-                            PayslipMoneyRow(label = "OT 3.0 (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT lễ ${df.format(c.heSoOtNgayLe)} (${df.format(s.otLeHours)}h)", value = s.tienOtLe, isAddition = true, isAccent = true)
                         }
 
                         // 15.1 OT đêm (Merged)
@@ -939,7 +940,7 @@ fun PayslipScreen(
                         val totalOtNightPay = s.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
 
                         if (totalOtNightHours > 0.0) {
-                            PayslipMoneyRow(label = "OTĐ 1.5 (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
+                            PayslipMoneyRow(label = "OT đêm ${df.format(c.heSoOtDem)} (${df.format(totalOtNightHours)}h)", value = totalOtNightPay, isAddition = true, isAccent = true)
                         }
 
                         // 16. Phụ cấp đêm
@@ -1460,24 +1461,24 @@ fun savePayslipAsPngImage(
     if (pcComCaShowPNG > 0.0) drawRow("Phụ cấp cơm/ ca", "+${fmt.format(pcComCaShowPNG)}đ", paintGreen)
     if (pcComOtShowPNG > 0.0) drawRow("Phụ cấp cơm OT", "+${fmt.format(pcComOtShowPNG)}đ", paintGreen)
 
-    // OT 1.5 Merged
+    // OT Ngày Merged
     val projOtDayPNG = if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
     val totalOtDayPNG = summary.otDayHours + projOtDayPNG
     val totalPayDayPNG = summary.tienOtNgay + (if (selectedTab == 1 && selectedOt15Shift == "Ngày") customOt15Pay else 0.0)
-    if (totalOtDayPNG > 0.0) drawRow("Làm thêm 1.5 (${df.format(totalOtDayPNG)}h)", "+${fmt.format(totalPayDayPNG)}đ", paintGreen)
+    if (totalOtDayPNG > 0.0) drawRow("OT ngày ${df.format(config.heSoOtNgayThuong)} (${df.format(totalOtDayPNG)}h)", "+${fmt.format(totalPayDayPNG)}đ", paintGreen)
 
-    if (summary.tienChuNhat > 0.0) drawRow("Làm thêm 2.0 (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
+    if (summary.tienChuNhat > 0.0) drawRow("OT chủ nhật ${df.format(config.heSoOtChuNhat)} (${df.format(summary.chuNhatHours)}h)", "+${fmt.format(summary.tienChuNhat)}đ", paintGreen)
     if (selectedTab == 1 && includeSundayInProjection && remainingSundays > 0) {
-        drawRow("Dự kiến CN ($remainingSundays ngày)", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", paintGreen)
+        drawRow("Dự kiến CN (${df.format(config.heSoOtChuNhat)} - $remainingSundays ngày)", "+${fmt.format(remainingSundays * dailySalary * config.heSoOtChuNhat)}đ", paintGreen)
     }
 
-    if (summary.tienOtLe > 0.0) drawRow("Làm thêm 3.0 (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
+    if (summary.tienOtLe > 0.0) drawRow("OT lễ ${df.format(config.heSoOtNgayLe)} (${df.format(summary.otLeHours)}h)", "+${fmt.format(summary.tienOtLe)}đ", paintGreen)
 
-    // OTĐ 1.5 Merged
+    // OTĐ Merged
     val projOtNightPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15DaysCount * (4.0 - breakHours).coerceAtLeast(0.0) else 0.0
     val totalOtNightPNG = summary.otNightHours + projOtNightPNG
     val totalPayNightPNG = summary.tienOtDem + (if (selectedTab == 1 && selectedOt15Shift == "Đêm") customOt15Pay else 0.0)
-    if (totalOtNightPNG > 0.0) drawRow("Làm thêm 1.5 (${df.format(totalOtNightPNG)}h)", "+${fmt.format(totalPayNightPNG)}đ", paintGreen)
+    if (totalOtNightPNG > 0.0) drawRow("OT đêm ${df.format(config.heSoOtDem)} (${df.format(totalOtNightPNG)}h)", "+${fmt.format(totalPayNightPNG)}đ", paintGreen)
 
     val finalPcCaDemCountPNG = if (selectedTab == 1 && selectedOt15Shift == "Đêm") summary.caDemCount + customOt15DaysCount.toInt() else summary.caDemCount
     val finalPcCaDemPNG = if (selectedTab == 1) (summary.pcCaDemVal + customNightAllowance) else summary.pcCaDemVal
